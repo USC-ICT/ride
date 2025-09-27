@@ -1,0 +1,72 @@
+﻿namespace Ride.Entities
+{
+    public enum ItemType
+    {
+        START_WEAPONS,
+        m4,
+        ak47,
+        HmvM1114_Gun,
+        m2Browning,
+        m240,
+        m24,
+        M256A1_Gun,
+        PlaceholderArtillery,
+        zombiteBite,
+        END_WEAPONS,
+        START_AMMUNITION,
+        m4_Magazine,
+        ak47_Magazine,
+        HmvM1114_Magazine,
+        m2Browning_Magazine,
+        m240_Magazine,
+        m24_Magazine,
+        M830A1_Heat_Magazine,
+        PlaceholderArtillery_Magazine,
+        zombieBite_Magazine,
+        END_AMMUNITION,
+        Smoke_Grenade,
+        M1918BAR,
+        M1918BAR_Magazine,
+        MP40,
+        MP40_Magazine,
+        Breda30,
+        Breda30_Magazine,
+        M1Thompson,
+        M1Thompson_Magazine,
+        M7,
+        M7_Grenade,
+        M67_Grenade,
+        TankGun88mmKwk36,
+        TankGun88mmKwk36_Magazine,
+        TankGun75mm,
+        TankGun75mm_Magazine,
+        TankGun122mm,
+        TankGun122mm_Magazine,
+        mg42,
+        mg42_Magazine,
+        mg42Mounted,
+        M203,
+        M203_Magazine,
+        BMP_2A70_Gun,
+        BMP_2A70_Magazine,
+        M242Bushmaster_Gun,
+        M791_APSabot_Magazine,
+        D81TM_2A46_Gun,
+        T80U_3VBM3_Magazine,
+        ProximityIED
+    }
+
+    public enum ItemUsage
+    {
+        FreeToUse,
+        InUse,
+        Destroyed
+    }
+
+    public enum ItemStatus
+    {
+        Unowned,
+        Equipped,
+        Stowed
+    }
+}
