@@ -1,0 +1,22 @@
+{
+    "name": "USC-ICT.Ride.VH",
+    "rootNamespace": "",
+    "references": [
+        "GUID:c3ebf86341718f54f83c009568e2678c",
+        "GUID:b058abb6483f15049aae1ed7dccefd2e",
+        "GUID:2fada79de881e994c9d4caaedca79d95",
+        "GUID:6581efa823ee97c419222e80baa44c0e",
+        "GUID:6c1ba14c9cbf010418e9e28bda64acaa",
+        "GUID:925050033004c334fb25bd207f080b17",
+        "GUID:50a6137419da9a6489f393ad553505d2"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

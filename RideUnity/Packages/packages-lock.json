@@ -260,6 +260,15 @@
       "source": "embedded",
       "dependencies": {}
     },
+    "edu.usc.ict.ride.vh": {
+      "version": "file:edu.usc.ict.ride.vh",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "edu.usc.ict.ride.vendor.vh": "0.0.8290",
+        "edu.usc.ict.ride.cognition": "0.0.8322"
+      }
+    },
     "com.unity.modules.accessibility": {
       "version": "1.0.0",
       "depth": 0,

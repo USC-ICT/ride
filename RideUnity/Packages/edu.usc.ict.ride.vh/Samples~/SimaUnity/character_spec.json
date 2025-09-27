@@ -1,0 +1,9 @@
+{
+  "name": "ChrKevin",
+  "type": "ChrGenericMleAdult",
+  "gender": "Male",				/// here you can define the gender of the speaker. options: Male, Female, Nonbinary
+  "attitude": "",				/// here you can define the attitude/style of the speaker. possible options: friednly, hostile, etc
+  "personality": "",			/// here you can define the personality of the speaker. possible options: extrovert, introvert, expressive, etc
+  "context": "",				/// here you can explain the context of the speech. for example: Imagine a job interview scenario. A job interviewer is talking to a candidate.
+  "description": ""				/// here you can explain any specific demands on nonverbal behaviors. for example: the character should use more smiles
+}

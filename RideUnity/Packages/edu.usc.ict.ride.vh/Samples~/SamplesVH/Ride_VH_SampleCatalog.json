@@ -1,0 +1,13 @@
+{
+    "localPrefixPath": "C:/Users/esookiassian/AppData/LocalLow/USC-ICT/RIDE/AssetCatalogs/VH/6000.0.27f1/BuiltIn/StandaloneWindows64",
+    "remotePrefixPath": "ride-owt/Test/AssetCatalogs/VH/6000.0.27f1/BuiltIn/StandaloneWindows64",
+    "entries": [
+        {
+            "assetName": "CC_Kevin",
+            "bundleFileName": "cc_kevin_bundle",
+            "labels": [
+                "CC_Kevin"
+            ]
+        }
+    ]
+}
