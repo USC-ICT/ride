@@ -1,0 +1,21 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<SymbolSet xmlns="http://disa.mil/JointMilSyML.xsd" ID="SS_UNKNOWN" Label="Unknown" DimensionID="UNKNOWN" Geometry="POINT">
+  <SymbolSetCode>
+    <DigitOne>0</DigitOne>
+    <DigitTwo>0</DigitTwo>
+  </SymbolSetCode>
+  <LegacyCodingSchemeCode Name="2525C">S</LegacyCodingSchemeCode>
+  <Entities>
+    <Entity ID="UNSPECIFIED" Label="Unspecified" GeometryType="NA" Icon="NA">
+      <EntityCode>
+        <DigitOne>0</DigitOne>
+        <DigitTwo>0</DigitTwo>
+      </EntityCode>
+    </Entity>
+  </Entities>
+  <LegacySymbols>
+    <LegacySymbol ID="UNKNOWN_SYM" Label="S*ZP------*****" EntityID="UNSPECIFIED">
+      <LegacyFunctionCode DimensionOverride="Z" Name="2525C">------</LegacyFunctionCode>
+    </LegacySymbol>
+  </LegacySymbols>
+</SymbolSet>

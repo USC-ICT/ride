@@ -1,0 +1,470 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<xs:schema targetNamespace="http://disa.mil/JointMilSyML.xsd"
+    elementFormDefault="qualified"
+    xmlns="http://disa.mil/JointMilSyML.xsd"
+    xmlns:jmsml="http://disa.mil/JointMilSyML.xsd"
+    xmlns:xs="http://www.w3.org/2001/XMLSchema"
+>
+ <xs:simpleType name="SingleLetterType">
+    <xs:restriction base="xs:token">
+      <xs:length value="1" fixed="true"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="LegacyTokenType">
+    <xs:restriction base="xs:token">
+      <xs:length value="6" fixed="true"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="StandardType">
+    <xs:restriction base="xs:token">
+      <xs:enumeration value="ALL"/>
+      <xs:enumeration value="MILSTD_2525"/>
+      <xs:enumeration value="NATO_APP6"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="IconType">
+    <xs:restriction base="xs:token">
+      <xs:enumeration value="NA"/>
+      <xs:enumeration value="MAIN"/>
+      <xs:enumeration value="MAIN_1"/>
+      <xs:enumeration value="MAIN_2"/>
+      <xs:enumeration value="FULL_OCTAGON"/>
+      <xs:enumeration value="FULL_FRAME"/>
+      <xs:enumeration value="SPECIAL"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="ShapeType">
+    <xs:restriction base="xs:token">
+      <xs:enumeration value="NA"/>
+      <xs:enumeration value="CIRCLE"/>
+      <xs:enumeration value="CLOVER"/>
+      <xs:enumeration value="CURVE"/>
+      <xs:enumeration value="DIAMOND"/>
+      <xs:enumeration value="RECTANGLE"/>
+      <xs:enumeration value="SQUARE"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="GeometryType">
+    <xs:restriction base="xs:token">
+      <xs:enumeration value="NA"/>
+      <xs:enumeration value="POINT"/>
+      <xs:enumeration value="LINE"/>
+      <xs:enumeration value="AREA"/>
+      <xs:enumeration value="MIXED"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="AmplifierType">
+    <xs:restriction base="xs:token">
+      <xs:enumeration value="GRAPHIC"/>
+      <xs:enumeration value="TEXT"/>
+    </xs:restriction>
+  </xs:simpleType>
+  
+  <xs:simpleType name="AttributeTypeType">
+    <xs:restriction base="xs:token">
+      <xs:enumeration value="BOOLEAN"/>
+      <xs:enumeration value="DATETIME"/>
+      <xs:enumeration value="DOUBLE"/>
+      <xs:enumeration value="INTEGER"/>
+      <xs:enumeration value="LONG"/>
+      <xs:enumeration value="SINGLE"/>
+      <xs:enumeration value="STRING"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:complexType name="LegacyFunctionCodeType">
+    <xs:simpleContent>
+      <xs:extension base="LegacyTokenType">
+        <xs:attributeGroup ref="NameAttributeGroup"/>
+        <xs:attribute name="SchemaOverride" type="xs:token" use="optional" default=""/>
+        <xs:attribute name="DimensionOverride" type="xs:token" use="optional" default=""/>
+        <xs:attribute name="StandardIdentityOverride" type="xs:token" use="optional" default=""/>
+        <xs:attribute name="StatusOverride" type="xs:token" use="optional" default=""/>
+        <xs:attribute name="HQTFFDOverride" type="xs:token" use="optional" default=""/>
+        <xs:attribute name="AmplifierOverride" type="xs:token" use="optional" default=""/>
+        <xs:attribute name="TailOverride" type="xs:token" use="optional" default=""/>
+        <xs:attribute name="LimitUseTo" type="xs:token" use="optional" default=""/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+
+  <xs:complexType name="LegacyLetterCodeType">
+    <xs:simpleContent>
+      <xs:extension base="SingleLetterType">
+        <xs:attributeGroup ref="NameAttributeGroup"/>
+        <xs:attribute name="CodingSchemeLetter" type="xs:token" use="optional" default=""/>
+        <xs:attribute name="StandardIdentityOverride" type="xs:token" use="optional" default=""/>
+        <xs:attribute name="BattleDimensionLetter" type="xs:token" use="optional" default=""/>
+        <xs:attribute name="FirstFunctionLetter" type="xs:token" use="optional" default=""/>
+        <xs:attribute name="Function" type="xs:token" use="optional" default=""/>
+        <xs:attribute name="IsPlanned" type="xs:boolean" use="optional" default="true"/>
+        <xs:attribute name="Graphic" type="xs:token" use="optional" default=""/>
+        <xs:attribute name="LimitUseTo" type="xs:token" use="optional" default=""/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+  
+  <xs:simpleType name="SingleDigitType">
+    <xs:restriction base="xs:unsignedShort">
+      <xs:minInclusive value="0"/>
+      <xs:maxInclusive value="9"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:complexType name="DoubleDigitType" mixed="true">
+    <xs:sequence>
+      <xs:element name="DigitOne" type="SingleDigitType" minOccurs="1" default="0"/>
+      <xs:element name="DigitTwo" type="SingleDigitType" minOccurs="1" default="0"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:attributeGroup name="NameAttributeGroup">
+    <xs:attribute name="Name" type="xs:token" use="required"/>
+    <xs:attribute name="Label" type="xs:token" use="optional"/>
+    <xs:attribute name="LabelAlias" type="xs:token" use="optional" default=""/>
+    <xs:attribute name="Description" type="xs:string" use="optional"/>
+    <xs:attribute name="Remarks" type="xs:string" use="optional"/>
+  </xs:attributeGroup>
+
+  <xs:attributeGroup name="IdentifierAttributeGroup">
+    <xs:attribute name="ID" type="xs:ID" use="required"/>
+    <xs:attribute name="Label" type="xs:token" use="optional"/>
+    <xs:attribute name="LabelAlias" type="xs:token" use="optional" default=""/>
+    <xs:attribute name="Description" type="xs:string" use="optional"/>
+    <xs:attribute name="Remarks" type="xs:string" use="optional"/>
+  </xs:attributeGroup>
+
+  <xs:attributeGroup name="IdentifierAttributeGroup2">
+    <xs:attribute name="ID" type="xs:IDREF" use="required"/>
+    <xs:attribute name="Label" type="xs:token" use="optional"/>
+    <xs:attribute name="Description" type="xs:string" use="optional"/>
+    <xs:attribute name="Remarks" type="xs:string" use="optional"/>
+  </xs:attributeGroup>
+
+  <xs:attributeGroup name="IdentifierDrawRuleGroup">
+    <xs:attribute name="ID" type="xs:ID" use="required"/>
+    <xs:attribute name="GeometryID" type="xs:IDREF" use="required"/>
+    <xs:attribute name="AnchorPoints" type="xs:string" use="optional" default="Not Applicable"/>
+    <xs:attribute name="SizeShape" type="xs:string" use="optional" default="Not Applicable"/>
+    <xs:attribute name="Orientation" type="xs:string" use="optional" default="Not Applicable"/>
+    <xs:attribute name="Ornamentation" type="xs:string" use="optional" default="Not Applicable"/>
+  </xs:attributeGroup>
+
+  <xs:attributeGroup name="GraphicNameAttributeGroup">
+    <xs:attribute name="Name" type="xs:token" use="required"/>
+    <xs:attribute name="Label" type="xs:token" use="optional"/>
+    <xs:attribute name="LabelAlias" type="xs:token" use="optional" default=""/>
+    <xs:attribute name="Description" type="xs:string" use="optional"/>
+    <xs:attribute name="Remarks" type="xs:string" use="optional"/>
+    <xs:attribute name="Graphic" type="xs:anyURI" use="optional"/>
+  </xs:attributeGroup>
+
+  <xs:attributeGroup name="SIGraphicAttributeGroup">
+    <xs:attribute name="StandardIdentityGroup" type="xs:IDREF" use="required"/>
+    <xs:attribute name="Graphic" type="xs:anyURI" use="required"/>
+  </xs:attributeGroup>
+
+  <xs:attributeGroup name="SIGDimensionGraphicAttributeGroup">
+    <xs:attribute name="StandardIdentityGroup" type="xs:IDREF" use="required"/>
+    <xs:attribute name="DimensionID" type="xs:IDREF" use="required"/>
+    <xs:attribute name="Graphic" type="xs:anyURI" use="required"/>
+  </xs:attributeGroup>
+
+  <xs:attributeGroup name="SIDimensionGraphicAttributeGroup">
+    <xs:attribute name="StandardIdentity" type="xs:IDREF" use="required"/>
+    <xs:attribute name="Dimension" type="xs:IDREF" use="required"/>
+    <xs:attribute name="Graphic" type="xs:anyURI" use="required"/>
+  </xs:attributeGroup>
+
+  <xs:attributeGroup name="GraphicIdentifierAttributeGroup">
+    <xs:attribute name="ID" type="xs:ID" use="required"/>
+    <xs:attribute name="Label" type="xs:token" use="optional"/>
+    <xs:attribute name="LabelAlias" type="xs:token" use="optional" default=""/>
+    <xs:attribute name="Description" type="xs:string" use="optional"/>
+    <xs:attribute name="Remarks" type="xs:string" use="optional"/>
+    <xs:attribute name="Graphic" type="xs:anyURI" use="optional"/>
+  </xs:attributeGroup>
+
+  <xs:attributeGroup name="FramedGraphicIdentifierAttributeGroup">
+    <xs:attribute name="ID" type="xs:ID" use="required"/>
+    <xs:attribute name="Label" type="xs:token" use="optional" default=""/>
+    <xs:attribute name="LabelAlias" type="xs:token" use="optional" default=""/>
+    <xs:attribute name="Description" type="xs:string" use="optional" default=""/>
+    <xs:attribute name="Remarks" type="xs:string" use="optional" default=""/>
+    <xs:attribute name="Graphic" type="xs:anyURI" use="optional" default=""/>
+    <xs:attribute name="AlternativeGraphic" type="xs:anyURI" use="optional" default=""/>
+    <xs:attribute name="CircleGraphic" type="xs:anyURI" use="optional" default=""/>
+    <xs:attribute name="CloverGraphic" type="xs:anyURI" use="optional" default=""/>
+    <xs:attribute name="CurveGraphic" type="xs:anyURI" use="optional" default=""/>
+    <xs:attribute name="DiamondGraphic" type="xs:anyURI" use="optional" default=""/>
+    <xs:attribute name="RectangleGraphic" type="xs:anyURI" use="optional" default=""/>
+    <xs:attribute name="SquareGraphic" type="xs:anyURI" use="optional" default=""/>
+    <xs:attribute name="DrawRuleID" type="xs:IDREF" use="optional" default="POINT_RULE"/>
+    <xs:attribute name="DrawNote" type="xs:string" use="optional" default="Not Applicable"/>
+    <xs:attribute name="Standard" type="StandardType" use="optional" default="ALL"/>
+    <xs:attribute name="Icon" type="IconType" use="optional" default="MAIN"/>
+    <xs:attribute name="IsCivilian" type="xs:boolean" use="optional" default="false"/>
+    <xs:attribute name="IsAlignable" type="xs:boolean" use="optional" default="false"/>
+  </xs:attributeGroup>
+
+  <xs:attributeGroup name="FramedGraphicNameAttributeGroup">
+    <xs:attribute name="Name" type="xs:token" use="required"/>
+    <xs:attribute name="Label" type="xs:token" use="optional"/>
+    <xs:attribute name="Description" type="xs:string" use="optional"/>
+    <xs:attribute name="Remarks" type="xs:string" use="optional"/>
+    <xs:attribute name="Graphic" type="xs:anyURI" use="optional"/>
+    <xs:attribute name="CircleGraphic" type="xs:anyURI" use="optional"/>
+    <xs:attribute name="CloverGraphic" type="xs:anyURI" use="optional"/>
+    <xs:attribute name="CurveGraphic" type="xs:anyURI" use="optional"/>
+    <xs:attribute name="DiamondGraphic" type="xs:anyURI" use="optional"/>
+    <xs:attribute name="RectangleGraphic" type="xs:anyURI" use="optional"/>
+    <xs:attribute name="SquareGraphic" type="xs:anyURI" use="optional"/>
+  </xs:attributeGroup>
+
+  <xs:attributeGroup name="SymbolAttributeGroup">
+    <xs:attribute name="EntityID" type="xs:IDREF" default="NA" use="optional"/>
+    <xs:attribute name="EntityTypeID" type="xs:IDREF" default="NA" use="optional"/>
+    <xs:attribute name="EntitySubTypeID" type="xs:IDREF" default="NA" use="optional"/>
+    <xs:attribute name="ModifierOneID" type="xs:IDREF" default="NA" use="optional"/>
+    <xs:attribute name="ModifierTwoID" type="xs:IDREF" default="NA" use="optional"/>
+  </xs:attributeGroup>
+
+  <xs:complexType name="ModifiersType">
+    <xs:sequence>
+      <xs:element name="Modifier" minOccurs="1" maxOccurs="unbounded">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="ModifierCode" type="DoubleDigitType"/>
+          </xs:sequence>
+          <xs:attributeGroup ref="GraphicIdentifierAttributeGroup"/>
+          <xs:attribute name="Category" type="xs:token" use="optional" default=""/>
+          <xs:attribute name="CategoryAlias" type="xs:token" use="optional" default=""/>
+          <xs:attribute name="LimitUseTo" type="xs:IDREFS" use="optional"/>
+          <xs:attribute name="Standard" type="StandardType" use="optional" default="ALL"/>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="FieldListType">
+    <xs:sequence>
+      <xs:element name="Field" minOccurs="0" maxOccurs="unbounded">
+        <xs:complexType>
+          <xs:attributeGroup ref="IdentifierAttributeGroup"/>
+          <xs:attribute name="Type" type="AttributeTypeType"/>
+          <xs:attribute name="AmplifierID" type="xs:IDREF" use="required"/>
+          <xs:attribute name="X" type="xs:int" use="optional" default="0"/>
+          <xs:attribute name="Y" type="xs:int" use="optional" default="0"/>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="EntitySubTypeType">
+    <xs:sequence>
+      <xs:element name="EntitySubTypeCode" type="DoubleDigitType" minOccurs="1" maxOccurs="1"/>
+      <xs:element ref="Tags" minOccurs="0" maxOccurs="1">
+        <xs:annotation>
+          <xs:documentation>Custom tags, often used for searching information in user interfaces.</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+    </xs:sequence>
+    <xs:attributeGroup ref="FramedGraphicIdentifierAttributeGroup"/>
+    <xs:attribute name="GeometryType" type="GeometryType" default="POINT" use="optional"/>
+    <xs:attribute name="EntityCode" type="xs:token" use="optional" default="00"/>
+    <xs:attribute name="EntityTypeCode" type="xs:token" use="optional" default="00"/>
+  </xs:complexType>
+
+  <xs:element name="Tags">
+    <xs:annotation>
+      <xs:documentation>One or more Tag elements that can be used by systems to store custom information on other elements.</xs:documentation>
+    </xs:annotation>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="Tag" type="xs:token" minOccurs="1" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+  <!-- Similar to SymbolSet:Entity, without the types and subtypes and code -->
+  <!-- TODO: Consider refactoring - this is my first use of XML substitution groups -->
+  
+  <xs:element name="Entity" type="EntityType"/>
+  <xs:complexType name="EntityType">
+    <xs:sequence>
+      <xs:element ref="Tags" minOccurs="0" maxOccurs="1">
+        <xs:annotation>
+          <xs:documentation>Custom tags, often used for searching information in user interfaces.</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+    </xs:sequence>
+    <xs:attributeGroup ref="FramedGraphicIdentifierAttributeGroup"/>
+    <xs:attribute name="GeometryType" type="GeometryType" default="POINT" use="optional"/>
+  </xs:complexType>
+
+  <xs:element name="LegacyEntity" type="LegacyEntityType" substitutionGroup="Entity"/>
+  <xs:complexType name="LegacyEntityType">
+    <xs:complexContent>
+      <xs:extension base="EntityType">
+        <xs:sequence>
+          <xs:element name="LegacyFunctionCode" type="LegacyFunctionCodeType" minOccurs="1" maxOccurs="unbounded"/>
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  
+  <!-- Label Placement -->
+  
+  <xs:simpleType name="LabelRuleType">
+    <xs:restriction base="xs:token">
+      <xs:enumeration value="Point"/>
+      <xs:enumeration value="Line"/>
+      <xs:enumeration value="Area"/>
+    </xs:restriction>
+  </xs:simpleType>
+  
+  <xs:simpleType name="PointLabelMethodType">
+    <xs:restriction base="xs:token">
+      <xs:enumeration value="NA"/>
+      <xs:enumeration value="AroundPoint"/>
+			<xs:enumeration value="CenteredOnPoint"/>
+			<xs:enumeration value="NorthOfPoint"/>
+			<xs:enumeration value="NorthEastOfPoint"/>
+			<xs:enumeration value="EastOfPoint"/>
+			<xs:enumeration value="SouthEastOfPoint"/>
+			<xs:enumeration value="SouthOfPoint"/>
+			<xs:enumeration value="SouthWestOfPoint"/>
+			<xs:enumeration value="WestOfPoint"/>
+			<xs:enumeration value="NorthWestOfPoint"/>
+    </xs:restriction>
+  </xs:simpleType>
+  
+  <xs:simpleType name="LineLabelMethodType">
+    <xs:restriction base="xs:token">
+      <xs:enumeration value="NA"/>
+      <xs:enumeration value="CenteredHorizontalOnLine"/>
+			<xs:enumeration value="CenteredStraightOnLine"/>
+			<xs:enumeration value="CenteredCurvedOnLine"/>
+			<xs:enumeration value="CenteredPerpendicularOnLine"/>
+			<xs:enumeration value="OffsetHorizontalFromLine"/>
+			<xs:enumeration value="OffsetStraightFromLine"/>
+			<xs:enumeration value="OffsetCurvedFromLine"/>
+			<xs:enumeration value="OffsetPerpendicularFromLine"/>
+      </xs:restriction>
+  </xs:simpleType>
+  
+   <xs:simpleType name="AreaLabelMethodType">
+    <xs:restriction base="xs:token">
+      <xs:enumeration value="NA"/>
+      <xs:enumeration value="HorizontalInPolygon"/>
+			<xs:enumeration value="StraightInPolygon"/>
+			<xs:enumeration value="CurvedInPolygon"/>
+			<xs:enumeration value="HorizontalAroundPolygon"/>
+			<xs:enumeration value="RepeatAlongBoundary"/>
+			<xs:enumeration value="CurvedAroundPolygon"/>
+    </xs:restriction>
+  </xs:simpleType>
+  
+  <xs:simpleType name="MultiPartOptionType">
+    <xs:restriction base="xs:token">
+      <xs:enumeration value="OneLabelPerFeature"/>
+			<xs:enumeration value="OneLabelPerPart"/>
+			<xs:enumeration value="OneLabelPerSegment"/>
+    </xs:restriction>
+  </xs:simpleType>
+  
+  <xs:simpleType name="ConstrainOffsetType">
+    <xs:restriction base="xs:token">
+      <xs:enumeration value="NoConstraint"/>
+			<xs:enumeration value="AboveLine"/>
+			<xs:enumeration value="BelowLine"/>
+			<xs:enumeration value="LeftOfLine"/>
+			<xs:enumeration value="RightOfLine"/>
+    </xs:restriction>
+  </xs:simpleType>
+  
+  <xs:simpleType name="OffsetAlongLinePlacementType">
+		<xs:restriction base="xs:token">
+			<xs:enumeration value="BestPositionAlongLine"/>
+			<xs:enumeration value="BeforeStartOfLine"/>
+			<xs:enumeration value="AlongLineFromStart"/>
+			<xs:enumeration value="AlongLineFromEnd"/>
+			<xs:enumeration value="AfterEndOfLine"/>
+		</xs:restriction>
+	</xs:simpleType>
+  
+  <xs:simpleType name="LabelAnchorPointType">
+		<xs:restriction base="xs:token">
+			<xs:enumeration value="CenterOfLabel"/>
+			<xs:enumeration value="NearestSideOfLabel"/>
+			<xs:enumeration value="FurthestSideOfLabel"/>
+		</xs:restriction>
+	</xs:simpleType>
+  
+  <xs:simpleType name="LabelUnitType">
+		<xs:restriction base="xs:token">
+			<xs:enumeration value="Map"/>
+			<xs:enumeration value="MM"/>
+			<xs:enumeration value="Inch"/>
+			<xs:enumeration value="Point"/>
+			<xs:enumeration value="Percentage"/>
+		</xs:restriction>
+	</xs:simpleType>
+
+  <xs:simpleType name="LabelExternalZoneType">
+    <xs:restriction base="xs:token">
+      <xs:enumeration value="NA"/>
+      <xs:enumeration value="AboveLeft"/>
+      <xs:enumeration value="AboveCenter"/>
+      <xs:enumeration value="AboveRight"/>
+      <xs:enumeration value="CenterRight"/>
+      <xs:enumeration value="BelowRight"/>
+      <xs:enumeration value="BelowCenter"/>
+      <xs:enumeration value="BelowLeft"/>
+      <xs:enumeration value="CenterLeft"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="LabelInternalZoneType">
+    <xs:restriction base="xs:token">
+      <xs:enumeration value="NA"/>
+      <xs:enumeration value="AboveLeft"/>
+      <xs:enumeration value="AboveCenter"/>
+      <xs:enumeration value="AboveRight"/>
+      <xs:enumeration value="CenterRight"/>
+      <xs:enumeration value="BelowRight"/>
+      <xs:enumeration value="BelowCenter"/>
+      <xs:enumeration value="BelowLeft"/>
+      <xs:enumeration value="CenterLeft"/>
+      <xs:enumeration value="Center"/>
+    </xs:restriction>
+  </xs:simpleType>
+                 
+  <xs:attributeGroup name="LabelRuleAttributeGroup">
+    <xs:attribute name="ID" type="xs:ID" use="required"/>
+    <xs:attribute name="Type" type="LabelRuleType" use="required"/>
+    <xs:attribute name="PointLabelMethod" type="PointLabelMethodType" use="optional" default="NA"/>
+    <xs:attribute name="LineLabelMethod" type="LineLabelMethodType" use="optional" default="NA"/>
+    <xs:attribute name="AreaLabelMethod" type="AreaLabelMethodType" use="optional" default="NA"/>
+    <xs:attribute name="MultiPartOption" type="MultiPartOptionType" use="optional" default="OneLabelPerFeature"/>
+    <xs:attribute name="ConstrainOffset" type="ConstrainOffsetType" use="optional" default="NoConstraint"/>
+    <xs:attribute name="ExternalZone" type="LabelExternalZoneType" use="optional" default="NA"/>
+    <xs:attribute name="InternalZone" type="LabelInternalZoneType" use="optional" default="NA"/>
+    <xs:attribute name="Offset" type="xs:double" use="optional" default="0"/>
+    <xs:attribute name="OffsetUnit" type="LabelUnitType" use="optional" default="Map"/>
+  </xs:attributeGroup>
+
+  <xs:attributeGroup name="OffsetAlongLineAttributeGroup">
+    <xs:attribute name="PlacementMethod" type="OffsetAlongLinePlacementType" use="required"/>
+    <xs:attribute name="LabelAnchorPoint" type="LabelAnchorPointType" use="required"/>
+    <xs:attribute name="Distance" type="xs:double" use="optional" default="0"/>
+    <xs:attribute name="Tolerance" type="xs:double" use="optional" default="0"/>
+    <xs:attribute name="DistanceUnit" type="LabelUnitType" use="optional" default="Map"/>
+  </xs:attributeGroup>
+</xs:schema>

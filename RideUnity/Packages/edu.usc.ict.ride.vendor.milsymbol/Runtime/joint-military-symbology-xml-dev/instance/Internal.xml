@@ -1,0 +1,21 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<SymbolSet xmlns="http://disa.mil/JointMilSyML.xsd" ID="SS_INTERNAL" Label="Internal" DimensionID="INTERNAL" Geometry="POINT">
+  <SymbolSetCode>
+    <DigitOne>9</DigitOne>
+    <DigitTwo>8</DigitTwo>
+  </SymbolSetCode>
+  <Entities>
+    <Entity ID="UNSPECIFIED" Label="Unspecified" GeometryType="NA" Icon="NA">
+      <EntityCode>
+        <DigitOne>0</DigitOne>
+        <DigitTwo>0</DigitTwo>
+      </EntityCode>
+    </Entity>
+    <Entity ID="INVALID" Label="Invalid Symbol" Graphic="98100000.svg" Icon="FULL_OCTAGON">
+      <EntityCode>
+        <DigitOne>1</DigitOne>
+        <DigitTwo>0</DigitTwo>
+      </EntityCode>
+    </Entity>
+  </Entities>
+</SymbolSet>
