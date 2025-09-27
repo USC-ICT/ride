@@ -148,6 +148,24 @@
         "com.unity.nuget.newtonsoft-json": "3.2.1"
       }
     },
+    "edu.usc.ict.ride.vendor.crc32net": {
+      "version": "file:edu.usc.ict.ride.vendor.crc32net",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {}
+    },
+    "edu.usc.ict.ride.vendor.milsymbol": {
+      "version": "file:edu.usc.ict.ride.vendor.milsymbol",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {}
+    },
+    "edu.usc.ict.ride.vendor.vhassets": {
+      "version": "file:edu.usc.ict.ride.vendor.vhassets",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {}
+    },
     "com.unity.modules.accessibility": {
       "version": "1.0.0",
       "depth": 0,
