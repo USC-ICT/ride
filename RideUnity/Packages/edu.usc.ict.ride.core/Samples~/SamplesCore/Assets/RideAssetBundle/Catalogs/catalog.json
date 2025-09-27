@@ -1,0 +1,20 @@
+{
+    "localPrefixPath": "C:/Users/esookiassian/AppData/LocalLow/USC-ICT/RIDE/AssetCatalogs/6000.0.27f1/BuiltIn/StandaloneWindows64",
+    "remotePrefixPath": "ride-owt/Test/AssetCatalogs/6000.0.27f1/BuiltIn/StandaloneWindows64",
+    "entries": [
+        {
+            "assetName": "OrangeSphere",
+            "bundleFileName": "orangesphere_bundle",
+            "labels": [
+                "SampleSphere"
+            ]
+        },
+        {
+            "assetName": "RideAtlasCube",
+            "bundleFileName": "rideatlascube_bundle",
+            "labels": [
+                "SampleCube"
+            ]
+        }
+    ]
+}
