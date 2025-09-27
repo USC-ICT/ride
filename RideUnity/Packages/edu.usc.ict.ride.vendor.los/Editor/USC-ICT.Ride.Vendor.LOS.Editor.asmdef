@@ -1,0 +1,18 @@
+{
+    "name": "USC-ICT.Ride.Vendor.LOS.Editor",
+    "rootNamespace": "",
+    "references": [
+        "GUID:b7fb054a2b6b3054881c286d7da17c0c"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
