@@ -190,6 +190,18 @@
         "com.unity.nuget.newtonsoft-json": "3.2.1"
       }
     },
+    "edu.usc.ict.ride.cognition": {
+      "version": "file:edu.usc.ict.ride.cognition",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "edu.usc.ict.ride.vendor.aws": "0.0.8290",
+        "edu.usc.ict.ride.vendor.cognition": "0.0.8290",
+        "edu.usc.ict.ride.vendor.vhassets": "0.0.8310",
+        "edu.usc.ict.ride.core": "0.0.8310",
+        "edu.usc.ict.ride.core.ui": "0.0.8310"
+      }
+    },
     "edu.usc.ict.ride.core": {
       "version": "file:edu.usc.ict.ride.core",
       "depth": 0,
@@ -202,6 +214,14 @@
         "edu.usc.ict.ride.vendor.milsymbol": "0.0.8290",
         "edu.usc.ict.ride.vendor.vhassets": "0.0.8310",
         "edu.usc.ict.ride.abstract": "0.0.8290"
+      }
+    },
+    "edu.usc.ict.ride.core.ui": {
+      "version": "file:edu.usc.ict.ride.core.ui",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "edu.usc.ict.ride.core": "0.0.8310"
       }
     },
     "edu.usc.ict.ride.vendor.aws": {
@@ -218,12 +238,6 @@
     },
     "edu.usc.ict.ride.vendor.crc32net": {
       "version": "file:edu.usc.ict.ride.vendor.crc32net",
-      "depth": 0,
-      "source": "embedded",
-      "dependencies": {}
-    },
-    "edu.usc.ict.ride.vendor.los": {
-      "version": "file:edu.usc.ict.ride.vendor.los",
       "depth": 0,
       "source": "embedded",
       "dependencies": {}

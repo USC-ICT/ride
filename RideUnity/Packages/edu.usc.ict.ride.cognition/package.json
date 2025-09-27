@@ -1,0 +1,45 @@
+{
+  "name": "edu.usc.ict.ride.cognition",
+  "version": "0.0.8322",
+  "displayName": "RIDE Cognition",
+  "description": "This is the USC ICT RIDE Cognition Package",
+  "unity": "2022.1",
+  "unityRelease": "9f1",
+  "dependencies": {
+    "edu.usc.ict.ride.vendor.aws": "0.0.8290",
+    "edu.usc.ict.ride.vendor.cognition": "0.0.8290",
+    "edu.usc.ict.ride.vendor.vhassets": "0.0.8310",
+    "edu.usc.ict.ride.core": "0.0.8310",
+    "edu.usc.ict.ride.core.ui": "0.0.8310"
+  },
+  "homepage": "https://ride.ict.usc.edu",
+  "documentationUrl": "https://ride.ict.usc.edu",
+  "changelogUrl": "https://ride.ict.usc.edu",
+  "license": "SEE LICENSE IN LICENSE.md",
+  "licensesUrl": "https://ride.ict.usc.edu",
+  "bugs": {
+    "url": "https://ride.ict.usc.edu"
+  },
+  "author": {
+    "name": "USC-ICT",
+    "email": "ride@ict.usc.edu",
+    "url": "https://ride.ict.usc.edu"
+  },
+  "repository": {
+    "type": "svn",
+    "url": "https://ride.ict.usc.edu"
+  },
+  "keywords": [
+    "RIDE"
+  ],
+  "publishConfig": {
+    "registry": "https://ride-npm.ict.usc.edu"
+  },
+  "samples": [
+    {
+      "displayName": "RIDE Cognition Sample",
+      "description": "Sample scene demonstrating RIDE Cognition systems",
+      "path": "Samples~/SamplesCognition"
+    }
+  ]
+}
