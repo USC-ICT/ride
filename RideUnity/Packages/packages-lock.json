@@ -204,14 +204,38 @@
         "edu.usc.ict.ride.abstract": "0.0.8290"
       }
     },
+    "edu.usc.ict.ride.vendor.aws": {
+      "version": "file:edu.usc.ict.ride.vendor.aws",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {}
+    },
+    "edu.usc.ict.ride.vendor.cognition": {
+      "version": "file:edu.usc.ict.ride.vendor.cognition",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {}
+    },
     "edu.usc.ict.ride.vendor.crc32net": {
       "version": "file:edu.usc.ict.ride.vendor.crc32net",
       "depth": 0,
       "source": "embedded",
       "dependencies": {}
     },
+    "edu.usc.ict.ride.vendor.los": {
+      "version": "file:edu.usc.ict.ride.vendor.los",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {}
+    },
     "edu.usc.ict.ride.vendor.milsymbol": {
       "version": "file:edu.usc.ict.ride.vendor.milsymbol",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {}
+    },
+    "edu.usc.ict.ride.vendor.vh": {
+      "version": "file:edu.usc.ict.ride.vendor.vh",
       "depth": 0,
       "source": "embedded",
       "dependencies": {}

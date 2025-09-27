@@ -1,0 +1,16 @@
+{
+    "name": "NonVerbalBehaviorGenerator",
+    "rootNamespace": "",
+    "references": [
+        "GUID:79052b06a159d6844b2106e7d0d7e686"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

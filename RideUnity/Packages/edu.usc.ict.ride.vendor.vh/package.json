@@ -1,0 +1,32 @@
+{
+  "name": "edu.usc.ict.ride.vendor.vh",
+  "version": "0.0.8290",
+  "displayName": "RIDE Ι Vendor - VH",
+  "description": "This is the USC ICT RIDE Vendor VH Package",
+  "unity": "2022.1",
+  "unityRelease": "9f1",
+  "dependencies": {},
+  "homepage": "https://ride.ict.usc.edu",
+  "documentationUrl": "https://ride.ict.usc.edu",
+  "changelogUrl": "https://ride.ict.usc.edu",
+  "license": "SEE LICENSE IN LICENSE.md",
+  "licensesUrl": "https://ride.ict.usc.edu",
+  "bugs": {
+    "url": "https://ride.ict.usc.edu"
+  },
+  "author": {
+    "name": "USC-ICT",
+    "email": "ride@ict.usc.edu",
+    "url": "https://ride.ict.usc.edu"
+  },
+  "repository": {
+    "type": "svn",
+    "url": "https://ride.ict.usc.edu"
+  },
+  "keywords": [
+    "RIDE"
+  ],
+  "publishConfig": {
+    "registry": "https://ride-npm.ict.usc.edu"
+  }
+}
