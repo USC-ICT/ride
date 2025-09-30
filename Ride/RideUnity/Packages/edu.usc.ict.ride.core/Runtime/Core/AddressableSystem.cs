@@ -207,6 +207,11 @@ namespace Ride
 
             if (!File.Exists(localCatalogPath))
             {
+                // populate these so that the rest of the system isn't waiting on this entry (see ValidateCatalogLoadStatus(), ValidateAssetBundleLoadStatus()
+                addressableInfo.IsCatalogLoaded = true;
+                addressableInfo.AssetBundlesReady = true;
+                addressableInfo.AddAssetBundleKey($"{localCatalogPath}-unused");
+
                 Debug.LogWarning($"AddressableSystem.LoadLocalCatalog() - Local catalog not found at {localCatalogPath}");
                 return;
             }
