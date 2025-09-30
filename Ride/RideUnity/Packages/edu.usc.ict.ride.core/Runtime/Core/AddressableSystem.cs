@@ -158,7 +158,8 @@ namespace Ride
 
             if (IsLocalAsset(assetBundleKey))
             {
-                string localPath = Path.Combine(Application.persistentDataPath, "Addressables", Path.GetFileName(originalUrl)).Replace("\\", "/");
+                string localPath = Path.Combine(Application.streamingAssetsPath, "aa", "Addressables", Path.GetFileName(originalUrl)).Replace("\\", "/");
+                localPath = Path.GetFullPath(localPath).Replace("\\", "/");
                 request.url = localPath;
                 return;
             }
@@ -201,11 +202,12 @@ namespace Ride
 
         private void LoadLocalCatalog(AddressableCatalogInfo addressableInfo)
         {
-            string localCatalogPath = Path.Combine(Application.persistentDataPath, "Addressables", addressableInfo.GetCatalogAssetKey()).Replace("\\", "/");
+            string localCatalogPath = Path.Combine(Application.streamingAssetsPath, "aa", "Addressables", addressableInfo.GetCatalogAssetKey()).Replace("\\", "/");
+            localCatalogPath = Path.GetFullPath(localCatalogPath).Replace("\\", "/");
 
-            if (!System.IO.File.Exists(localCatalogPath))
+            if (!File.Exists(localCatalogPath))
             {
-                Debug.LogError($"Local catalog not found at {localCatalogPath}. Ensure Addressables are built and stored correctly.");
+                Debug.LogWarning($"AddressableSystem.LoadLocalCatalog() - Local catalog not found at {localCatalogPath}");
                 return;
             }
             Debug.Log($"Loading local Addressables catalog from {localCatalogPath}");
