@@ -11,6 +11,9 @@ namespace Ride.NLP
     /// </summary>
     public class NlpSystemAnthropic : NlpSystemUnity
     {
+        private string m_model = "claude-haiku-4-5"; //claude-sonnet-4-5
+
+
         /// <summary>
         /// Initializes the system by configuring the Anthropic endpoint, setting up authorization, 
         /// defining the initial prompt, and performing base initialization.
@@ -43,8 +46,7 @@ namespace Ride.NLP
             //Serialize data for the question
             string data = RideIO.JsonSerialize(new
             {
-                //model = "claude-3-haiku-20240307",
-                model = "claude-3-5-sonnet-20240620",
+                model = m_model,
                 system = m_initialPrompt,
                 messages = messagesList.ToArray(),
                 max_tokens = 1024

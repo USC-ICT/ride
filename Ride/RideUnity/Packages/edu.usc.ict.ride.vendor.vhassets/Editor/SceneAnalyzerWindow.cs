@@ -364,7 +364,7 @@ public class SceneAnalyzerWindow : EditorWindow
     #endregion
 
     #region Functions
-    [MenuItem("VH/Scene Reporting/Scene Analyzer")]
+    //[MenuItem("VH/Scene Reporting/Scene Analyzer")]
     static void Init()
     {
         SceneAnalyzerWindow window = (SceneAnalyzerWindow)EditorWindow.GetWindow(typeof(SceneAnalyzerWindow));

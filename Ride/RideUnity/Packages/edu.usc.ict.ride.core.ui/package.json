@@ -1,12 +1,12 @@
 {
   "name": "edu.usc.ict.ride.core.ui",
-  "version": "0.0.8310",
+  "version": "0.0.8524",
   "displayName": "RIDE Core UI",
   "description": "This is the USC ICT RIDE Core UI Package",
   "unity": "2022.1",
   "unityRelease": "9f1",
   "dependencies": {
-    "edu.usc.ict.ride.core": "0.0.8310"
+    "edu.usc.ict.ride.core": "0.0.8524"
   },
   "homepage": "https://ride.ict.usc.edu",
   "documentationUrl": "https://ride.ict.usc.edu",

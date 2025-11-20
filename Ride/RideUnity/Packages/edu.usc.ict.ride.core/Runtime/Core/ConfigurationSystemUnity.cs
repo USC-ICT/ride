@@ -7,10 +7,12 @@ namespace Ride
     /// <summary>
     /// Unity MonoBehaviour system for loading, accessing, and persisting the RIDE configuration.
     /// Wraps access to <see cref="RideConfig"/>, and provides convenience methods for validation,
-    /// AWS terrain configuration, and Azure QnA setup. Automatically loads the configuration at runtime from persistent storage.
+    /// AWS terrain configuration, and other cloud services setup. Automatically loads the configuration 
+    /// at runtime from persistent storage.
     /// 
-    /// Use <see cref="Load"/> and <see cref="Save"/> to manage configuration lifecycle,
-    /// or call <see cref="ResetConfig"/> to restore defaults. Supports checking for version compatibility and validating AWS keys.
+    /// Use <see cref="Load"/> and <see cref="Save"/> to manage configuration lifecycle, or call 
+    /// <see cref="ResetConfig"/> to restore defaults. Supports checking for version compatibility 
+    /// and validating AWS keys.
     ///
     /// The actual configuration format is defined in <see cref="RideConfig"/>.
     /// </summary>

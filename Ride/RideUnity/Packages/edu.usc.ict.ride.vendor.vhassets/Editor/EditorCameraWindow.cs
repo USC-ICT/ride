@@ -19,7 +19,7 @@ public class EditorCameraWindow : EditorWindow
     Rect m_PosRect = new Rect(10, 10, 250, 25);
     Rect m_RotRect = new Rect(10, 45, 250, 25);
 
-    [MenuItem("VH/Editor Camera Window")]
+    //[MenuItem("VH/Editor Camera Window")]
     static void Init()
     {
         ThisWindow = (EditorCameraWindow)EditorWindow.GetWindow(typeof(EditorCameraWindow));

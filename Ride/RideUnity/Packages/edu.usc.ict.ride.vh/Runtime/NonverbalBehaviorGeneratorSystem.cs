@@ -22,7 +22,13 @@ namespace Ride
         /// <summary>
         /// Struct to represent an input stream for NVBG, containing the filename and the associated TextAsset.
         /// </summary>
-        [Serializable] public class StreamInfo { public string fileName; public TextAsset textAsset; }
+        [Serializable] public class StreamInfo
+        {
+            [HideInInspector][SerializeField] public string fileName;
+            public TextAsset textAsset;
+            public override string ToString() => fileName;
+        }
+
         public List<StreamInfo> m_streams = new()
         {
             new StreamInfo() { fileName = "NVBG_behavior_description.xsl", textAsset = null },

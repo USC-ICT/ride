@@ -54,6 +54,9 @@ namespace Ride.TextToSpeech
             EnglishV1,
             MultilingualV1,
             MultilingualV2,
+            FlashV2_5,
+            TurboV2_5,
+            V3
         }
 
         [Serializable]
@@ -67,6 +70,21 @@ namespace Ride.TextToSpeech
         public class VoiceDataContainer
         {
             public List<VoiceData> voices;
+        }
+
+        [Serializable]
+        public class ElevenLabsTimestampsResult
+        {
+            public string audio_base64;
+            public ElevenLabsAlignment alignment;
+            public ElevenLabsAlignment normalized_alignment;
+        }
+
+        public class ElevenLabsAlignment
+        {
+            public char[] characters;
+            public double[] character_start_times_seconds;
+            public double[] character_end_times_seconds;
         }
 
         const string BaseUrl = "https://api.elevenlabs.io/v1/";
@@ -171,7 +189,8 @@ namespace Ride.TextToSpeech
             if (SelectedVoiceIndex != -1 && SelectedVoiceIndex < AvailableVoices.Count)
             {
                 var voiceID = AvailableVoices[SelectedVoiceIndex].voice_id;
-                yield return StartCoroutine(GetAudioClip(text, voiceID));
+                //yield return StartCoroutine(GetAudioClip(text, voiceID));
+                yield return StartCoroutine(GetAudioClipWithTimestamps(text, voiceID));
             }
             else
             {
@@ -217,7 +236,7 @@ namespace Ride.TextToSpeech
             {
                 Debug.LogError("Invalid voice selected.");
             }
-        }
+        }            
 
         private IEnumerator GetAudioClip(string textToSpeak, string voiceID)
         {
@@ -242,12 +261,43 @@ namespace Ride.TextToSpeech
                 {
                     Debug.Log(www.error);
                     yield break;
-                }
+                }                
 
                 var clip = DownloadHandlerAudioClip.GetContent(www);
 
                 clipTime = clip.length;
                 SaveAudioClipToWav(clip, savedFilePath);
+            }
+        }
+
+        private IEnumerator GetAudioClipWithTimestamps(string textToSpeak, string voiceID)
+        {
+            textToSpeak = PreprocessString(textToSpeak); // preprocess the text
+
+            var postData = $"{{ \"text\": \"{textToSpeak}\", \"model_id\": \"{GetModelId()}\", \"voice_settings\": {{ \"stability\": 0.5, \"similarity_boost\": 0.5 }} }}";
+            var ttsUrl = BaseUrl + "text-to-speech/" + voiceID + "/with-timestamps";
+
+            using (var www = UnityWebRequest.Get(ttsUrl))
+            {
+                www.method = UnityWebRequest.kHttpVerbPOST;
+                www.SetRequestHeader("xi-api-key", m_apiKey);
+                www.SetRequestHeader("Content-Type", "application/json");
+
+                var bodyRaw = System.Text.Encoding.UTF8.GetBytes(postData);
+                www.uploadHandler = new UploadHandlerRaw(bodyRaw);
+
+                yield return www.SendWebRequest();
+
+                if (www.result != UnityWebRequest.Result.Success)
+                {
+                    Debug.Log(www.error);
+                    yield break;
+                }
+
+                ElevenLabsTimestampsResult result = JsonUtility.FromJson<ElevenLabsTimestampsResult>(www.downloadHandler.text);
+
+                // Convert base64 to audio clip and save
+                yield return StartCoroutine(DecodeBase64ToAudioClip(result.audio_base64));
             }
         }
 
@@ -357,6 +407,80 @@ namespace Ride.TextToSpeech
                 writer.Write(new[] { 'd', 'a', 't', 'a' });
                 writer.Write(bytes.Length);
                 writer.Write(bytes);
+            }
+        }
+
+        private IEnumerator DecodeBase64ToAudioClip(string base64String)
+        {
+            // Decode base64 string to byte array
+            byte[] audioData = Convert.FromBase64String(base64String);
+
+            // Determine audio type based on header bytes
+            AudioType audioType = DetectAudioType(audioData);
+
+            // Create a temporary file path
+            string tempPath = Application.temporaryCachePath + "/tempAudio" + GetExtension(audioType);
+
+            // Write bytes to temporary file
+            System.IO.File.WriteAllBytes(tempPath, audioData);
+
+            // Load audio clip using UnityWebRequest
+            using (UnityEngine.Networking.UnityWebRequest www = UnityEngine.Networking.UnityWebRequestMultimedia.GetAudioClip("file://" + tempPath, audioType))
+            {
+                yield return www.SendWebRequest();
+
+                if (www.result == UnityEngine.Networking.UnityWebRequest.Result.Success)
+                {
+                    AudioClip audioClip = UnityEngine.Networking.DownloadHandlerAudioClip.GetContent(www);
+
+                    clipTime = audioClip.length;
+                    SaveAudioClipToWav(audioClip, savedFilePath);
+
+                    //Debug.Log("Audio clip loaded successfully!");
+                }
+                else
+                {
+                    Debug.LogError("Failed to load audio: " + www.error);
+                }
+            }
+
+            // Clean up temporary file
+            if (System.IO.File.Exists(tempPath))
+            {
+                System.IO.File.Delete(tempPath);
+            }
+        }
+
+        private AudioType DetectAudioType(byte[] data)
+        {
+            // Check file signature (magic numbers)
+            if (data.Length < 4) return AudioType.UNKNOWN;
+
+            // WAV file signature
+            if (data[0] == 0x52 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x46)
+                return AudioType.WAV;
+
+            // MP3 file signature
+            if (data[0] == 0xFF && (data[1] & 0xE0) == 0xE0)
+                return AudioType.MPEG;
+            if (data[0] == 0x49 && data[1] == 0x44 && data[2] == 0x33)
+                return AudioType.MPEG;
+
+            // OGG file signature
+            if (data[0] == 0x4F && data[1] == 0x67 && data[2] == 0x67 && data[3] == 0x53)
+                return AudioType.OGGVORBIS;
+
+            return AudioType.UNKNOWN;
+        }
+
+        private string GetExtension(AudioType type)
+        {
+            switch (type)
+            {
+                case AudioType.WAV: return ".wav";
+                case AudioType.MPEG: return ".mp3";
+                case AudioType.OGGVORBIS: return ".ogg";
+                default: return ".audio";
             }
         }
     }

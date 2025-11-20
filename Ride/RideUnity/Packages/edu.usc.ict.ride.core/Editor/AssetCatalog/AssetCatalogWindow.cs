@@ -51,7 +51,7 @@ public class AssetCatalogWindow : EditorWindow
     /// <summary>
     /// Opens the Asset Catalog Editor window from the Unity Editor menu.
     /// </summary>
-    [MenuItem("Ride/Tools/Asset Catalog Editor")]
+    [MenuItem("Ride/Asset Catalogs/Asset Catalog Editor")]
     public static void ShowWindow()
     {
         var window = GetWindow<AssetCatalogWindow>("Asset Catalog Editor");

@@ -40,7 +40,7 @@ public class ImportSettingsWindow : EditorWindow
     #endregion
 
     #region Functions
-    [MenuItem("VH/Import Settings")]
+    //[MenuItem("VH/Import Settings")]
     static void Init()
     {
         ImportSettingsWindow window = (ImportSettingsWindow)EditorWindow.GetWindow(typeof(ImportSettingsWindow));

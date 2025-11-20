@@ -200,6 +200,10 @@ namespace Ride.NLP
             };
             string questionJSON = RideIO.JsonSerializeNoObjRef(question);
 
+#if UNITY_WEBGL && !UNITY_EDITOR
+            m_uri = "https://ah7b4cjitre7z5xlems5dhvecu0pnzrb.lambda-url.us-west-2.on.aws/chat";
+#endif
+
             //Call web service
             DateTime startTime = DateTime.Now;
             using var webRequest = new UnityWebRequest(m_uri, "POST");

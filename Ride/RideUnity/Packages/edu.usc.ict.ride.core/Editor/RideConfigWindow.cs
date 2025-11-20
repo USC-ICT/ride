@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using UnityEditor;
 using UnityEngine;
+using Newtonsoft.Json;
 
 namespace Ride
 {
@@ -161,7 +162,12 @@ namespace Ride
 
                 // Directly draw RideConfig's fields without a root foldout
                 var t = typeof(RideConfig);
+
+#pragma warning disable IDE0079  // Remove unnecessary suppression
+#pragma warning disable UNT0018  // System.Reflection usage detected in performance critical message 'OnGUI'.
                 var fields = t.GetFields(BindingFlags.Instance | BindingFlags.Public);
+#pragma warning restore IDE0079, UNT0018  // System.Reflection usage detected in performance critical message 'OnGUI'.
+
                 foreach (var f in fields)
                 {
                     var cur = f.GetValue(boxed);
@@ -267,12 +273,13 @@ namespace Ride
                 EditorGUILayout.SelectableLabel(m_path ?? "(none)", GUILayout.Height(18));
             }
 
-            // Optional: show version info similar to TerrainKeyWindow
-            using (new EditorGUILayout.HorizontalScope())
-            {
-                bool ok = ConfigurationSystemUnity.IsCorrectVersion(m_config);
-                EditorGUILayout.LabelField(ok ? $"Version: {m_config.version}" : "Config File Incorrect Version!", ok ? EditorStyles.label : EditorStyles.boldLabel);
-            }
+            var verStyle = ConfigurationSystemUnity.IsCorrectVersion(m_config)
+                ? EditorStyles.label
+                : new GUIStyle(EditorStyles.boldLabel) { normal = { textColor = Color.red } };
+
+            EditorGUILayout.LabelField($"Version: {m_config.version}", verStyle);
+            if (!ConfigurationSystemUnity.IsCorrectVersion(m_config))
+                EditorGUILayout.LabelField($"Config File Incorrect Version!", verStyle);
         }
 
         private void DrawBottomBar()
@@ -285,6 +292,13 @@ namespace Ride
                     CommitImmediateUIChange();
                 }
 
+                var btnStyle = ConfigurationSystemUnity.IsCorrectVersion(m_config)
+                    ? GUI.skin.button
+                    : new GUIStyle(GUI.skin.button) { normal = { textColor = Color.red } };
+
+                if (GUILayout.Button("Upgrade to Latest", btnStyle, GUILayout.Width(160)))
+                    AttemptUpgrade();
+
                 GUILayout.FlexibleSpace();
 
                 if (GUILayout.Button("Save As...", GUILayout.Width(100)))
@@ -296,6 +310,12 @@ namespace Ride
 
                 if (GUILayout.Button("Save", GUILayout.Width(80)))
                     TrySave(m_path);
+
+                if (GUILayout.Button("Save to Default Config", GUILayout.Width(180)))
+                {
+                    TrySave(null);
+                    TryLoadDefault();
+                }
             }
         }
 
@@ -304,11 +324,7 @@ namespace Ride
             try
             {
                 if (string.IsNullOrEmpty(path))
-                {
-                    var dir = SafeDir(ConfigurationSystemUnity.GetDefaultPath());
-                    path = EditorUtility.SaveFilePanel("Save Ride Config", dir, "ride.config.json", "json");
-                    if (string.IsNullOrEmpty(path)) return;
-                }
+                    path = ConfigurationSystemUnity.GetDefaultPath();
 
                 Directory.CreateDirectory(Path.GetDirectoryName(path) ?? ".");
                 ConfigurationSystemUnity.Save(m_config, path);
@@ -385,8 +401,12 @@ namespace Ride
                 var v = cur as Version;
                 using (new EditorGUILayout.HorizontalScope())
                 {
-                    EditorGUILayout.LabelField(label, GUILayout.Width(LabelWidth));
-                    EditorGUILayout.LabelField(v != null ? v.ToString() : "(null)", GUILayout.ExpandWidth(true));
+                    var verStyle = ConfigurationSystemUnity.IsCorrectVersion(m_config)
+                        ? EditorStyles.label
+                        : new GUIStyle(EditorStyles.boldLabel) { normal = { textColor = Color.red } };
+
+                    EditorGUILayout.LabelField(label, verStyle, GUILayout.Width(LabelWidth));
+                    EditorGUILayout.LabelField(v != null ? v.ToString() : "(null)", verStyle, GUILayout.ExpandWidth(true));
                 }
                 return cur; // unchanged
             }
@@ -592,6 +612,193 @@ namespace Ride
                    n.Contains("apikey") || n.Contains("api_key") || n.Contains("accesskey") ||
                    n.Contains("access_key") || n.Contains("endpointkey") || n.Contains("bearer") ||
                    n.EndsWith("key");
+        }
+
+
+        // ===== MERGE LOADER =====
+
+        private void AttemptUpgrade()
+        {
+            try
+            {
+                // Load the current file text if available; otherwise, upgrade from the in-memory config
+                string json;
+                if (!string.IsNullOrEmpty(m_path) && File.Exists(m_path))
+                    json = File.ReadAllText(m_path);
+                else
+                    json = JsonUtility.ToJson(m_config); // best-effort fallback
+
+                var upgraded = LoadMergedOntoDefaults(json, out string loadedVer);
+
+                // Set to the latest default version explicitly as part of the upgrade
+                upgraded.version = RideConfig.Default.version;
+
+                m_config = upgraded;
+                CommitImmediateUIChange();
+
+                EditorUtility.DisplayDialog(TitleText, "Upgraded in memory to the latest schema.\nReview changes and Save.", "OK");
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"Upgrade failed: {ex}");
+                EditorUtility.DisplayDialog(TitleText, "Failed to upgrade config. See Console.", "OK");
+            }
+        }
+
+        private static RideConfig LoadMergedOntoDefaults(string json, out string loadedVersionText)
+        {
+            // 1) Start from current schema defaults so new fields remain populated
+            var result = RideConfig.Default; // struct copy
+
+            // 2) Forgiving deserialize of the user's file into a TEMP object
+            //    (Unknown fields ignored; nulls preserved; nested objects created)
+            var settings = new JsonSerializerSettings
+            {
+                MissingMemberHandling  = MissingMemberHandling.Ignore,
+                NullValueHandling      = NullValueHandling.Include,   // keep nulls so we can treat them as "absent"
+                DefaultValueHandling   = DefaultValueHandling.Populate,
+                ObjectCreationHandling = ObjectCreationHandling.Replace,
+                Error = (sender, args) => { args.ErrorContext.Handled = true; }
+            };
+
+            RideConfig temp;
+            try
+            {
+                temp = JsonConvert.DeserializeObject<RideConfig>(json, settings);
+            }
+            catch
+            {
+                temp = default; // if it totally fails, overlay does nothing and defaults remain
+            }
+
+            // 3) Overlay temp -> result using our rule:
+            //    - strings: only copy if NOT null/empty (so defaults survive otherwise)
+            //    - numbers/bools: current LooksPresent logic applies
+            object boxedDst = result; // box value type so SetValue writes into it
+            OverlayRecursive(temp, boxedDst, typeof(RideConfig));
+            result = (RideConfig)boxedDst;
+
+            // 4) Version (for display only) and optional guardrails
+            loadedVersionText = ExtractVersionFromJson(json);
+            result = Sanitize(result);
+
+            return result;
+        }
+
+        // Recursively overlay fields from src -> dst. 
+        // Works with structs (boxed), nested structs, and simple leaves.
+        private static void OverlayRecursive(object src, object dst, Type t)
+        {
+            if (src == null || dst == null) return;
+
+            // Leaf-like cases are handled by parent (sets the field). Bail here.
+            if (IsLeaf(t)) return;
+
+            var flags = BindingFlags.Instance | BindingFlags.Public;
+            var fields = t.GetFields(flags);
+            for (int i = 0; i < fields.Length; i++)
+            {
+                var f = fields[i];
+                var fType = f.FieldType;
+
+                var srcVal = f.GetValue(src);
+                var dstVal = f.GetValue(dst);
+
+                if (IsLeaf(fType))
+                {
+                    if (LooksPresent(srcVal, fType))
+                    {
+                        // write into boxed struct/class
+                        f.SetValue(dst, CoerceIfNeeded(srcVal, fType));
+                    }
+                }
+                else
+                {
+                    // For nested structs/classes: recurse if srcVal is non-null (for classes)
+                    // For structs, srcVal will always be a value; recurse anyway.
+                    if (srcVal != null)
+                    {
+                        // If destination is null (class), create one so we can descend
+                        if (dstVal == null && fType.IsClass)
+                        {
+                            dstVal = Activator.CreateInstance(fType);
+                            f.SetValue(dst, dstVal);
+                        }
+                        OverlayRecursive(srcVal, dstVal, fType);
+
+                        // write the (boxed) nested struct/class back into the parent
+                        f.SetValue(dst, dstVal);
+                    }
+                }
+            }
+
+            // (Optional) public settable properties if you have any (your file is fields-only today)
+            // var props = t.GetProperties(flags).Where(p => p.CanRead && p.CanWrite);
+            // foreach (var p in props) { ... } 
+        }
+
+        // Decide whether an incoming value looks "present" (i.e., should overwrite defaults).
+        private static bool LooksPresent(object val, Type t)
+        {
+            if (val == null) return false;
+            if (t == typeof(string)) return !string.IsNullOrEmpty((string)val);
+            if (t.IsEnum) return true;
+
+            if (t == typeof(bool))
+            {
+                // Caveat: cannot distinguish "absent" vs "explicit false" with JsonUtility.
+                // Best-effort policy: apply false as well.
+                return true;
+            }
+            if (t == typeof(ushort)) return (ushort)val != default(ushort);
+            if (t == typeof(int))    return (int)val != default;
+            if (t == typeof(float))  return Math.Abs((float)val - default(float)) > float.Epsilon;
+            if (t == typeof(double)) return Math.Abs((double)val - default(double)) > double.Epsilon;
+            if (t == typeof(Version)) return val != null; // we normally won't get this via JsonUtility
+
+            // Value-types (structs) are handled by recursion, not here
+            return true;
+        }
+
+        // Handle minor type coercions (e.g., clamp ports, convert numerics if needed)
+        private static object CoerceIfNeeded(object val, Type t)
+        {
+            if (t == typeof(ushort))
+            {
+                // JsonUtility maps JSON numbers to the exact field type; still, clamp to be safe
+                int asInt = Convert.ToInt32(val);
+                if (asInt < 0) asInt = 0;
+                if (asInt > 65535) asInt = 65535;
+                return (ushort)asInt;
+            }
+            return val;
+        }
+
+        [Serializable] private struct VersionNumber { public int Major, Minor, Build, Revision; }
+        [Serializable] private struct VersionProbe { public VersionNumber version; }
+
+        private static string ExtractVersionFromJson(string json)
+        {
+            try
+            {
+                var probe = JsonConvert.DeserializeObject<VersionProbe>(json);
+                return $"{probe.version.Major}.{probe.version.Minor}.{probe.version.Build}.{probe.version.Revision}";
+            }
+            catch
+            {
+                return "(unknown)";
+            }
+        }
+
+        // Example guardrails you might apply after merge
+        private static RideConfig Sanitize(RideConfig cfg)
+        {
+            // RESTSettings.port is ushort; clamp already happens in CoerceIfNeeded,
+            // but if you ever change it, you can enforce here too.
+            if (cfg.rest.port > 65535) cfg.rest.port = 65535;   // defensive; port is ushort today :contentReference[oaicite:3]{index=3}
+            if (cfg.rest.port < 0) cfg.rest.port = 0;
+
+            return cfg;
         }
     }
 }

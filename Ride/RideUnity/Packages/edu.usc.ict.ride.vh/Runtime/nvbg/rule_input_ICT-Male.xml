@@ -80,8 +80,12 @@
 				<clip>Standing01_BeatMidLf01</clip>
 			</posture>
 			<posture name="ChrGenericMleAdult@IdleStandingUpright01">
-				<clip>IdleStandingUpright01_YouLf01</clip>
+				<!--   <clip>IdleStandingUpright01_YouLf01</clip> -->
 				<clip>IdleStandingUpright01_BeatLowLf01</clip>
+			</posture>
+			<posture name="OG_IdleStandingUpright01">
+				<clip>OG_IdleStandingUpright01_YouLf01</clip>
+				<clip>OG_IdleStandingUpright01_BeatLowLf01</clip>
 			</posture>
 			<posture name="ChrGenericMleAdult@IdleSittingUpright01">
 				<clip>IdleSittingUpright01_IndicateSmLf01</clip>
@@ -111,6 +115,10 @@
 				<clip>IdleStandingUpright01_MeLf01</clip>
 				<clip>IdleStandingUpright01_BeatLowRt01</clip>
 			</posture>
+			<posture name="OG_IdleStandingUpright01">
+				<clip>OG_IdleStandingUpright01_MeLf01</clip>
+				<clip>OG_IdleStandingUpright01_BeatLowRt01</clip>
+			</posture>
 			<posture name="ChrGenericMleAdult@IdleSittingUpright01">
 				<clip>IdleSittingUpright01_SelfMedLf01</clip>
 			</posture>
@@ -136,6 +144,10 @@
 			<posture name="ChrGenericMleAdult@IdleStandingUpright01">
 				<clip>IdleStandingUpright01_ChopLf01</clip>
 				<clip>IdleStandingUpright01_BeatLowBt01</clip>
+			</posture>
+			<posture name="OG_IdleStandingUpright01">
+				<clip>OG_IdleStandingUpright01_ChopLf01</clip>
+				<clip>OG_IdleStandingUpright01_BeatLowBt01</clip>
 			</posture>
 			<posture name="ChrGenericMleAdult@IdleSittingUpright01">
 				<clip>IdleSittingUpright01_SingleTapSmLf01</clip>
@@ -169,6 +181,10 @@
 				<clip>IdleStandingUpright01_NegativeRt01</clip>
 				<clip>IdleStandingUpright01_Shrug01</clip>
 			</posture>
+			<posture name="OG_IdleStandingUpright01">
+				<clip>OG_IdleStandingUpright01_NegativeRt01</clip>
+				<clip>OG_IdleStandingUpright01_Shrug01</clip>
+			</posture>
 			<posture name="ChrGenericMleAdult@IdleSittingUpright01">
 				<clip>IdleSittingUpright01_AllTapSmLf01</clip>
 				<clip>IdleSittingUpright01_AllTapSmRt01</clip>
@@ -191,6 +207,9 @@
 			<posture name="ChrGenericMleAdult@IdleStandingUpright01">
 				<clip>IdleStandingUpright01_HoweverLf01</clip>
 			</posture>
+			<posture name="OG_IdleStandingUpright01">
+				<clip>OG_IdleStandingUpright01_HoweverLf01</clip>
+			</posture>
 			<posture name="ChrGenericMleAdult@IdleSittingUpright01">
 				<clip>IdleSittingUpright01_SingleTapSmLf01</clip>
 				<clip>IdleSittingUpright01_SingleTapSmRt01</clip>
@@ -212,6 +231,9 @@
 			<posture name="ChrGenericMleAdult@IdleStandingUpright01">
 				<clip>IdleStandingUpright01_Shrug01</clip>
 			</posture>
+			<posture name="OG_IdleStandingUpright01">
+				<clip>OG_IdleStandingUpright01_Shrug01</clip>
+			</posture>
 			<posture name="ChrGenericMleAdult@IdleSittingUpright01">
 				<clip>IdleSittingUpright01_FrontMedLf01</clip>
 				<clip>IdleSittingUpright01_FrontSmRt01</clip>
@@ -228,6 +250,9 @@
 			</posture>
 			<posture name="ChrGenericMleAdult@IdleStandingUpright01">
 				<clip>IdleStandingUpright01_Shrug01</clip>
+			</posture>
+			<posture name="OG_IdleStandingUpright01">
+				<clip>OG_IdleStandingUpright01_Shrug01</clip>
 			</posture>
 			<posture name="ChrGenericMleAdult@IdleSittingUpright01">
 				<clip>IdleSittingUpright01_ShrugSm01</clip>
@@ -251,6 +276,9 @@
 			<posture name="ChrGenericMleAdult@IdleStandingUpright01">
 				<clip>IdleStandingUpright01_Shrug01</clip>
 			</posture>
+			<posture name="OG_IdleStandingUpright01">
+				<clip>OG_IdleStandingUpright01_Shrug01</clip>
+			</posture>
 			<posture name="ChrGenericMleAdult@IdleSittingUpright01">
 				<clip>IdleSittingUpright01_LeftMedLf01</clip>
 				<clip>IdleSittingUpright01_IndicateSmRt01</clip>
@@ -269,6 +297,9 @@
 			<posture name="ChrGenericMleAdult@IdleStandingUpright01">
 				<clip>IdleStandingUpright01_IndicateLeftLf01</clip>
 			</posture>
+			<posture name="OG_IdleStandingUpright01">
+				<clip>OG_IdleStandingUpright01_IndicateLeftLf01</clip>
+			</posture>
 			<posture name="ChrGenericMleAdult@IdleSittingUpright01">
 				<clip>IdleSittingUpright01_IndicateSmRt01</clip>
 				<clip>IdleSittingUpright01_IndicateSmLf01</clip>
@@ -286,6 +317,9 @@
 			<posture name="ChrGenericMleAdult@IdleStandingUpright01">
 				<clip>IdleStandingUpright01_IndicateRightRt01</clip>
 			</posture>
+			<posture name="OG_IdleStandingUpright01">
+				<clip>OG_IdleStandingUpright01_IndicateRightRt01</clip>
+			</posture>
 			<posture name="ChrGenericMleAdult@IdleSittingUpright01">
 				<clip>IdleSittingUpright01_IndicateSmRt01</clip>
 				<clip>IdleSittingUpright01_IndicateSmLf01</clip>
@@ -299,6 +333,9 @@
 		<animation>
 			<posture name="ChrGenericMleAdult@IdleStandingUpright01">
 				<clip>IdleStandingUpright01_OfferLf01</clip>
+			</posture>
+			<posture name="OG_IdleStandingUpright01">
+				<clip>OG_IdleStandingUpright01_OfferLf01</clip>
 			</posture>
 			<posture name="ChrGenericMleAdult@IdleSittingUpright01">
 				<clip>IdleSittingUpright01_IndicateSmLf01</clip>
@@ -316,6 +353,9 @@
 			</posture>
 			<posture name="ChrGenericMleAdult@IdleStandingUpright01">
 				<clip>IdleStandingUpright01_ChopLf01</clip>
+			</posture>
+			<posture name="OG_IdleStandingUpright01">
+				<clip>OG_IdleStandingUpright01_ChopLf01</clip>
 			</posture>
 			<posture name="ChrGenericMleAdult@IdleSittingUpright01">
 				<clip>IdleSittingUpright01_SingleTapSmLf01</clip>

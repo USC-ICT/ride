@@ -115,6 +115,7 @@ MonoBehaviour:
   audioSource: {fileID: 0}
   selectedVoiceIndex: 0
   Voices: []
+  VoicesReady: 0
   currentModel: 2
 --- !u!114 &603552834598375001
 MonoBehaviour:
@@ -178,7 +179,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7b03b5d282135e74a91206fcfba4f662, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  initialPrompt: 
 --- !u!1 &2996951997171778854
 GameObject:
   m_ObjectHideFlags: 0
@@ -223,9 +223,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: fbe2361f047fde049891ef2c4d29bcdc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  <recognizedSpeech>k__BackingField: 
-  <confidence>k__BackingField: 0
-  <isRecognizing>k__BackingField: 0
 --- !u!1 &3866502476597097769
 GameObject:
   m_ObjectHideFlags: 0
@@ -421,11 +418,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 560a6fb3949d00642be8e8887916472c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  <recognizedSpeech>k__BackingField: 
-  <confidence>k__BackingField: 0
-  <isRecognizing>k__BackingField: 0
-  <autoSilenceTimeoutSeconds>k__BackingField: 3
-  <initialSilenceTimeoutSeconds>k__BackingField: 10
 --- !u!1 &5624495247750243275
 GameObject:
   m_ObjectHideFlags: 0
@@ -585,9 +577,68 @@ Transform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 250032498786347542}
+  - {fileID: 6563466127580120213}
   - {fileID: 1306618731624871739}
   m_Father: {fileID: 8344103313544686372}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &7797734754375721899
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 6563466127580120213}
+  - component: {fileID: 8420530374086690901}
+  m_Layer: 0
+  m_Name: SpeechRecognitionSystemOpenAI
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &6563466127580120213
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7797734754375721899}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 7155888745045487287}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &8420530374086690901
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7797734754375721899}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 16ded78137cde61499bb02722b4f4a14, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  model: gpt-4o-realtime-preview-2025-06-03
+  sampleRate: 24000
+  chunkSize: 4800
+  microphoneDevice: 
+  transcriptOnly: 1
+  voice: alloy
+  autoStartOnConnect: 0
+  postPlaybackDelay: 0.3
+  streamingStartBufferSeconds: 1
+  streamingEndBufferSeconds: 3
+  maxStreamingClipSeconds: 300
+  vadThreshold: 0.7
+  vadPrefixPaddingMs: 300
+  vadSilenceDurationMs: 500
 --- !u!1 &8916280520738937985
 GameObject:
   m_ObjectHideFlags: 0
@@ -632,7 +683,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e365640269b358646a082ec2558bf61b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  initialPrompt: 
   temperature: 0.3
   max_tokens: 200
 --- !u!1 &9120045423269580850

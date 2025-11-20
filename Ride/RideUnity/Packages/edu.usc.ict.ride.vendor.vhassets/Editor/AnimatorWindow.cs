@@ -82,7 +82,7 @@ public class AnimatorWindow : EditorWindow
     #endregion
 
     #region Functions
-    [MenuItem("VH/Mecanim/Animator Utils")]
+    //[MenuItem("VH/Mecanim/Animator Utils")]
     static void Init()
     {
         AnimatorWindow window = (AnimatorWindow)EditorWindow.GetWindow(typeof(AnimatorWindow));

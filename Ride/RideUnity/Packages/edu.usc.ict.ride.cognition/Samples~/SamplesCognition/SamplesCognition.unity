@@ -491,18 +491,6 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: bbb139f8881fe834291227ca4a633b2e, type: 3}
---- !u!114 &218620573 stripped
-MonoBehaviour:
-  m_CorrespondingSourceObject: {fileID: 8837329204827447453, guid: bbb139f8881fe834291227ca4a633b2e,
-    type: 3}
-  m_PrefabInstance: {fileID: 218620572}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d022f6727d15da64d86a6204eb86e0a1, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!114 &218620574 stripped
 MonoBehaviour:
   m_CorrespondingSourceObject: {fileID: 4214430528309879419, guid: bbb139f8881fe834291227ca4a633b2e,
@@ -2362,7 +2350,6 @@ MonoBehaviour:
   m_vhWebCam: {fileID: 1534498845}
   m_webcamRawImage: {fileID: 200441057}
   m_awsRekognitionSystem: {fileID: 218620574}
-  m_azureFaceSystem: {fileID: 218620573}
   m_microphoneAudio: {fileID: 1639236903}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:

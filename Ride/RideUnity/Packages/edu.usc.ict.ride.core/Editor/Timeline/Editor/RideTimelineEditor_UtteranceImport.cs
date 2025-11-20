@@ -27,10 +27,10 @@ public class RideTimelineEditor_UtteranceImport : EditorWindow
     public Dictionary<string, UtteranceElements> m_cutscenes = new Dictionary<string, UtteranceElements>();
     private List<TimelineAsset> m_createdTimelines = new List<TimelineAsset>();
 
-    [MenuItem("Ride/Timeline/Generate Cutscene Timeline")]
+    [MenuItem("Ride/Timeline/Generate Utterance Timeline")]
     public static void ShowWindow()
     {
-        GetWindow<RideTimelineEditor_UtteranceImport>(true, "Generate Cutscene Timeline", false);
+        GetWindow<RideTimelineEditor_UtteranceImport>(true, "Generate Utterance Timeline", false);
     }
 
     public void OnGUI()

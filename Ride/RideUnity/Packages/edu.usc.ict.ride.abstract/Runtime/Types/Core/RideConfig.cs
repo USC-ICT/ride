@@ -9,17 +9,17 @@ namespace Ride
     [Serializable]
     public struct RideConfig
     {
-        public static readonly Version DefaultVersion = new Version("1.0.5.5");
+        public static readonly Version DefaultVersion = new Version("1.0.5.6");
 
 
         /// <summary>Application specific settings for Anthropic</summary>
         [Serializable]
         public struct AnthropicSettings
         {
-            /// <summary>URL for OpenAI</summary>
+            /// <summary>URL for Anthropic</summary>
             public string endpoint;
 
-            /// <summary>Authorization key for OpenAI</summary>
+            /// <summary>Authorization key for Anthropic</summary>
             public string endpointKey;
 
             public static AnthropicSettings Default => new AnthropicSettings
@@ -140,13 +140,12 @@ namespace Ride
             };
         }
 
-        /// <summary>Application specific settings for Microsoft Azure</summary>
+        /// <summary>Application specific settings for Microsoft Azure for storing data in file storage or blob</summary>
         [Serializable]
         public struct AzureBlobSettings
         {
             public string connectionString;
 
-            /// <summary>for storing data in file storage or blob</summary>
             public string storageKey;
 
             public static AzureBlobSettings Default => new AzureBlobSettings
@@ -261,11 +260,15 @@ namespace Ride
         [Serializable]
         public struct ElevenLabsSettings
         {
+            /// <summary>Endpoint for ElevenLabs</summary>
+            public string endpoint;
+            
             /// <summary>API key for ElevenLabs</summary>
             public string apiKey;
 
             public static ElevenLabsSettings Default => new ElevenLabsSettings
             {
+                endpoint = "https://api.elevenlabs.io/v1",
                 apiKey = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
             };
         }
@@ -372,6 +375,16 @@ namespace Ride
             {
                 endpointKey = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",  // openweathermap.org
             };
+            public static OpenAISettings DefaultWhisper => new OpenAISettings
+            {
+                endpoint = "https://api.openai.com/v1/audio/transcriptions",
+                endpointKey = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",  
+            };
+            public static OpenAISettings DefaultRealtime => new OpenAISettings
+            {
+                endpoint = "wss://api.openai.com/v1/realtime",
+                endpointKey = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",  
+            };
         }
 
         /// <summary>Backend server that hosts RIDE REST services</summary>
@@ -466,6 +479,8 @@ namespace Ride
         public OpenAISettings openAIGPT;
         public OpenAISettings openAINews;
         public OpenAISettings openAIWeather;
+        public OpenAISettings openAIWhisper;
+        public OpenAISettings openAIRealtime;
         public RestServerApiSettings restApi;
         public RESTSettings rest;
         public SlackSettings slack;
@@ -497,6 +512,8 @@ namespace Ride
             openAIGPT = OpenAISettings.DefaultGPT,
             openAINews = OpenAISettings.DefaultNews,
             openAIWeather = OpenAISettings.DefaultWeather,
+            openAIWhisper = OpenAISettings.DefaultWhisper,
+            openAIRealtime = OpenAISettings.DefaultRealtime,
             restApi = RestServerApiSettings.Default,
             rest = RESTSettings.Default,
             slack = SlackSettings.Default,

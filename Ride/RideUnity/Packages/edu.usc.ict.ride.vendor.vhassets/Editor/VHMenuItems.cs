@@ -15,7 +15,7 @@ namespace VHAssets
 /// </summary>
 public class VHMenuItems : MonoBehaviour
 {
-    [MenuItem("VH/Scene Reporting/Check For Duplicate Materials")]
+    //[MenuItem("VH/Scene Reporting/Check For Duplicate Materials")]
     static void CheckForDuplicateMaterials()
     {
         //Object[] allProjectMaterials = Component.FindObjectsOfTypeIncludingAssets(typeof(Material));
@@ -79,7 +79,7 @@ public class VHMenuItems : MonoBehaviour
         Resources.UnloadUnusedAssets();
     }
 
-    [MenuItem("VH/Generate Audio Prefabs")]
+    //[MenuItem("VH/Generate Audio Prefabs")]
     static void GenerateAudioPrefabs()
     {
         Debug.Log("--- GenerateAudioPrefabs() started -------------");
@@ -125,7 +125,7 @@ public class VHMenuItems : MonoBehaviour
         Debug.Log(string.Format("--- GenerateAudioPrefabs() ended - {0} Prefabs generated -------------", filesToConvert.Count));
     }
 
-    [MenuItem("VH/Fixes/Cutscene References")]
+    //[MenuItem("VH/Fixes/Cutscene References")]
     public static void FixCutsceneReferences()
     {
         if (Selection.gameObjects == null || Selection.gameObjects.Length == 0)
@@ -198,7 +198,7 @@ public class VHMenuItems : MonoBehaviour
         }
     }
 
-    [MenuItem("VH/Fixes/Cutscene Enum Strings")]
+    //[MenuItem("VH/Fixes/Cutscene Enum Strings")]
     public static void FixEnumReferences()
     {
         /*if (Selection.gameObjects == null || Selection.gameObjects.Length == 0)

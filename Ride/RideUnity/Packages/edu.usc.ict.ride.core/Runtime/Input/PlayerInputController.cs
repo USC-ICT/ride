@@ -182,11 +182,6 @@ namespace Ride.IO
             agentTransform = transform;
 
             StartCoroutine(RegisterPlayerInputController());
-
-#if UNITY_EDITOR
-            if (!Application.isPlaying)
-                PlayerInputEditor.SetupPlayerInputPackage();
-#endif
         }
 
         protected override void Start()

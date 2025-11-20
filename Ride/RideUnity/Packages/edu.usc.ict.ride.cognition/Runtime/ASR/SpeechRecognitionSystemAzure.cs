@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Threading.Tasks;
 using UnityEngine;
 #if !UNITY_WEBGL
 using Microsoft.CognitiveServices.Speech;
@@ -25,7 +26,7 @@ namespace Ride.SpeechRecognition
     }
 
     /// <summary>
-    /// SpeechRecognitionSystem utilzing Microsofts Cognitive services Speech SDK
+    /// SpeechRecognitionSystem utilizing Microsofts Cognitive services Speech SDK
     /// </summary>
     public class SpeechRecognitionSystemAzure : SpeechRecognitionSystemUnity, IInputSourceConfigurableSpeechRecognition
     {
