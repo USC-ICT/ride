@@ -195,11 +195,11 @@
       "depth": 0,
       "source": "embedded",
       "dependencies": {
-        "edu.usc.ict.ride.vendor.aws": "0.0.8290",
-        "edu.usc.ict.ride.vendor.cognition": "0.0.8290",
-        "edu.usc.ict.ride.vendor.vhassets": "0.0.8310",
-        "edu.usc.ict.ride.core": "0.0.8310",
-        "edu.usc.ict.ride.core.ui": "0.0.8310"
+        "edu.usc.ict.ride.vendor.aws": "0.0.8411",
+        "edu.usc.ict.ride.vendor.cognition": "0.0.8440",
+        "edu.usc.ict.ride.vendor.vhassets": "0.0.8436",
+        "edu.usc.ict.ride.core": "0.0.8524",
+        "edu.usc.ict.ride.core.ui": "0.0.8524"
       }
     },
     "edu.usc.ict.ride.core": {
@@ -210,10 +210,10 @@
         "com.unity.addressables": "1.21.8",
         "com.unity.ai.navigation": "2.0.0",
         "com.unity.inputsystem": "1.7.0",
-        "edu.usc.ict.ride.vendor.crc32net": "0.0.8290",
-        "edu.usc.ict.ride.vendor.milsymbol": "0.0.8290",
-        "edu.usc.ict.ride.vendor.vhassets": "0.0.8310",
-        "edu.usc.ict.ride.abstract": "0.0.8290"
+        "edu.usc.ict.ride.vendor.crc32net": "0.0.8411",
+        "edu.usc.ict.ride.vendor.milsymbol": "0.0.8411",
+        "edu.usc.ict.ride.vendor.vhassets": "0.0.8436",
+        "edu.usc.ict.ride.abstract": "0.0.8436"
       }
     },
     "edu.usc.ict.ride.core.ui": {
@@ -221,7 +221,7 @@
       "depth": 0,
       "source": "embedded",
       "dependencies": {
-        "edu.usc.ict.ride.core": "0.0.8310"
+        "edu.usc.ict.ride.core": "0.0.8524"
       }
     },
     "edu.usc.ict.ride.vendor.aws": {
@@ -265,8 +265,8 @@
       "depth": 0,
       "source": "embedded",
       "dependencies": {
-        "edu.usc.ict.ride.vendor.vh": "0.0.8290",
-        "edu.usc.ict.ride.cognition": "0.0.8322"
+        "edu.usc.ict.ride.vendor.vh": "0.0.8411",
+        "edu.usc.ict.ride.cognition": "0.0.8602"
       }
     },
     "com.unity.modules.accessibility": {
