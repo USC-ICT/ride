@@ -21,8 +21,6 @@ namespace Ride
         private List<AssetCatalogData> m_catalogs = new();
         private Dictionary<string, UnityEngine.Object> m_loadedAssetsByName = new();
         private Dictionary<string, AssetBundle> m_loadedBundles = new();
-        private AWSFileStorageS3System m_fileStorageSystemAWS;
-        private ConfigurationSystemUnity m_rideConfigSystem;
 
         public bool CatalogCurrentlyLoading { get; private set; }
         public int NumCatalogsLoaded => m_catalogs.Count;
@@ -66,11 +64,6 @@ namespace Ride
         /// <inheritdoc/>
         public override void SystemInit()
         {
-            m_rideConfigSystem = Systems.Get<ConfigurationSystemUnity>();
-            m_fileStorageSystemAWS = Systems.Get<AWSFileStorageS3System>();
-            m_fileStorageSystemAWS.m_cognitoIdentityPoolId = m_rideConfigSystem.GetTerrainKey();
-            m_fileStorageSystemAWS.m_regionName = m_rideConfigSystem.GetTerrainKeyRegion();
-
             // if (Application.isPlaying)
             //     await LoadCatalogs(m_catalogsToLoad);
 
@@ -513,10 +506,15 @@ namespace Ride
                 return op;
             }
 
+            var rideConfigSystem = Systems.Get<ConfigurationSystemUnity>();
+            var fileStorageSystemAWS = Systems.Get<AWSFileStorageS3System>();
+            fileStorageSystemAWS.m_cognitoIdentityPoolId = rideConfigSystem.GetTerrainKey();
+            fileStorageSystemAWS.m_regionName = rideConfigSystem.GetTerrainKeyRegion();
+
             string bucket = parts[0];
             string key = string.Join("/", parts.Skip(1));
 
-            if (!ConfigurationSystemUnity.IsTerrainKeyFormatValid(m_fileStorageSystemAWS.m_cognitoIdentityPoolId))
+            if (!ConfigurationSystemUnity.IsTerrainKeyFormatValid(fileStorageSystemAWS.m_cognitoIdentityPoolId))
             {
                 op.SetCompleted(AWSFileStorageS3System.GetLocation(bucket, key));
                 return op;
@@ -524,7 +522,7 @@ namespace Ride
 
             //Debug.Log($"RequestSignedURL() - {bucket} {key}");
 
-            m_fileStorageSystemAWS.GetSignedURL(bucket, key, signedURL =>
+            fileStorageSystemAWS.GetSignedURL(bucket, key, signedURL =>
             {
                 if (!string.IsNullOrEmpty(signedURL))
                     op.SetCompleted(signedURL);

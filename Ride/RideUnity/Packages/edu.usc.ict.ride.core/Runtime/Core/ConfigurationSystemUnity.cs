@@ -41,7 +41,13 @@ namespace Ride
         public RideConfig Load() => m_config = Load(ConfigPath);
 
         /// <inheritdoc/>
+        public RideConfig LoadFromJson(string json) => m_config = LoadFromJsonContent(json);
+
+        /// <inheritdoc/>
         public void Save() => Save(Config, ConfigPath);
+
+        /// <inheritdoc/>
+        public void SetConfig(RideConfig config) => m_config = config;
 
         public RideConfig ResetConfig() => m_config = RideConfig.Default;
 
@@ -82,6 +88,14 @@ namespace Ride
 
         public static string GetDefaultPath() => $"{RideIO.ApplicationPersistentDataPath()}/config/{FileName}";
 
+        /// <summary>
+        /// Loads configuration from a file on disk.
+        /// 
+        /// If the file does not exist, a default configuration is generated and saved.
+        /// If the file exists but cannot be parsed, defaults are returned.
+        /// </summary>
+        /// <param name="path">Absolute path to the config file.</param>
+        /// <returns>The loaded configuration (or defaults if unavailable/invalid).</returns>
         public static RideConfig Load(string path)
         {
             var config = RideConfig.Default;
@@ -89,19 +103,38 @@ namespace Ride
             if (File.Exists(path))
             {
                 string json = File.ReadAllText(path);
-                try
-                {
-                    config = RideIO.JsonDeserialize<RideConfig>(json);
-                }
-                catch (JsonReaderException e)
-                {
-                    Debug.LogWarning($"RideConfigService.Load() - error reading config file.  Is it out of date?  Exception: {e}");
-                    config = RideConfig.Default;
-                }
+                config = LoadFromJsonContent(json);
             }
             else
             {
                 Save(config, path);
+            }
+
+            return config;
+        }
+
+        /// <summary>
+        /// Loads a configuration from an in-memory JSON string.
+        /// 
+        /// If parsing fails, defaults are returned.
+        /// </summary>
+        /// <param name="json">JSON contents representing a <see cref="RideConfig"/>.</param>
+        /// <returns>The parsed configuration, or <see cref="RideConfig.Default"/> on failure.</returns>
+        public static RideConfig LoadFromJsonContent(string json)
+        {
+            var config = RideConfig.Default;
+
+            if (string.IsNullOrWhiteSpace(json))
+                return config;
+
+            try
+            {
+                config = RideIO.JsonDeserialize<RideConfig>(json);
+            }
+            catch (JsonReaderException e)
+            {
+                Debug.LogWarning($"ConfigurationSystemUnity.LoadFromJson() - error reading config contents. Is it out of date? Exception: {e}");
+                config = RideConfig.Default;
             }
 
             return config;

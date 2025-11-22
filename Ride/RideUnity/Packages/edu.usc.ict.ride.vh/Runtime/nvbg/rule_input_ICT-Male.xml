@@ -79,12 +79,12 @@
 				<clip>Standing01_BeatLowLf01</clip>
 				<clip>Standing01_BeatMidLf01</clip>
 			</posture>
-			<posture name="ChrGenericMleAdult@IdleStandingUpright01">
 				<!--   <clip>IdleStandingUpright01_YouLf01</clip> -->
+			<posture name="ChrGenericMleAdult@IdleStandingUpright01">
 				<clip>IdleStandingUpright01_BeatLowLf01</clip>
 			</posture>
 			<posture name="OG_IdleStandingUpright01">
-				<clip>OG_IdleStandingUpright01_YouLf01</clip>
+				<!--   <clip>OG_IdleStandingUpright01_YouLf01</clip>  -->
 				<clip>OG_IdleStandingUpright01_BeatLowLf01</clip>
 			</posture>
 			<posture name="ChrGenericMleAdult@IdleSittingUpright01">

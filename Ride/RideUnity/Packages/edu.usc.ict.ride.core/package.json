@@ -1,6 +1,6 @@
 {
   "name": "edu.usc.ict.ride.core",
-  "version": "0.0.8524",
+  "version": "0.0.8648",
   "displayName": "RIDE Core",
   "description": "This is the USC ICT RIDE Core Package",
   "unity": "2022.1",
@@ -12,7 +12,7 @@
     "edu.usc.ict.ride.vendor.crc32net": "0.0.8411",
     "edu.usc.ict.ride.vendor.milsymbol": "0.0.8411",
     "edu.usc.ict.ride.vendor.vhassets": "0.0.8436",
-    "edu.usc.ict.ride.abstract": "0.0.8436"
+    "edu.usc.ict.ride.abstract": "0.0.8648"
   },
   "homepage": "https://ride.ict.usc.edu",
   "documentationUrl": "https://ride.ict.usc.edu",

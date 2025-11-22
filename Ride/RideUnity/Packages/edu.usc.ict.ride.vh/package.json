@@ -1,13 +1,13 @@
 {
   "name": "edu.usc.ict.ride.vh",
-  "version": "0.0.8623",
+  "version": "0.0.8648",
   "displayName": "RIDE VH",
   "description": "This is the USC ICT RIDE VH Package",
   "unity": "2022.1",
   "unityRelease": "9f1",
   "dependencies": {
     "edu.usc.ict.ride.vendor.vh": "0.0.8411",
-    "edu.usc.ict.ride.cognition": "0.0.8602"
+    "edu.usc.ict.ride.cognition": "0.0.8648"
   },
   "homepage": "https://ride.ict.usc.edu",
   "documentationUrl": "https://ride.ict.usc.edu",
