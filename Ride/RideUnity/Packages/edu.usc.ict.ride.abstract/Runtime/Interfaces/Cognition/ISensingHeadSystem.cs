@@ -3,14 +3,28 @@
 namespace Ride.Sensing
 {
     /// <summary>
+    /// Rectangular boundary that encloses a detected face.
+    /// </summary>
+    [Serializable]
+    public struct FaceRectangle
+    {
+        public float top;
+        public float left;
+        public float width;
+        public float height;
+
+        public FaceRectangle(float _top, float _left, float _width, float _height) { top = _top; left = _left; width = _width; height = _height; }
+    }
+
+    /// <summary>
     /// Request wrapper for analyzing head orientation and occlusion.
     /// </summary>
     [Serializable]
     public class SensingHeadRequest : SensingRequest
     {
-        public Object input;
+        public object input;
 
-        public SensingHeadRequest(Object input)
+        public SensingHeadRequest(object input)
         {
             this.input = input;
         }
@@ -56,17 +70,5 @@ namespace Ride.Sensing
         /// <param name="input">The image data to analyze.</param>
         /// <param name="onComplete">Callback triggered after analysis completes.</param>
         void AnalyzeHead(object input, Action<SensingResponse> onComplete);
-    }
-
-    /// <summary>
-    /// Rectangular boundary that encloses a detected face.
-    /// </summary>
-    [Serializable]
-    public struct FaceRectangle
-    {
-        public float top;
-        public float left;
-        public float width;
-        public float height;
     }
 }

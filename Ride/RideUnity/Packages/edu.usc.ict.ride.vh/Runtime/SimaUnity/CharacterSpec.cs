@@ -1,8 +1,10 @@
-using Newtonsoft.Json;
 using System;
 using System.IO;
 using UnityEngine;
+using Newtonsoft.Json;
 
+namespace Ride
+{
 //public enum CharacterType { GenericMleAdult, GenericFmlAdult} // It can be changed according to the rig of the animations
 
 [Serializable]
@@ -57,4 +59,5 @@ public static class CharacterSpecLoader
             };
         }
     }
+}
 }

@@ -11,55 +11,119 @@ using Ride.AWS;
 namespace Ride
 {
     /// <summary>
-    /// Unity runtime system responsible for loading asset catalogs and asset bundles locally or from remote storage.
-    /// Supports AWS S3 signed URL integration, local caching, progress tracking, and async loading by name or label.
+    /// Provides asynchronous loading of Unity assets using RIDE asset catalogs and
+    /// asset bundles, with optional local-first access and secure remote fallback.
+    ///
+    /// This system is designed as a <b>loader</b>, not a cache. It resolves
+    /// <see cref="AssetCatalogData"/> entries, loads the corresponding asset bundle
+    /// (either from a local path or a signed remote URL), extracts the requested asset,
+    /// and immediately unloads the bundle. The returned asset remains valid for as long
+    /// as the caller holds references to it, and the caller is responsible for managing
+    /// the asset’s lifetime.
+    ///
+    /// <para>
+    /// This behavior allows large bundles—such as Virtual Human characters, terrain
+    /// chunks, or high-resolution textures—to be streamed on demand without permanently
+    /// increasing memory usage. The system does not retain references to loaded bundles
+    /// or assets; once the load operation completes, the asset bundle is unloaded and
+    /// only the returned asset remains in memory.
+    /// </para>
+    ///
+    /// <para><b>Usage Model</b></para>
+    /// <para>
+    /// Callers typically load an asset once, instantiate as many GameObjects as needed,
+    /// and then release it when finished:
+    /// </para>
+    /// <list type="number">
+    /// <item>
+    /// <description>
+    /// Invoke <see cref="LoadAssetByName(string)"/> or <see cref="LoadAnyAssetByLabels(System.Collections.Generic.List{string})"/>
+    /// to obtain a prefab or other Unity asset.
+    /// </description>
+    /// </item>
+    /// <item>
+    /// <description>
+    /// Instantiate the asset using <see cref="UnityEngine.Object.Instantiate(UnityEngine.Object)"/>.
+    /// </description>
+    /// </item>
+    /// <item>
+    /// <description>
+    /// When the asset is no longer required:
+    /// destroy all instantiated GameObjects,
+    /// clear all strong C# references to the loaded asset,
+    /// and run <see cref="UnloadUnusedAssetsCoroutine"/> (or call
+    /// <see cref="UnityEngine.Resources.UnloadUnusedAssets"/> directly)
+    /// to allow Unity to reclaim the underlying resources.
+    /// </description>
+    /// </item>
+    /// </list>
+    ///
+    /// <para><b>Memory Behavior</b></para>
+    /// <para>
+    /// Unity loads the textures, meshes, animations, and other dependencies of an asset
+    /// when the asset is extracted from its bundle. These resources remain resident
+    /// until:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>All strong references to the asset are released, <i>and</i></description></item>
+    /// <item><description>
+    /// Unity performs an unload pass via <see cref="UnityEngine.Resources.UnloadUnusedAssets"/>
+    /// or a scene change.
+    /// </description></item>
+    /// </list>
+    /// <para>
+    /// Because the system does not retain bundles or asset references, callers control
+    /// resource lifetime explicitly. This allows applications to load many large assets
+    /// sequentially (e.g., previewing 50 Virtual Humans) without accumulating memory.
+    /// </para>
+    ///
+    /// <para><b>Catalog Management</b></para>
+    /// <para>
+    /// The system may load multiple catalogs at runtime. All asset loading operations
+    /// wait for catalog initialization to complete. Each <see cref="AssetCatalogData"/>
+    /// provides mappings between logical asset names and the bundle files that contain
+    /// them, along with labels for category-based retrieval.
+    /// </para>
+    ///
+    /// <para><b>Local and Remote Bundle Paths</b></para>
+    /// <para>
+    /// When resolving a bundle, the system will:
+    /// </para>
+    /// <list type="number">
+    /// <item><description>
+    /// Attempt to load from the catalog’s configured <c>localPrefixPath</c> if the bundle
+    /// file exists on disk.
+    /// </description></item>
+    /// <item><description>
+    /// If not found locally, request a signed URL for secure remote access and retrieve
+    /// the bundle using <see cref="UnityEngine.Networking.UnityWebRequestAssetBundle"/>.
+    /// </description></item>
+    /// </list>
+    ///
+    /// <para><b>Threading and Execution</b></para>
+    /// <para>
+    /// All load operations are performed asynchronously using Unity coroutines.
+    /// Operations report progress via <see cref="LoadOperation{T}"/> and complete
+    /// with either a Unity asset or an error message.
+    /// </para>
+    ///
+    /// <para><b>Intended Use</b></para>
+    /// <para>
+    /// This system is intended for on-demand loading of assets in memory-sensitive
+    /// applications such as RIDE scenarios, Virtual Human selection interfaces,
+    /// or terrain streaming tools. It provides the minimum necessary caching and
+    /// leaves responsibility for asset reuse and memory cleanup to the caller.
+    /// </para>
     /// </summary>
     public class AssetLoadingSystemAssetBundles : RideSystemMonoBehaviour, IAssetLoadingSystem
     {
         public List<CatalogLoadInfoUnity> m_catalogsToLoad = new();
         [SerializeField] private bool m_verboseLogging = false;
         private List<AssetCatalogData> m_catalogs = new();
-        private Dictionary<string, UnityEngine.Object> m_loadedAssetsByName = new();
-        private Dictionary<string, AssetBundle> m_loadedBundles = new();
 
         public bool CatalogCurrentlyLoading { get; private set; }
         public int NumCatalogsLoaded => m_catalogs.Count;
 
-
-#if UNITY_EDITOR
-        /// <summary>
-        /// Ensures that all AssetBundles loaded in memory are unloaded when entering Play Mode in the Unity Editor.
-        /// <para>
-        /// This prevents the following error that can occur if the same AssetBundle is loaded again during a new Play session:
-        /// </para>
-        /// <code>
-        /// "AssetBundle '...' can't be loaded because another AssetBundle with the same files is already loaded."
-        /// </code>
-        /// <para>
-        /// This issue arises because Unity does not automatically unload AssetBundles when exiting Play Mode. If an AssetBundle was
-        /// previously loaded and not explicitly unloaded (via <see cref="AssetBundle.Unload"/>), it can remain in memory and trigger a
-        /// conflict when reloading the same bundle (even from a different URL) in a subsequent Play session.
-        /// </para>
-        /// <para>
-        /// Calling <see cref="AssetBundle.UnloadAllAssetBundles(bool)"/> with <c>true</c> ensures both the bundles and their loaded assets
-        /// are fully released from memory.
-        /// </para>
-        /// <para>
-        /// Related documentation and references:
-        /// <list type="bullet">
-        /// <item><see href="https://docs.unity3d.com/ScriptReference/AssetBundle.UnloadAllAssetBundles.html">Unity docs: AssetBundle.UnloadAllAssetBundles</see></item>
-        /// <item><see href="https://forum.unity.com/threads/assetbundle-cant-be-loaded-because-another-assetbundle-with-the-same-files-is-already-loaded.1201760/">Unity Forum: Duplicate bundle load error</see></item>
-        /// <item><see href="https://issuetracker.unity3d.com/issues/assetbundles-are-not-unloaded-on-exiting-play-mode">Unity Issue Tracker: Bundles not unloaded on Play exit</see></item>
-        /// </list>
-        /// </para>
-        /// </summary>
-        [UnityEditor.InitializeOnEnterPlayMode]
-        private static void OnEnterPlayMode()
-        {
-            //Debug.Log("[Ride] Clearing cached AssetBundles before entering Play Mode.");
-            AssetBundle.UnloadAllAssetBundles(true);
-        }
-#endif
 
         /// <inheritdoc/>
         public override void SystemInit()
@@ -118,6 +182,9 @@ namespace Ride
                     }
 
                     catalog.isRemoteCatalog = false;
+
+                    CheckRideBundleVersion(catalog);
+
                     m_catalogs.Add(catalog);
                     newCatalogLoaded = true;
                     LogCatalogContents(catalog, "[AssetLoadingSystemAssetBundles] Loaded catalog from TextAsset.");
@@ -179,6 +246,9 @@ namespace Ride
                     string json = www.downloadHandler.text;
                     var catalog = JsonUtility.FromJson<AssetCatalogData>(json);
                     catalog.isRemoteCatalog = true;
+
+                    CheckRideBundleVersion(catalog);
+
                     m_catalogs.Add(catalog);
                     newCatalogLoaded = true;
                     LogCatalogContents(catalog, "[AssetLoadingSystemAssetBundles] Loaded remote catalog.");
@@ -196,6 +266,9 @@ namespace Ride
                     string json = File.ReadAllText(catalogFilePath);
                     var catalog = JsonUtility.FromJson<AssetCatalogData>(json);
                     catalog.isRemoteCatalog = false;
+
+                    CheckRideBundleVersion(catalog);
+
                     m_catalogs.Add(catalog);
                     newCatalogLoaded = true;
                     LogCatalogContents(catalog, "[AssetLoadingSystemAssetBundles] Loaded local catalog.");
@@ -210,28 +283,11 @@ namespace Ride
             CatalogCurrentlyLoading = false;
         }
 
-        private static string GetAssetBundlePlatformName()
-        {
-            string platform = "";
-            if (RideUtils.IsAndroid()) platform = "Android";
-            else if (RideUtils.IsIOS()) platform = "iOS";
-            else if (RideUtils.IsWebGL()) platform = "WebGL";
-            else if (RideUtils.IsLinux()) platform = "StandaloneLinux64";
-            else if (RideUtils.IsOSX()) platform = "StandaloneOSXUniversal";  // OSX and Windows currently placed last in the list to prevent early match when in editor
-            else if (RideUtils.IsWindows()) platform = "StandaloneWindows64";
-            else Debug.LogWarning("GetAssetBundlePlatformName() - platform not found.");
-            return platform;
-        }
-
         private static string GetBuildPostfixPath()
         {
-            string[] v = Application.unityVersion.Split('.');
-            string version = v.Length >= 2 ? $"{v[0]}.{v[1]}.x" : Application.unityVersion;
-            string pipeline = GraphicsSettings.currentRenderPipeline == null
-                ? "BuiltIn" : GraphicsSettings.currentRenderPipeline.GetType().Name.Contains("HD")
-                ? "HDRP" : (GraphicsSettings.currentRenderPipeline.GetType().Name.Contains("Universal")
-                ? "URP" : GraphicsSettings.currentRenderPipeline.GetType().Name);
-            string target = GetAssetBundlePlatformName();
+            string version = AssetCatalogUtility.GetCompatibleUnityVersionName();
+            string pipeline = AssetCatalogUtility.GetRenderPipelineName();
+            string target = AssetCatalogUtility.GetPlatformName();
             return Path.Combine(version, pipeline, target).Replace("\\", "/");
         }
 
@@ -250,7 +306,7 @@ namespace Ride
             yield return StartCoroutine(LoadCatalogs(m_catalogsToLoad));
         }
 
-        // <summary>Internal method for loading a list of core catalog entries.</summary>
+        /// <summary>Internal method for loading a list of core catalog entries.</summary>
         private IEnumerator InternalLoadCatalogs(List<CatalogLoadInfoUnity> catalogInfos)
         {
             CatalogCurrentlyLoading = true;
@@ -275,21 +331,106 @@ namespace Ride
             if (!m_verboseLogging)
                 return;
 
-            if (catalog == null || catalog.entries == null)
+            if (catalog == null)
             {
-                Debug.LogWarning("[AssetLoadingSystemAssetBundles] Catalog loaded but no entries found.");
+                Debug.LogWarning("[AssetLoadingSystemAssetBundles] LogCatalogContents called with null catalog.");
                 return;
             }
 
+            string source = catalog.isRemoteCatalog ? "Remote" : "Local";
+
             Debug.Log($"{headerMessage}");
-            Debug.Log($"Contains {catalog.entries.Count} entries:");
-            foreach (var entry in catalog.entries)
-                Debug.Log($"- {entry.assetName}");
+            Debug.Log(
+                $"AssetLoadingSystemAssetBundles - [RIDE Asset Catalog]\n" +
+                $"  Source:                       {source}\n" +
+                $"  Local Prefix Path:            {catalog.localPrefixPath}\n" +
+                $"  Remote Prefix Path:           {catalog.remotePrefixPath}\n" +
+                $"  --- Version Metadata ---\n" +
+                $"  Ride Bundle Version:          {catalog.rideBundleVersion ?? "(none)"}\n" +
+                $"  Unity Version (Built With):   {catalog.unityVersion ?? "(unknown)"}\n" +
+                $"  Platform:                     {catalog.platform ?? "(unknown)"}\n" +
+                $"  Render Pipeline:              {catalog.renderPipeline ?? "(unknown)"}\n" +
+                $"  Render Pipeline Version:      {catalog.renderPipelineVersion ?? "(unknown)"}\n" +
+                $"  --- Asset Entries ---\n" +
+                $"  Entry Count:                  {catalog.entries?.Count ?? 0}"
+            );
+
+            if (catalog.entries != null)
+            {
+                foreach (var entry in catalog.entries)
+                {
+                    var labels = entry.labels != null ? string.Join(", ", entry.labels) : "(none)";
+
+                    Debug.Log(
+                        $"AssetLoadingSystemAssetBundles - [RIDE Asset Catalog Entry]\n" +
+                        $"    Asset:        {entry.assetName}\n" +
+                        $"    Bundle:       {entry.bundleFileName}\n" +
+                        $"    Hash128:      {entry.bundleHash128}\n" +
+                        $"    Labels:       {labels}\n"
+                    );
+                }
+            }
         }
 
-        /// <summary>Loads an asset using its name.</summary>
-        /// <param name="assetName">The unique asset name.</param>
-        /// <returns>The loaded asset or null.</returns>
+        /// <summary>
+        /// Asynchronously loads a single asset by name from the loaded asset catalogs.
+        /// </summary>
+        /// <param name="assetName">
+        /// Logical asset name as defined in the loaded <see cref="AssetCatalogData"/> entries
+        /// (for example, <c>entry.assetName</c>), not a file system path.
+        /// </param>
+        /// <returns>
+        /// A <see cref="LoadOperation{T}"/> that completes with the loaded asset as a
+        /// <see cref="UnityEngine.Object"/> on success, or a failure state if the asset
+        /// cannot be found or its bundle fails to load.
+        /// </returns>
+        /// <remarks>
+        /// <para>
+        /// This method looks up <paramref name="assetName"/> in the currently loaded catalogs,
+        /// resolves the corresponding <see cref="AssetCatalogEntry"/>, loads the associated
+        /// asset bundle (from local storage or remote storage such as S3, depending on the
+        /// catalog configuration), and then loads the asset from that bundle.
+        /// </para>
+        /// <para>
+        /// The operation reports progress via the returned <see cref="LoadOperation{T}"/>.
+        /// The call is non-blocking; the underlying work is performed by a Unity coroutine
+        /// started on this system.
+        /// </para>
+        /// <para>
+        /// Memory management:
+        /// </para>
+        /// <para>
+        /// The asset returned by this method is a live Unity object. This system is intended
+        /// to behave as a loader rather than a long-term cache: once the asset has been
+        /// loaded and returned, callers are expected to keep any references they need and
+        /// are also responsible for releasing those references when the asset is no longer
+        /// required. Destroy all instantiated GameObjects created from the loaded asset,
+        /// clear any C# references to the asset itself, and then run
+        /// <c>UnloadUnusedAssetsCoroutine()</c> (or call
+        /// <see cref="UnityEngine.Resources.UnloadUnusedAssets"/> directly) to allow Unity to
+        /// reclaim the underlying textures, meshes, and other resources.
+        /// </para>
+        /// <para>
+        /// For repeated use of the same asset (for example, instantiating 100 copies of a
+        /// barrel prefab), the recommended pattern is:
+        /// </para>
+        /// <list type="number">
+        /// <item>
+        /// <description>Call <see cref="LoadAssetByName"/> once to obtain the prefab.</description>
+        /// </item>
+        /// <item>
+        /// <description>Instantiate as many copies as needed using <see cref="UnityEngine.Object.Instantiate(UnityEngine.Object)"/>.</description>
+        /// </item>
+        /// <item>
+        /// <description>When finished, destroy the instances and clear your references to the prefab, then run <c>UnloadUnusedAssetsCoroutine()</c> to free memory.</description>
+        /// </item>
+        /// </list>
+        /// <para>
+        /// Calling <see cref="LoadAssetByName"/> multiple times for the same asset name is
+        /// allowed and will load the asset each time according to the current implementation,
+        /// but is not recommended when you can reuse an existing reference.
+        /// </para>
+        /// </remarks>
         public LoadOperation<object> LoadAssetByName(string assetName)
         {
             var op = new LoadOperation<object>();
@@ -305,12 +446,6 @@ namespace Ride
                 yield break;
             }
 
-            if (m_loadedAssetsByName.TryGetValue(assetName, out var cached))
-            {
-                op.SetCompleted(cached);
-                yield break;
-            }
-
             while (CatalogCurrentlyLoading)
                 yield return null;
 
@@ -322,8 +457,9 @@ namespace Ride
 
                 string bundleName = entry.bundleFileName;
 
+                AssetBundle bundle = null;
+
                 // Check if bundle already loaded
-                if (!m_loadedBundles.TryGetValue(bundleName, out var bundle))
                 {
                     string localBundlePath = Path.Combine(catalog.localPrefixPath, bundleName);
                     if (File.Exists(localBundlePath))
@@ -397,8 +533,6 @@ namespace Ride
                         op.SetFailed("Bundle is null after load.");
                         yield break;
                     }
-
-                    m_loadedBundles[bundleName] = bundle;
                 }
 
                 var loadRequest = bundle.LoadAssetAsync(entry.assetName, typeof(UnityEngine.Object));
@@ -414,10 +548,11 @@ namespace Ride
                 {
                     Debug.LogWarning($"Asset '{entry.assetName}' not found in bundle '{bundleName}'.");
                     op.SetFailed($"Asset '{entry.assetName}' not found in bundle '{bundleName}'.");
+                    bundle.Unload(false);
                     yield break;
                 }
 
-                m_loadedAssetsByName[entry.assetName] = asset;
+                bundle.Unload(false);
                 op.SetCompleted(asset);
                 yield break;
             }
@@ -426,9 +561,61 @@ namespace Ride
         }
 
 
-        /// <summary>Loads the first matching asset using one or more labels.</summary>
-        /// <param name="labels">The list of labels to match.</param>
-        /// <returns>The loaded asset or null.</returns>
+        /// <summary>
+        /// Asynchronously loads the first asset whose catalog entry contains at least one of the specified labels.
+        /// </summary>
+        /// <param name="labels">
+        /// List of labels to match against catalog entries. An entry is considered a match if its
+        /// <c>labels</c> collection contains any one of the provided label values.
+        /// </param>
+        /// <returns>
+        /// A <see cref="LoadOperation{T}"/> that completes with the loaded asset as a
+        /// <see cref="UnityEngine.Object"/> on success, or a failure state if no matching
+        /// entry is found or the underlying bundle fails to load.
+        /// </returns>
+        /// <remarks>
+        /// <para>
+        /// This method waits for any in-progress catalog loads to complete, then scans the
+        /// currently loaded <see cref="AssetCatalogData"/> instances in order and selects
+        /// the first <see cref="AssetCatalogEntry"/> whose <c>labels</c> collection contains
+        /// at least one of the labels in <paramref name="labels"/>. It then delegates to
+        /// <see cref="LoadAssetByName(string)"/> to perform the actual bundle and asset load.
+        /// </para>
+        /// <para>
+        /// Label matching is an "any-match" search: if an entry has labels
+        /// <c>["vh", "civilian", "male"]</c> and the caller passes
+        /// <c>["civilian", "tank"]</c>, that entry is considered a match because it
+        /// contains <c>"civilian"</c>.
+        /// </para>
+        /// <para>
+        /// Memory management:
+        /// </para>
+        /// <para>
+        /// As with <see cref="LoadAssetByName(string)"/>, this system functions as a loader,
+        /// not a long-term cache. Once the asset has been loaded and returned, the caller is
+        /// responsible for managing its lifetime. Destroy any instantiated GameObjects created
+        /// from the loaded asset, clear strong C# references to the asset when it is no longer
+        /// needed, and then invoke <c>UnloadUnusedAssetsCoroutine()</c> (or call
+        /// <see cref="UnityEngine.Resources.UnloadUnusedAssets"/> directly) to allow Unity to
+        /// unload the underlying resources.
+        /// </para>
+        /// <para>
+        /// If you intend to create many instances of a single asset chosen by label (for
+        /// example, selecting a random barrel prefab from a group of labeled barrels),
+        /// the recommended pattern is to:
+        /// </para>
+        /// <list type="number">
+        /// <item>
+        /// <description>Call <see cref="LoadAnyAssetByLabels"/> once to obtain the prefab.</description>
+        /// </item>
+        /// <item>
+        /// <description>Instantiate as many copies as needed.</description>
+        /// </item>
+        /// <item>
+        /// <description>When finished, destroy the instances, clear references to the prefab, and run <c>UnloadUnusedAssetsCoroutine()</c> to free memory.</description>
+        /// </item>
+        /// </list>
+        /// </remarks>
         public LoadOperation<object> LoadAnyAssetByLabels(List<string> labels)
         {
             var op = new LoadOperation<object>();
@@ -538,17 +725,45 @@ namespace Ride
         /// <returns>Catalog entry if found, otherwise null.</returns>
         public AssetCatalogEntry GetCatalogEntry(string assetName) => m_catalogs.SelectMany(c => c.entries).FirstOrDefault(e => e.assetName == assetName);
 
-        /// <summary>Unloads all loaded asset bundles.</summary>
-        public void UnloadAll()
-        {
-            foreach (var bundle in m_loadedBundles.Values)
-                bundle.Unload(false);
-
-            m_loadedBundles.Clear();
-        }
-
         /// <summary>Returns the total number of assets across all catalogs.</summary>
         public int GetEntryCount() => m_catalogs.SelectMany(c => c.entries).Count();
+
+        /// <summary>
+        /// Runs Unity's <see cref="UnityEngine.Resources.UnloadUnusedAssets"/> and yields
+        /// until the unload operation has completed.
+        /// </summary>
+        /// <returns>
+        /// An <see cref="System.Collections.IEnumerator"/> that yields while Unity scans
+        /// for assets that are no longer referenced and releases their associated memory.
+        /// </returns>
+        /// <remarks>
+        /// <para>
+        /// Use this helper after destroying all instances of assets loaded through this
+        /// system and clearing any strong C# references to those assets. Unity only
+        /// releases the underlying textures, meshes, and other resources when there are
+        /// no remaining references and an unload pass is executed.
+        /// </para>
+        /// <para>
+        /// Centralizing the call to <see cref="UnityEngine.Resources.UnloadUnusedAssets"/>
+        /// in this coroutine makes the intended lifetime model explicit for callers of
+        /// the asset loading system and avoids scattering unload calls throughout the codebase.
+        /// </para>
+        /// <para>
+        /// Typical usage:
+        /// </para>
+        /// <code>
+        /// // Destroy instances and clear references
+        /// GameObject.Destroy(characterInstance);
+        /// characterPrefab = null;
+        ///
+        /// // Then run the unload pass through this system
+        /// StartCoroutine(assetLoadingSystem.UnloadUnusedAssetsCoroutine());
+        /// </code>
+        /// </remarks>
+        public IEnumerator UnloadUnusedAssetsCoroutine()
+        {
+            yield return Resources.UnloadUnusedAssets();
+        }
 
         /// <summary>Returns a flat list of all asset name/label pairs in loaded catalogs.</summary>
         /// <returns>List of (assetName, labels).</returns>
@@ -560,17 +775,26 @@ namespace Ride
                 .ToList();
         }
 
-        /// <summary>Checks if an asset is already loaded and cached.</summary>
-        /// <param name="assetName">The name of the asset.</param>
-        /// <returns>True if the asset's bundle is loaded.</returns>
-        public bool IsCached(string assetName)
+        private static void CheckRideBundleVersion(AssetCatalogData catalog)
         {
-            var entry = m_catalogs.SelectMany(c => c.entries).FirstOrDefault(e => e.assetName == assetName);
-            if (entry == null) return false;
-            return m_loadedBundles.ContainsKey(entry.bundleFileName);
+            // Null or empty means older catalogs that didn't contain this field.
+            if (string.IsNullOrEmpty(catalog.rideBundleVersion))
+            {
+                Debug.LogWarning(
+                    $"[RIDE Asset Catalog] Catalog '{catalog.localPrefixPath}' " +
+                    $"does not specify a rideBundleVersion. It may be outdated."
+                );
+            }
+            // Compare against the editor-defined version.
+            else if (!string.Equals(catalog.rideBundleVersion, AssetCatalogData.RIDE_VERSION, StringComparison.Ordinal))
+            {
+                Debug.LogWarning(
+                    $"AssetLoadingSystemAssetBundles - [RIDE Asset Catalog] Version mismatch detected! " +
+                    $"Catalog version: {catalog.rideBundleVersion}, " +
+                    $"Expected: {AssetCatalogData.RIDE_VERSION}. " +
+                    $"Loading will continue, but issues may occur."
+                );
+            }
         }
-
-        /// <summary>Clears the internal asset bundle cache without unloading them.</summary>
-        public void ClearCache() => m_loadedBundles.Clear();
     }
 }

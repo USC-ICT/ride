@@ -1,9 +1,12 @@
-﻿using System.IO;
+﻿using System.Collections;
+using System.Collections.Generic;
+using System.IO;
+using UnityEngine;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
-using UnityEngine;
-using System.Collections.Generic;
 
+namespace Ride
+{
 public static class BehaviorLogger
 {
     public static void SaveBehaviorsToFile(List<Behavior> behaviors, string fileName = "Behaviors.json", string customPath = null)
@@ -36,4 +39,5 @@ public static class BehaviorLogger
             Debug.LogError($"❌ Failed to save behaviors: {ex.Message}");
         }
     }
+}
 }

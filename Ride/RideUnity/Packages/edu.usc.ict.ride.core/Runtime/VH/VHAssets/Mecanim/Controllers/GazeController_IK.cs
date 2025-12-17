@@ -1,124 +1,203 @@
-﻿using Ride;
-using UnityEngine;
+﻿using UnityEngine;
+using Ride;
 
 namespace VHAssets
 {
-public class GazeController_IK : GazeController
-{
-    #region Variables
-    [SerializeField]
-    [Range(0, 1)]
-    float m_HeadGazeWeight = 0.5f;
-    [SerializeField]
-    [Range(0, 1)]
-    float m_BodyGazeWeight = 0;
-    [SerializeField]
-    [Range(0, 1)]
-    float m_EyeGazeWeight = 1;
+    /// <summary>
+    /// Gaze controller implementation that uses Unity's built-in Animator IK
+    /// to drive look-at behavior for a character.
+    /// 
+    /// This component bridges the abstract gaze logic in <see cref="GazeController"/>
+    /// with an <see cref="Animator"/> configured for look-at:
+    /// - Reads the current gaze target and weights from the base class
+    /// - Applies them using <see cref="Animator.SetLookAtPosition(Vector3)"/> and
+    ///   <see cref="Animator.SetLookAtWeight(float,float,float,float)"/>
+    /// 
+    /// This class assumes:
+    /// - An <see cref="Animator"/> is present in the hierarchy
+    /// - The Animator is configured to use IK for look-at
+    /// 
+    /// Gaze targeting, blending, and state management are handled by
+    /// <see cref="GazeController"/>. This class is focused solely on
+    /// integrating that data with the animation system via Unity's IK.
+    /// </summary>
+    public class GazeController_IK : GazeController
+    {
+        #region Fields
+        [SerializeField][Range(0f, 1f)] private float m_HeadGazeWeight = 0.5f;
+        [SerializeField][Range(0f, 1f)] private float m_BodyGazeWeight = 0;
+        [SerializeField][Range(0f, 1f)] private float m_EyeGazeWeight = 1f;
 
-    [SerializeField]
-    [Range(0, 1)]
-    float m_CurrentTotalGazeWeight = 0;
+        [SerializeField][Range(0f, 1f)] private float m_CurrentTotalGazeWeight = 0;
+        [SerializeField][Range(0f, 1f)] private float m_CurrentEyeGazeWeight = 0;
+        [SerializeField][Range(0f, 1f)] private float m_CurrentHeadGazeWeight = 0;
+        [SerializeField][Range(0f, 1f)] private float m_CurrentBodyGazeWeight = 0;
 
-    [SerializeField]
-    [Range(0, 1)]
-    float m_CurrentEyeGazeWeight = 0;
+        private Animator m_Animator;
+        #endregion
 
-    [SerializeField]
-    [Range(0, 1)]
-    float m_CurrentHeadGazeWeight = 0;
+        #region Properties
+        public override float HeadGazeWeight { get => m_HeadGazeWeight; set => m_HeadGazeWeight = value; }
+        public override float EyeGazeWeight { get => m_EyeGazeWeight; set => m_EyeGazeWeight = value; }
+        public override float BodyGazeWeight { get => m_BodyGazeWeight; set => m_BodyGazeWeight = value; }
+        public override float CurrentHeadGazeWeight { get => m_CurrentHeadGazeWeight; set => m_CurrentHeadGazeWeight = value; }
+        public override float CurrentEyeGazeWeight { get => m_CurrentEyeGazeWeight; set => m_CurrentEyeGazeWeight = value; }
+        public override float CurrentBodyGazeWeight { get => m_CurrentBodyGazeWeight; set => m_CurrentBodyGazeWeight = value; }
+        public override float CurrentTotalGazeWeight { get => m_CurrentTotalGazeWeight; set => m_CurrentTotalGazeWeight = value; }
+        #endregion
 
-    [SerializeField]
-    [Range(0, 1)]
-    float m_CurrentBodyGazeWeight = 0;
-    Animator m_Animator;
-    #endregion
-
-    #region Properties
-    public override float HeadGazeWeight
-    {
-        get { return m_HeadGazeWeight; }
-        set { m_HeadGazeWeight = value; }
-    }
-    public override float EyeGazeWeight
-    {
-        get { return m_EyeGazeWeight; }
-        set { m_EyeGazeWeight = value; }
-    }
-    public override float BodyGazeWeight
-    {
-        get { return m_BodyGazeWeight; }
-        set { m_BodyGazeWeight = value; }
-    }
-    public override float CurrentHeadGazeWeight
-    {
-        get { return m_CurrentHeadGazeWeight; }
-        set { m_CurrentHeadGazeWeight = value; }
-    }
-    public override float CurrentEyeGazeWeight
-    {
-        get { return m_CurrentEyeGazeWeight; }
-        set { m_CurrentEyeGazeWeight = value; }
-    }
-    public override float CurrentBodyGazeWeight
-    {
-        get { return m_CurrentBodyGazeWeight; }
-        set { m_CurrentBodyGazeWeight = value; }
-    }
-    public override float CurrentTotalGazeWeight
-    {
-        get { return m_CurrentTotalGazeWeight; }
-        set { m_CurrentTotalGazeWeight = value; }
-    }
-    #endregion
-
-    #region Functions
-    void Start()
-    {
-        if (!TryGetComponent(out ILoadableAsset loadedAsset))
-            InitializeLoadedAsset();
-    }
-
-    public void InitializeLoadedAsset()
-    {
-        Setup();
-        if (m_GazeTarget != null)
+        #region Functions
+        void Start()
         {
-            InitGaze(m_GazeTarget);
-            SetGazeTargetWithSpeed(m_GazeTarget, GazeParts.All);
+            // initialize immediately only when there is NO ILoadableAsset.
+            if (!TryGetComponent(out ILoadableAsset _))
+                InitializeLoadedAsset();
         }
-    }
 
-    void Setup()
-    {
-        if (m_Animator == null)
+        void OnAnimatorIK(int layer)
         {
-            m_Animator = GetComponentInChildren<Animator>();
-            if (m_Animator == null)
-                Debug.LogError("No animator found in hierarchy of " + name + ". Gaze won't work");
+            UpdateGaze();
         }
-    }
 
-    protected override void InitGaze(GameObject gazeTarget)
-    {
-        Setup();
-        m_CurrentTotalGazeWeight = 1;
-        base.InitGaze(gazeTarget);
-    }
-
-    public override void UpdateGaze()
-    {
-        if (m_GazeTarget != null && m_Animator != null)
+        /// <summary>
+        /// Initializes the gaze system for a loaded asset, ensuring that
+        /// an <see cref="Animator"/> is available and that an initial gaze
+        /// target is configured if one has been assigned.
+        /// 
+        /// This method is typically called after an <see cref="ILoadableAsset"/>
+        /// has finished loading, but can also be used for immediate initialization
+        /// on non-loadable characters.
+        /// </summary>
+        public void InitializeLoadedAsset()
         {
+            EnsureAnimator();
+            EnsureGazeOrigin();
+
+            if (m_GazeTarget != null)
+            {
+                InitGaze(m_GazeTarget);
+                SetGazeTargetWithSpeed(m_GazeTarget, GazeParts.All);
+            }
+        }
+
+        /// <summary>
+        /// Updates the Animator IK look-at position and weights based on the
+        /// current gaze state managed by <see cref="GazeController"/>.
+        /// 
+        /// This method:
+        /// - Uses <see cref="GazeController.GetGazePosition"/> as the look-at point
+        /// - Maps the per-channel weights (body, head, eyes) and total weight into
+        ///   <see cref="Animator.SetLookAtWeight(float,float,float,float)"/>
+        /// 
+        /// It performs no state changes itself; all fade timing and target
+        /// management happens in the base class.
+        /// </summary>
+        public override void UpdateGaze()
+        {
+            if (m_GazeTarget == null || m_Animator == null)
+                return;
+
+            // Position: where the character should look.
             m_Animator.SetLookAtPosition(GetGazePosition());
+
+            // Weights: total controls overall IK strength; the remaining parameters
+            // control how much of that strength is driven by body, head, and eyes.
             m_Animator.SetLookAtWeight(m_CurrentTotalGazeWeight, m_CurrentBodyGazeWeight, m_CurrentHeadGazeWeight, m_CurrentEyeGazeWeight);
         }
-    }
 
-    void OnAnimatorIK(int layer)
-    {
-        UpdateGaze();
+        /// <summary>
+        /// Ensures that an <see cref="Animator"/> reference is available.
+        /// 
+        /// If no Animator has been cached yet, this method searches the
+        /// current GameObject hierarchy using <see cref="Component.GetComponentInChildren{T}()"/>.
+        /// If no Animator is found, an error is logged and gaze will not function.
+        /// </summary>
+        private void EnsureAnimator()
+        {
+            if (m_Animator != null)
+                return;
+
+            m_Animator = GetComponentInChildren<Animator>();
+            if (m_Animator == null)
+                Debug.LogError($"No animator found in hierarchy of {name}. Gaze won't work");
+        }
+
+        /// <summary>
+        /// Ensures that a transform is assigned as the origin used for vertical
+        /// gaze calculations (see <c>GetVerticalGaze()</c>).
+        ///
+        /// If the user has not explicitly assigned <c>m_GazeOrigin</c>, this method
+        /// attempts to choose a sensible default from the humanoid rig:
+        /// <list type="bullet">
+        ///   <item><description>Head bone (preferred)</description></item>
+        ///   <item><description>Left or right eye bone (if available)</description></item>
+        ///   <item><description>The Animator’s transform as a fallback</description></item>
+        /// </list>
+        ///
+        /// This origin is only used to measure the up/down angle of the gaze
+        /// (for eyelids and other “soft eye” effects). The IK look-at itself is
+        /// handled entirely by the Animator, so assigning this field is optional.
+        /// 
+        /// For <see cref="GazeController_IK"/>, it is recommended to leave
+        /// <c>m_GazeOrigin</c> unset—this method will automatically choose an
+        /// appropriate bone from the Animator.
+        /// </summary>
+        private void EnsureGazeOrigin()
+        {
+            if (m_GazeOrigin != null)
+                return;
+
+            EnsureAnimator();
+            if (m_Animator == null)
+                return;
+
+            var avatar = m_Animator.avatar;
+            if (avatar != null && avatar.isValid && avatar.isHuman)
+            {
+                Transform head = m_Animator.GetBoneTransform(HumanBodyBones.Head);
+                if (head != null)
+                {
+                    m_GazeOrigin = head;
+                    return;
+                }
+
+                Transform leftEye = m_Animator.GetBoneTransform(HumanBodyBones.LeftEye);
+                if (leftEye != null)
+                {
+                    m_GazeOrigin = leftEye;
+                    return;
+                }
+
+                Transform rightEye = m_Animator.GetBoneTransform(HumanBodyBones.RightEye);
+                if (rightEye != null)
+                {
+                    m_GazeOrigin = rightEye;
+                    return;
+                }
+            }
+
+            // final fallback
+            m_GazeOrigin = m_Animator.transform;
+        }
+
+        /// <summary>
+        /// Initializes a new gaze request for the specified target using
+        /// IK-specific behavior.
+        /// 
+        /// This override:
+        /// - Ensures that an <see cref="Animator"/> is available
+        /// - Forces <see cref="CurrentTotalGazeWeight"/> to 1.0 so that
+        ///   the IK look-at can use the full range of the per-channel weights
+        /// - Delegates to the base implementation to configure gaze state,
+        ///   fades, and positional transitions
+        /// </summary>
+        protected override void InitGaze(GameObject gazeTarget)
+        {
+            EnsureAnimator();
+            m_CurrentTotalGazeWeight = 1;
+
+            base.InitGaze(gazeTarget);
+        }
+        #endregion
     }
-    #endregion
-}
 }

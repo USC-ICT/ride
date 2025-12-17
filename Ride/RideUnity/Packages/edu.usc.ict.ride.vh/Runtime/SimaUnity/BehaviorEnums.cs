@@ -1,3 +1,5 @@
+namespace Ride
+{
 /// <summary>
 /// Enumerations describing supported nonverbal behavior categories and subtypes.
 /// It defines possible allowed values for BehaviorKind, GestureType, HeadType, FacialAU
@@ -59,4 +61,5 @@ public enum FacialAU
     au5,
     au6,
     au7
+}
 }

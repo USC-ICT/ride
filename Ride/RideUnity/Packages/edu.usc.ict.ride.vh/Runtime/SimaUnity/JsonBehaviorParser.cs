@@ -1,9 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
+namespace Ride
+{
 /// <summary>
 /// Parses nested nonverbal-behavior JSON into a flat list of <see cref="Behavior"/> objects
 ///. The input JSON is expected to have the shape:
@@ -117,4 +118,5 @@ public static class JsonBehaviorParser
         }
         return flatBehaviors;
     }
+}
 }

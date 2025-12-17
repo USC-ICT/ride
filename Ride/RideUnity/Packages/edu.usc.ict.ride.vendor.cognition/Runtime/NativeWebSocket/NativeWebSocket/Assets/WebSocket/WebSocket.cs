@@ -12,6 +12,8 @@ using System.Runtime.InteropServices;
 using UnityEngine;
 using System.Collections;
 
+namespace Ride.Vendor.NativeWebSocket
+{
 public class MainThreadUtil : MonoBehaviour
 {
     public static MainThreadUtil Instance { get; private set; }
@@ -207,19 +209,19 @@ namespace NativeWebSocket
   public class WebSocket : IWebSocket {
 
     /* WebSocket JSLIB functions */
-    [DllImport ("__Internal")]
+    [DllImport ("__Internal", EntryPoint = "RideVendorWebSocketConnect")]
     public static extern int WebSocketConnect (int instanceId);
 
-    [DllImport ("__Internal")]
+    [DllImport ("__Internal", EntryPoint = "RideVendorWebSocketClose")]
     public static extern int WebSocketClose (int instanceId, int code, string reason);
 
-    [DllImport ("__Internal")]
+    [DllImport ("__Internal", EntryPoint = "RideVendorWebSocketSend")]
     public static extern int WebSocketSend (int instanceId, byte[] dataPtr, int dataLength);
 
-    [DllImport ("__Internal")]
+    [DllImport ("__Internal", EntryPoint = "RideVendorWebSocketSendText")]
     public static extern int WebSocketSendText (int instanceId, string message);
 
-    [DllImport ("__Internal")]
+    [DllImport ("__Internal", EntryPoint = "RideVendorWebSocketGetState")]
     public static extern int WebSocketGetState (int instanceId);
 
     protected int instanceId;
@@ -732,25 +734,25 @@ namespace NativeWebSocket
     public delegate void OnCloseCallback (int instanceId, int closeCode);
 
     /* WebSocket JSLIB callback setters and other functions */
-    [DllImport ("__Internal")]
+    [DllImport ("__Internal", EntryPoint = "RideVendorWebSocketAllocate")]
     public static extern int WebSocketAllocate (string url);
 
-    [DllImport ("__Internal")]
+    [DllImport ("__Internal", EntryPoint = "RideVendorWebSocketAddSubProtocol")]
     public static extern int WebSocketAddSubProtocol (int instanceId, string subprotocol);
 
-    [DllImport ("__Internal")]
+    [DllImport ("__Internal", EntryPoint = "RideVendorWebSocketFree")]
     public static extern void WebSocketFree (int instanceId);
 
-    [DllImport ("__Internal")]
+    [DllImport ("__Internal", EntryPoint = "RideVendorWebSocketSetOnOpen")]
     public static extern void WebSocketSetOnOpen (OnOpenCallback callback);
 
-    [DllImport ("__Internal")]
+    [DllImport ("__Internal", EntryPoint = "RideVendorWebSocketSetOnMessage")]
     public static extern void WebSocketSetOnMessage (OnMessageCallback callback);
 
-    [DllImport ("__Internal")]
+    [DllImport ("__Internal", EntryPoint = "RideVendorWebSocketSetOnError")]
     public static extern void WebSocketSetOnError (OnErrorCallback callback);
 
-    [DllImport ("__Internal")]
+    [DllImport ("__Internal", EntryPoint = "RideVendorWebSocketSetOnClose")]
     public static extern void WebSocketSetOnClose (OnCloseCallback callback);
 
     /* If callbacks was initialized and set */
@@ -845,4 +847,5 @@ namespace NativeWebSocket
 
     }
 
+}
 }

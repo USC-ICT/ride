@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 
+namespace Ride
+{
 public static class UtteranceParser
 {
     /// <summary>
@@ -20,4 +22,5 @@ public static class UtteranceParser
 
         return parsed;
     }
+}
 }

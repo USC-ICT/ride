@@ -1,0 +1,4 @@
+root = false
+
+[*.cs]
+dotnet_diagnostic.IDE0090.severity = none  # 'new' expression can be simplified

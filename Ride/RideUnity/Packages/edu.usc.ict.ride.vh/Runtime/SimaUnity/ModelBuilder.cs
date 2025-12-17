@@ -2,8 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
-using Ride.NLP; // Ensure this namespace is correctly referenced
+using Ride.NLP;
 
+namespace Ride
+{
 /// <summary>
 /// Unity bridge that prepares a system prompt for the OpenAI chat model and
 /// sends user utterances for nonverbal behavior analysis. The raw JSON returned
@@ -190,4 +192,5 @@ public class ModelBuilder : MonoBehaviour
     }
 
 
+}
 }

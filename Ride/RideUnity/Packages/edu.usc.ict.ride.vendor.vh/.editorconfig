@@ -1,0 +1,12 @@
+root = false
+
+[*.cs]
+dotnet_diagnostic.IDE0017.severity = none  # Object initialization can be simplified
+dotnet_diagnostic.IDE0044.severity = none  # Make field readonly
+dotnet_diagnostic.IDE0056.severity = none  # Indexing can be simplified
+dotnet_diagnostic.IDE0057.severity = none  # "" can be simplified
+dotnet_diagnostic.IDE0059.severity = none  # Unnecessary assignment of a value to ''
+dotnet_diagnostic.IDE0060.severity = none  # Remove unused parameter '' if it is not part of a shipped public API
+dotnet_diagnostic.IDE0075.severity = none  # Conditional expression can be simplified
+dotnet_diagnostic.IDE0090.severity = none  # 'new' expression can be simplified
+dotnet_diagnostic.IDE1006.severity = none  # Naming rule violation: These words must begin with upper case characters: 

@@ -731,7 +731,7 @@ namespace Ride
                 Label("iOS specific info");
 #if UNITY_IOS
                 Label($"iOSDeviceGen: {UnityEngine.iOS.Device.generation}");  // The generation of the device.
-                if (!VHUtils.IsEditor()) Label($"systemVersion: {UnityEngine.iOS.Device.systemVersion}");  // Causes 'Assertion failed on expression' error when run in editor on Windows  // iOS version.
+                if (!RideUtils.IsEditor()) Label($"systemVersion: {UnityEngine.iOS.Device.systemVersion}");  // Causes 'Assertion failed on expression' error when run in editor on Windows  // iOS version.
                 Label($"advertisingIdentifier: {UnityEngine.iOS.Device.advertisingIdentifier}");  // Advertising ID.
                 Label($"advertisingTrackingEnabled: {UnityEngine.iOS.Device.advertisingTrackingEnabled}");  // Is advertising tracking enabled.
                 Label($"vendorIdentifier: {UnityEngine.iOS.Device.vendorIdentifier}");  // Vendor ID.

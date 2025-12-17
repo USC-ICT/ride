@@ -1,3 +1,5 @@
+namespace Ride
+{
 /// <summary>
 /// Represents a nonverbal behavior within an utterance, including its category (kind)
 /// its associated phrase in the utterance (phrase), and its timing marker (marker)
@@ -39,4 +41,5 @@ public class Behavior
     /// The facial action unit (AU), if the behavior is a facial expression; otherwise, null.
     /// </summary>
     public FacialAU? Facial { get; set; }
+}
 }

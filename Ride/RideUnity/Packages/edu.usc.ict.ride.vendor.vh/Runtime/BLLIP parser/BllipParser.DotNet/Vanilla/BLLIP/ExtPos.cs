@@ -1,5 +1,7 @@
 using System;
 
+using size_t = System.UInt64;
+
 
 namespace BllipParser.DotNet.Vanilla
 {
@@ -13,7 +15,16 @@ namespace BllipParser.DotNet.Vanilla
 
         public bool hasExtPos()
         {
-            throw new NotImplementedException();
+            for (size_t i = 0; i < size(); i ++)
+            {
+                vector<Term> terms = this[(int)i];  //operator[](i);
+                if (terms.size() > 0)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
     }
 }

@@ -1,51 +1,49 @@
-using UnityEditor;
-using UnityEngine;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using UnityEditor;
+using UnityEngine;
 
+namespace Ride
+{
 /// <summary>
 /// Unity Editor window for managing Asset Catalog Groups and viewing Build Summary data.
 /// Allows drag-and-drop assignment of assets, group prefix path configuration, and build reviewing/triggering.
 /// </summary>
 public class AssetCatalogWindow : EditorWindow
 {
-    private enum Tab { Catalog, BuildSummary }
-    private Tab m_currentTab = Tab.Catalog;
+    [Flags]
+    private enum AssetCatalogBuildTargets
+    {
+        // Add more as needed.  See BuildTarget enum for options.
+        None                = 0,
+        StandaloneOSX       = 1 << 0,
+        iOS                 = 1 << 1,
+        Android             = 1 << 2,
+        StandaloneWindows64 = 1 << 3,
+        WebGL               = 1 << 4,
+        StandaloneLinux64   = 1 << 5,
+    }
+
 
     private AssetCatalogProfile m_assetCatalogProfile;
-    private BuildSummaryProfile m_buildSummaryProfile;
 
     private const string ASSET_CATALOG_DATA_PATH = "Assets/AssetCatalogData";
     private const string ASSET_CATALOG_PROFILE_NAME = "AssetCatalogProfile.asset";
-    private static string BuildSummaryPath
-    {
-        get
-        {
-            return Path.Combine(Application.persistentDataPath, "BuildSummaryProfile.json");
-        }
-    }
     private bool m_catalogIsDirty = false;
-    private bool m_summaryIsDirty = false;
 
     private float m_nameColumnWidth = 200f;
     private float m_pathColumnWidth = 300f;
     private Vector2 m_scrollPosAssetList;
-    private Vector2 m_scrollPosHistory;
-    private Vector2 m_scrollPosJson;
     private bool m_isResizingNameColumn = false;
     private bool m_isResizingPathColumn = false;
     private Rect m_cursorRectName;
     private Rect m_cursorRectPath;
 
-    private int m_selectedBuildIndex = -1;
-    private bool m_buildSummaryExpanded = false;
     private List<bool> m_groupFoldouts = new();
 
-
-    public AssetCatalogProfile AssetCatalogProfile => m_assetCatalogProfile;
-    public bool CatalogIsDirty => m_catalogIsDirty;
-    public void SetCatalogDirty() => m_catalogIsDirty = true;
+    private AssetCatalogBuildTargets m_selectedBuildTargets;
 
 
     /// <summary>
@@ -60,16 +58,18 @@ public class AssetCatalogWindow : EditorWindow
 
     private void OnEnable()
     {
-        LoadOrCreatePersistentData();
+        LoadOrCreateCatalogProfile();
+
+        m_selectedBuildTargets = MapBuildTargetToMask(EditorUserBuildSettings.activeBuildTarget);
     }
 
-    /// <summary>
-    /// Loads catalog and build summary profiles, or creates them if missing.
-    /// </summary>
-    private void LoadOrCreatePersistentData()
+    private void OnDisable()
     {
-        LoadOrCreateCatalogProfile();
-        LoadOrCreateBuildSummaryProfile();
+        if (m_catalogIsDirty)
+        {
+            SavePersistentData(true);
+            m_catalogIsDirty = false;
+        }
     }
 
     /// <summary>
@@ -82,61 +82,36 @@ public class AssetCatalogWindow : EditorWindow
             m_assetCatalogProfile = null;
             return;
         }
-        m_assetCatalogProfile = AssetDatabase.LoadAssetAtPath<AssetCatalogProfile>(
-            $"{ASSET_CATALOG_DATA_PATH}/{ASSET_CATALOG_PROFILE_NAME}");
+
+        m_assetCatalogProfile = AssetDatabase.LoadAssetAtPath<AssetCatalogProfile>($"{ASSET_CATALOG_DATA_PATH}/{ASSET_CATALOG_PROFILE_NAME}");
     }
 
-    /// <summary>
-    /// Helper method to load the Build Summary Profile from Application.persistentDataPath/BuildSummaryProfile.json. Creates this file if missing.
-    /// </summary>
-    private void LoadOrCreateBuildSummaryProfile()
-    {
-        if (File.Exists(BuildSummaryPath))
-        {
-            m_buildSummaryProfile = CreateInstance<BuildSummaryProfile>();
-            string json = File.ReadAllText(BuildSummaryPath);
-            JsonUtility.FromJsonOverwrite(json, m_buildSummaryProfile);
-            if (m_buildSummaryProfile.builds.Count > 0)
-                m_selectedBuildIndex = m_buildSummaryProfile.builds.Count - 1;
-        }
-        else
-            m_buildSummaryProfile = CreateInstance<BuildSummaryProfile>();
-    }
-
-    private void CreatePersistentData()
+    private void CreateCatalogProfile()
     {
         if (!AssetDatabase.IsValidFolder(ASSET_CATALOG_DATA_PATH))
             AssetDatabase.CreateFolder("Assets", "AssetCatalogData");
+
         m_assetCatalogProfile = CreateInstance<AssetCatalogProfile>();
         AssetDatabase.CreateAsset(m_assetCatalogProfile, $"{ASSET_CATALOG_DATA_PATH}/{ASSET_CATALOG_PROFILE_NAME}");
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
-        m_buildSummaryProfile = CreateInstance<BuildSummaryProfile>();
     }
 
-    private void SavePersistentData(bool catalogChanged = false, bool summaryChanged = false)
+    private void SavePersistentData(bool catalogChanged)
     {
         if (catalogChanged && m_assetCatalogProfile != null)
             EditorUtility.SetDirty(m_assetCatalogProfile);
+
         if (catalogChanged)
             AssetDatabase.SaveAssets();
-        if (summaryChanged && m_buildSummaryProfile != null)
-        {
-            string dir = Path.GetDirectoryName(BuildSummaryPath);
-            if (!Directory.Exists(dir))
-                Directory.CreateDirectory(dir);
-            string json = JsonUtility.ToJson(m_buildSummaryProfile, true);
-            File.WriteAllText(BuildSummaryPath, json);
-        }
     }
 
     private void OnInspectorUpdate()
     {
-        if (m_catalogIsDirty || m_summaryIsDirty)
+        if (m_catalogIsDirty)
         {
-            SavePersistentData(m_catalogIsDirty, m_summaryIsDirty);
+            SavePersistentData(m_catalogIsDirty);
             m_catalogIsDirty = false;
-            m_summaryIsDirty = false;
         }
     }
 
@@ -146,30 +121,7 @@ public class AssetCatalogWindow : EditorWindow
     /// </summary>
     private void OnGUI()
     {
-        if (m_assetCatalogProfile == null || m_buildSummaryProfile == null)
-        {
-            EditorGUILayout.HelpBox("No AssetCatalogData found. Create it to persist asset and build info.", MessageType.Warning);
-            if (GUILayout.Button("Create AssetCatalogData"))
-            {
-                CreatePersistentData();
-                LoadOrCreatePersistentData();
-            }
-            return;
-        }
-
-        EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
-        m_currentTab = (Tab)GUILayout.Toolbar((int)m_currentTab, new[] { "Assets", "Build Summary" }, EditorStyles.toolbarButton);
-        EditorGUILayout.EndHorizontal();
-
-        switch (m_currentTab)
-        {
-            case Tab.Catalog:
-                DrawCatalogTab();
-                break;
-            case Tab.BuildSummary:
-                DrawBuildSummaryTab();
-                break;
-        }
+        DrawCatalogTab();
     }
 
     /// <summary>
@@ -177,6 +129,17 @@ public class AssetCatalogWindow : EditorWindow
     /// </summary>
     private void DrawCatalogTab()
     {
+        if (m_assetCatalogProfile == null)
+        {
+            EditorGUILayout.HelpBox("No AssetCatalogData found. Create it to persist asset and build info.", MessageType.Warning);
+            if (GUILayout.Button("Create AssetCatalogData"))
+            {
+                CreateCatalogProfile();
+                LoadOrCreateCatalogProfile();
+            }
+            return;
+        }
+
         EditorGUILayout.BeginHorizontal();
         EditorGUILayout.LabelField("Asset Catalog Groups", EditorStyles.boldLabel);
         GUILayout.FlexibleSpace();
@@ -195,6 +158,7 @@ public class AssetCatalogWindow : EditorWindow
         }
         EditorGUILayout.EndHorizontal();
 
+        EditorGUILayout.BeginHorizontal();
         bool allSelected = m_assetCatalogProfile.groups.All(g => g.includeInBuild);
         string toggleLabel = allSelected ? "Deselect All" : "Select All";
         if (GUILayout.Button(toggleLabel, GUILayout.Width(100)))
@@ -203,6 +167,19 @@ public class AssetCatalogWindow : EditorWindow
                 group.includeInBuild = !allSelected;
             m_catalogIsDirty = true;
         }
+
+        if (GUILayout.Button("Expand All", GUILayout.Width(120)))
+        {
+            for (int i = 0; i < m_groupFoldouts.Count; i++)
+                m_groupFoldouts[i] = true;
+        }
+
+        if (GUILayout.Button("Collapse All", GUILayout.Width(120)))
+        {
+            for (int i = 0; i < m_groupFoldouts.Count; i++)
+                m_groupFoldouts[i] = false;
+        }
+        EditorGUILayout.EndHorizontal();
 
         if (m_assetCatalogProfile.groups.Count != m_groupFoldouts.Count)
         {
@@ -216,13 +193,46 @@ public class AssetCatalogWindow : EditorWindow
         EditorGUILayout.EndScrollView();
 
         EditorGUILayout.Space();
+
+        m_selectedBuildTargets = (AssetCatalogBuildTargets)EditorGUILayout.EnumFlagsField("Build Targets", m_selectedBuildTargets);
+
+        EditorGUILayout.Space();
         if (GUILayout.Button("Build Catalog and Bundles"))
         {
-            if (m_assetCatalogProfile.groups.Count > 0)
+            if (m_assetCatalogProfile.groups.Count == 0)
             {
-                AssetCatalogUtils.BuildSelectedAssetGroups();
-                LoadOrCreateBuildSummaryProfile();
-                m_currentTab = Tab.BuildSummary;
+                Debug.LogWarning("[AssetCatalogWindow] No asset groups defined.");
+            }
+            else
+            {
+                var targets = GetSelectedBuildTargets(m_selectedBuildTargets);
+                if (targets.Count == 0)
+                {
+                    Debug.LogWarning("[AssetCatalogWindow] No build targets selected.");
+                }
+                else
+                {
+                    int index = 0;
+
+                    void Build()
+                    {
+                        if (index >= targets.Count)
+                        {
+                            EditorApplication.update -= Build;  // finished all targets
+                            return;
+                        }
+
+                        var target = targets[index++];
+
+                        Debug.Log($"[AssetCatalogWindow] Building for: {target}");
+
+                        AssetCatalogEditorUtility.BuildSelectedAssetGroups(target, verboseLogging: true);
+
+                        UnityEditorInternal.InternalEditorUtility.RepaintAllViews();  // Force console update
+                    }
+
+                    EditorApplication.update += Build;
+                }
             }
         }
     }
@@ -255,7 +265,14 @@ public class AssetCatalogWindow : EditorWindow
         Rect groupStart = GUILayoutUtility.GetRect(0, 0);
         EditorGUILayout.BeginVertical("box");
         EditorGUILayout.BeginHorizontal();
-        group.includeInBuild = EditorGUILayout.Toggle(group.includeInBuild, GUILayout.Width(16));
+        bool oldIncludeInBuild = group.includeInBuild;
+        bool newIncludeInBuild = EditorGUILayout.Toggle(oldIncludeInBuild, GUILayout.Width(16));
+        if (newIncludeInBuild != oldIncludeInBuild)
+        {
+            group.includeInBuild = newIncludeInBuild;
+            m_catalogIsDirty = true;
+            // optional: SavePersistentData(true);  // if you want immediate save
+        }
         m_groupFoldouts[index] = EditorGUILayout.Foldout(m_groupFoldouts[index], group.groupName, true);
 
         if (GUILayout.Button("X", GUILayout.Width(20)))
@@ -287,38 +304,50 @@ public class AssetCatalogWindow : EditorWindow
                 }
             }
             if (string.IsNullOrEmpty(group.localPrefixPath))
-                group.localPrefixPath = AssetCatalogUtils.GenerateDefaultLocalPath(group);
+                group.localPrefixPath = AssetCatalogUtility.GenerateDefaultLocalPath(group.groupName);
 
             if (string.IsNullOrEmpty(group.remotePrefixPath))
-                group.remotePrefixPath = AssetCatalogUtils.GenerateDefaultRemotePath(group);
+                group.remotePrefixPath = AssetCatalogUtility.GenerateDefaultRemotePath(group.groupName);
 
             EditorGUILayout.BeginHorizontal();
             group.localPrefixPath = EditorGUILayout.TextField("Local Prefix Path", group.localPrefixPath);
-            GUILayout.Label("/" + AssetCatalogUtils.GetBuildPostfixPath(), EditorStyles.miniLabel, GUILayout.ExpandWidth(false));
+            GUILayout.Label("/" + AssetCatalogEditorUtility.GetBuildPostfixPath(), EditorStyles.miniLabel, GUILayout.ExpandWidth(false));
             GUILayout.Space(5);
-            if (GUILayout.Button(EditorGUIUtility.IconContent("UndoHistory"), GUILayout.Width(24)))
+            GUIContent resetLocalContent = new GUIContent(
+                EditorGUIUtility.IconContent("UndoHistory").image,
+                "Reset the Local Prefix Path to the default generated location for this group.");
+            if (GUILayout.Button(resetLocalContent, GUILayout.Width(24)))
             {
-                group.localPrefixPath = AssetCatalogUtils.GenerateDefaultLocalPath(group);
+                group.localPrefixPath = AssetCatalogUtility.GenerateDefaultLocalPath(group.groupName);
                 m_catalogIsDirty = true;
             }
-            if (GUILayout.Button("📁", GUILayout.Width(24)))
+            GUIContent folderContent = new GUIContent(
+                EditorGUIUtility.IconContent("Folder Icon").image,
+                "Open this Local Prefix Path in the system file browser.");
+            if (GUILayout.Button(folderContent, GUILayout.Width(24), GUILayout.Height(20)))
                 OpenInExplorer(group.localPrefixPath);
             EditorGUILayout.EndHorizontal();
 
             EditorGUILayout.BeginHorizontal();
             group.remotePrefixPath = EditorGUILayout.TextField("Remote Prefix Path", group.remotePrefixPath);
-            GUILayout.Label("/" + AssetCatalogUtils.GetBuildPostfixPath(), EditorStyles.miniLabel, GUILayout.ExpandWidth(false));
+            GUILayout.Label("/" + AssetCatalogEditorUtility.GetBuildPostfixPath(), EditorStyles.miniLabel, GUILayout.ExpandWidth(false));
             GUILayout.Space(5);
-            if (GUILayout.Button(EditorGUIUtility.IconContent("UndoHistory"), GUILayout.Width(24)))
+            GUIContent resetRemoteContent = new GUIContent(
+                EditorGUIUtility.IconContent("UndoHistory").image,
+                "Reset the Remote Prefix Path to the default generated location for this group.");
+            if (GUILayout.Button(resetRemoteContent, GUILayout.Width(24)))
             {
-                group.remotePrefixPath = AssetCatalogUtils.GenerateDefaultRemotePath(group);
+                group.remotePrefixPath = AssetCatalogUtility.GenerateDefaultRemotePath(group.groupName);
                 m_catalogIsDirty = true;
             }
             GUILayout.Space(28);
             EditorGUILayout.EndHorizontal();
 
             if (EditorGUI.EndChangeCheck())
+            {
                 m_catalogIsDirty = true;
+                SavePersistentData(true);
+            }
             DrawGroupAssetSection(group);
         }
 
@@ -339,6 +368,7 @@ public class AssetCatalogWindow : EditorWindow
         Event evt = Event.current;
         if (!dropArea.Contains(evt.mousePosition))
             return;
+
         switch (evt.type)
         {
             case EventType.DragUpdated:
@@ -348,7 +378,7 @@ public class AssetCatalogWindow : EditorWindow
                 {
                     DragAndDrop.AcceptDrag();
 
-                    foreach (Object dragged in DragAndDrop.objectReferences)
+                    foreach (var dragged in DragAndDrop.objectReferences)
                     {
                         if (dragged is GameObject go &&
                             PrefabUtility.GetPrefabAssetType(go) != PrefabAssetType.NotAPrefab)
@@ -360,7 +390,9 @@ public class AssetCatalogWindow : EditorWindow
                                 m_catalogIsDirty = true;
                             }
                             else
+                            {
                                 Debug.LogWarning($"Asset with name '{draggedName}' already exists in group '{group.groupName}'");
+                            }
                         }
                     }
                     evt.Use();
@@ -371,85 +403,6 @@ public class AssetCatalogWindow : EditorWindow
         }
     }
 
-    /// <summary>
-    /// Draws the build summary tab showing build history, JSON snapshots, and per-asset metadata.
-    /// </summary>
-    private void DrawBuildSummaryTab()
-    {
-        if (m_buildSummaryProfile == null)
-        {
-            EditorGUILayout.HelpBox("No build summary data available.", MessageType.Info);
-            return;
-        }
-        var builds = m_buildSummaryProfile.builds;
-
-        if (builds.Count == 0)
-        {
-            EditorGUILayout.BeginHorizontal();
-            GUILayout.Label("Build History", EditorStyles.boldLabel);
-            if (GUILayout.Button("📁", GUILayout.Width(24)))
-                OpenInExplorer(Path.GetDirectoryName(BuildSummaryPath));
-        }
-
-        EditorGUILayout.BeginHorizontal();
-        EditorGUILayout.BeginVertical(GUILayout.Width(200));
-
-        EditorGUILayout.BeginHorizontal();
-        GUILayout.Label("Build History", EditorStyles.boldLabel);
-        if (GUILayout.Button("📁", GUILayout.Width(24)))
-            OpenInExplorer(Path.GetDirectoryName(BuildSummaryPath));
-        EditorGUILayout.EndHorizontal();
-        m_scrollPosHistory = EditorGUILayout.BeginScrollView(m_scrollPosHistory);
-        for (int i = builds.Count - 1; i >= 0; i--)
-        {
-            GUIStyle style = new(GUI.skin.box);
-            if (i == m_selectedBuildIndex)
-                style.normal.background = Texture2D.whiteTexture;
-
-            if (GUILayout.Button($"Build {i + 1}\n{builds[i].timestamp}", style, GUILayout.ExpandWidth(true), GUILayout.Height(40)))
-                m_selectedBuildIndex = i;
-        }
-        EditorGUILayout.EndScrollView();
-        EditorGUILayout.EndVertical();
-        GUILayout.Space(10);
-        EditorGUILayout.BeginVertical();
-
-        if (m_selectedBuildIndex < 0 || m_selectedBuildIndex >= builds.Count)
-            m_selectedBuildIndex = builds.Count - 1;
-
-        var selectedBuild = builds[m_selectedBuildIndex];
-
-        m_buildSummaryExpanded = EditorGUILayout.Foldout(m_buildSummaryExpanded, "Show Catalog JSON");
-        if (m_buildSummaryExpanded)
-        {
-            m_scrollPosJson = EditorGUILayout.BeginScrollView(m_scrollPosJson, GUILayout.Height(250), GUILayout.Width(position.width - 250));
-            EditorGUILayout.TextArea(selectedBuild.catalogJsonSnapshot, GUILayout.ExpandHeight(true));
-            EditorGUILayout.EndScrollView();
-        }
-
-        GUILayout.Space(10);
-        EditorGUILayout.BeginHorizontal();
-        GUILayout.Label("Asset Name", EditorStyles.boldLabel, GUILayout.Width(m_nameColumnWidth));
-        GUILayout.Label("Bundle Name", EditorStyles.boldLabel, GUILayout.Width(m_pathColumnWidth));
-        GUILayout.Label("Status", EditorStyles.boldLabel, GUILayout.Width(100));
-        GUILayout.Label("Last Modified", EditorStyles.boldLabel, GUILayout.Width(150));
-        GUILayout.Label("Size (bytes)", EditorStyles.boldLabel);
-        EditorGUILayout.EndHorizontal();
-
-        foreach (var row in selectedBuild.summaryRows)
-        {
-            EditorGUILayout.BeginHorizontal("box");
-            GUILayout.Label(row.assetName, GUILayout.Width(m_nameColumnWidth));
-            GUILayout.Label(row.bundleName, GUILayout.Width(m_pathColumnWidth));
-            GUILayout.Label(row.status, GUILayout.Width(100));
-            GUILayout.Label(row.lastModified, GUILayout.Width(150));
-            GUILayout.Label(row.sizeBytes.ToString());
-            EditorGUILayout.EndHorizontal();
-        }
-
-        EditorGUILayout.EndVertical();
-        EditorGUILayout.EndHorizontal();
-    }
 
     /// <summary>
     /// Draws the asset table column headers with adjustable width.
@@ -521,8 +474,8 @@ public class AssetCatalogWindow : EditorWindow
         foreach (var entry in group.assets)
         {
             EditorGUILayout.BeginHorizontal("box");
-            Object previousObj = entry.asset;
-            Object selectedObj = EditorGUILayout.ObjectField(previousObj, typeof(Object), false, GUILayout.Width(m_nameColumnWidth));
+            var previousObj = entry.asset;
+            var selectedObj = EditorGUILayout.ObjectField(previousObj, typeof(UnityEngine.Object), false, GUILayout.Width(m_nameColumnWidth));
             if (selectedObj != previousObj)
             {
                 string selectedName = selectedObj != null ? selectedObj.name : "";
@@ -563,7 +516,7 @@ public class AssetCatalogWindow : EditorWindow
                 menu.AddSeparator("");
                 menu.AddItem(new GUIContent("Manage Labels..."), false, () =>
                 {
-                    LabelManagerWindow.ShowWindow(m_assetCatalogProfile.allLabels);
+                    LabelManagerWindow.ShowWindow(m_assetCatalogProfile);
                 });
                 menu.ShowAsContext();
             }
@@ -589,6 +542,32 @@ public class AssetCatalogWindow : EditorWindow
             GUIUtility.ExitGUI();
         }
     }
+
+    private static AssetCatalogBuildTargets MapBuildTargetToMask(BuildTarget target)
+    {
+        return target switch
+        {
+            BuildTarget.StandaloneOSX       => AssetCatalogBuildTargets.StandaloneOSX,
+            BuildTarget.iOS                 => AssetCatalogBuildTargets.iOS,
+            BuildTarget.Android             => AssetCatalogBuildTargets.Android,
+            BuildTarget.StandaloneWindows64 => AssetCatalogBuildTargets.StandaloneWindows64,
+            BuildTarget.WebGL               => AssetCatalogBuildTargets.WebGL,
+            BuildTarget.StandaloneLinux64   => AssetCatalogBuildTargets.StandaloneLinux64,
+            _                               => AssetCatalogBuildTargets.None
+        };
+    }
+
+    private static List<BuildTarget> GetSelectedBuildTargets(AssetCatalogBuildTargets mask)
+    {
+        List<BuildTarget> outList = new();
+        if ((mask & AssetCatalogBuildTargets.StandaloneOSX) != 0) outList.Add(BuildTarget.StandaloneOSX);
+        if ((mask & AssetCatalogBuildTargets.iOS) != 0) outList.Add(BuildTarget.iOS);
+        if ((mask & AssetCatalogBuildTargets.Android) != 0) outList.Add(BuildTarget.Android);
+        if ((mask & AssetCatalogBuildTargets.StandaloneWindows64) != 0) outList.Add(BuildTarget.StandaloneWindows64);
+        if ((mask & AssetCatalogBuildTargets.WebGL) != 0) outList.Add(BuildTarget.WebGL);
+        if ((mask & AssetCatalogBuildTargets.StandaloneLinux64) != 0) outList.Add(BuildTarget.StandaloneLinux64);
+        return outList;
+    }
 }
 
 /// <summary>
@@ -597,17 +576,17 @@ public class AssetCatalogWindow : EditorWindow
 /// </summary>
 public class LabelManagerWindow : EditorWindow
 {
-    private List<string> _labels;
-    private string _newLabel = "";
+    private AssetCatalogProfile m_profile;
+    private string m_newLabel = "";
 
     /// <summary>
     /// Opens the label manager window and populates it with the current label list.
     /// </summary>
     /// <param name="labels">Reference to the list of global labels to manage.</param>
-    public static void ShowWindow(List<string> labels)
+    public static void ShowWindow(AssetCatalogProfile profile)
     {
         var window = GetWindow<LabelManagerWindow>("Manage Labels");
-        window._labels = labels;
+        window.m_profile = profile;
         window.minSize = new Vector2(300, 200);
     }
 
@@ -618,29 +597,50 @@ public class LabelManagerWindow : EditorWindow
     {
         EditorGUILayout.LabelField("Global Labels", EditorStyles.boldLabel);
 
-        for (int i = 0; i < _labels.Count; i++)
+        for (int i = 0; i < m_profile.allLabels.Count; i++)
         {
             EditorGUILayout.BeginHorizontal();
-            _labels[i] = EditorGUILayout.TextField(_labels[i]);
+            var newLabel = EditorGUILayout.TextField(m_profile.allLabels[i]);
+            if (newLabel != m_profile.allLabels[i])
+            {
+                m_profile.allLabels[i] = newLabel;
+                SaveProfile();
+            }
 
             if (GUILayout.Button("-", GUILayout.Width(20)))
             {
-                _labels.RemoveAt(i);
+                m_profile.allLabels.RemoveAt(i);
                 i--;
+
+                SaveProfile();
             }
             EditorGUILayout.EndHorizontal();
         }
 
         EditorGUILayout.Space();
         EditorGUILayout.BeginHorizontal();
-        _newLabel = EditorGUILayout.TextField(_newLabel);
+        m_newLabel = EditorGUILayout.TextField(m_newLabel);
 
-        if (GUILayout.Button("+", GUILayout.Width(30)) && !string.IsNullOrWhiteSpace(_newLabel))
+        if (GUILayout.Button("+", GUILayout.Width(30)) && !string.IsNullOrWhiteSpace(m_newLabel))
         {
-            if (!_labels.Contains(_newLabel))
-                _labels.Add(_newLabel);
-            _newLabel = "";
+            if (!m_profile.allLabels.Contains(m_newLabel))
+            {
+                m_profile.allLabels.Add(m_newLabel);
+                SaveProfile();
+            }
+
+            m_newLabel = "";
         }
         EditorGUILayout.EndHorizontal();
     }
+
+    private void SaveProfile()
+    {
+        if (m_profile != null)
+        {
+            EditorUtility.SetDirty(m_profile);
+            AssetDatabase.SaveAssets();
+        }
+    }
+}
 }

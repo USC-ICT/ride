@@ -203,6 +203,9 @@ public class GazeController_LookAt : GazeController
         }
     }
 
+    // intentionally empty, actual implementation is in LateUpdate()
+    public override void UpdateGaze() { }
+
     void ParentConstraint(Transform Constrained, Transform Constrainer)
     {
         Constrained.SetPositionAndRotation(Constrainer.position, Constrainer.rotation);

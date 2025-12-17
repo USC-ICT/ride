@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Threading.Tasks;
 using UnityEngine;
@@ -11,7 +12,6 @@ using UnityEngine.Android;
 #if UNITY_IOS
 using UnityEngine.iOS;
 #endif
-
 
 namespace Ride.SpeechRecognition
 {
@@ -38,6 +38,7 @@ namespace Ride.SpeechRecognition
         }
 
         const int SAMPLE_RATE = 24000;
+        const string DEFAULT_MICROHONE_NAME = "AzureDefault";
 
         public override bool IsSupported => true;
         public override float AutoSilenceTimeoutSeconds { get; set; } = 3;
@@ -53,9 +54,6 @@ namespace Ride.SpeechRecognition
         //bool m_micPermissionGranted = false;
 
 #if !UNITY_WEBGL
-        string m_apiKey;
-        string m_region;
-        SpeechConfig m_speechConfig;
         AudioConfig m_audioConfig;
         SpeechRecognizer m_speechRecognizer;
 #endif
@@ -73,14 +71,6 @@ namespace Ride.SpeechRecognition
         {
             base.SystemInit();
 
-#if !UNITY_WEBGL
-            ConfigurationSystemUnity configSystem = Globals.api.GetSystem<ConfigurationSystemUnity>();
-            m_apiKey = configSystem.config.azureSpeech.apiKey;
-            m_region = configSystem.config.azureSpeech.region;
-            m_speechConfig = SpeechConfig.FromSubscription(m_apiKey, m_region);
-            m_audioConfig = AudioConfig.FromDefaultMicrophoneInput();
-#endif
-
             CheckMicrophonePermissions();
         }
 
@@ -88,6 +78,25 @@ namespace Ride.SpeechRecognition
         public override void SetMicrophone(string deviceName)
         {
             base.SetMicrophone(deviceName);
+
+            // the method in the base class for finding default is not valid on this platform (unity mic names differ from azure expected names)
+            // see: https://learn.microsoft.com/en-us/azure/ai-services/speech-service/how-to-select-audio-input-devices
+
+            // On most platforms, Unity's microphone names do not match Azure's device names.
+            // We prefer default mic, but we still track the selected Unity mic name for logging.
+            if (string.IsNullOrEmpty(deviceName))
+            {
+                SelectedMicrophone = DEFAULT_MICROHONE_NAME;
+
+                Debug.Log("[Azure ASR] SetMicrophone called with empty deviceName; using default microphone.");
+            }
+            else
+            {
+                SelectedMicrophone = deviceName;
+
+                Debug.Log($"[Azure ASR] SetMicrophone called with deviceName='{deviceName}'.");
+            }
+
             SetInputSource(SpeechRecognitionType.MICROPHONE);
         }
 
@@ -96,20 +105,28 @@ namespace Ride.SpeechRecognition
         {
             m_currentInputSource = sourceType;
             m_filePath = filePath;
+
+            //Debug.Log($"[Azure ASR] Input source set to {m_currentInputSource}, filePath='{m_filePath}'.");
         }
 
         /// <inheritdoc/>
         public override void OnRecognizingStarted()
         {
+            Debug.Log("[Azure ASR] OnRecognizingStarted - starting CheckRecognizedSpeechRoutine and Azure recognizer.");
+
             StartCoroutine(CheckRecognizedSpeechRoutine());
             StartSpeechRecognitionAsync();
+
             base.OnRecognizingStarted();
         }
 
         /// <inheritdoc/>
         public override void OnRecognizingStopped()
         {
+            Debug.Log("[Azure ASR] OnRecognizingStopped - stopping Azure recognizer.");
+
             StopSpeechRecognitionAsync();
+
             base.OnRecognizingStopped();
         }
 
@@ -119,7 +136,13 @@ namespace Ride.SpeechRecognition
         /// </summary>
         protected void OnSpeechPartialRecognizedEvent(object sender, SpeechRecognitionEventArgs e)
         {
+            if (e == null || e.Result == null)
+                return;
+
             m_recognizedSpeechPartial = e.Result.Text;
+
+            if (!string.IsNullOrEmpty(m_recognizedSpeechPartial))
+                Debug.Log($"[Azure ASR] Recognizing (partial): '{m_recognizedSpeechPartial}'");
         }
 
         /// <summary>
@@ -127,7 +150,32 @@ namespace Ride.SpeechRecognition
         /// </summary>
         protected void OnSpeechRecognizedEvent(object sender, SpeechRecognitionEventArgs e)
         {
+            if (e == null || e.Result == null)
+                return;
+
             m_recognizedSpeech = e.Result.Text;
+
+            Debug.Log($"[Azure ASR] Recognized (final): Reason={e.Result.Reason}, Text='{m_recognizedSpeech}'");
+        }
+
+        /// <summary>
+        /// Event handler for cancellation events (errors, end-of-session, etc.).
+        /// </summary>
+        protected void OnSpeechCanceledEvent(object sender, SpeechRecognitionCanceledEventArgs e)
+        {
+            if (e == null)
+                return;
+
+            Debug.LogError(
+                $"[Azure ASR] Canceled: Reason={e.Reason}, ErrorCode={e.ErrorCode}, Details='{e.ErrorDetails}'");
+        }
+
+        /// <summary>
+        /// Event handler when the Azure session stops.
+        /// </summary>
+        protected void OnSessionStoppedEvent(object sender, SessionEventArgs e)
+        {
+            Debug.Log("[Azure ASR] SessionStopped event received from Azure.");            
         }
 #endif
 
@@ -137,31 +185,61 @@ namespace Ride.SpeechRecognition
         protected async void StartSpeechRecognitionAsync()
         {
 #if !UNITY_WEBGL
+            if (m_speechRecognizer != null)
+            {
+                Debug.LogWarning("[Azure ASR] StartSpeechRecognitionAsync called, but recognizer is already running.");
+                return;
+            }
+
             try
             {
-                m_speechConfig = SpeechConfig.FromSubscription(m_apiKey, m_region);
+                var configSystem = Systems.Get<ConfigurationSystemUnity>();
+                var apiKey = configSystem.config.azureSpeech.apiKey;
+                var region = configSystem.config.azureSpeech.region;
 
-                m_speechConfig.SetProperty(
+                Debug.Log($"[Azure ASR] SystemInit with region='{region}'.");
+
+                var speechConfig = SpeechConfig.FromSubscription(apiKey, region);
+
+                speechConfig.SetProperty(
                     PropertyId.SpeechServiceConnection_InitialSilenceTimeoutMs,
                     ((int)(InitialSilenceTimeoutSeconds * 1000)).ToString());
-                m_speechConfig.SetProperty(
+                speechConfig.SetProperty(
                     PropertyId.Speech_SegmentationSilenceTimeoutMs,
                     ((int)(AutoSilenceTimeoutSeconds * 1000)).ToString());
 
-                m_audioConfig = BuildAudioConfigWithFallback();
+                Debug.Log($"[Azure ASR] StartSpeechRecognitionAsync - InputSource={CurrentInputSource}");
 
-                m_speechRecognizer = new SpeechRecognizer(m_speechConfig, m_audioConfig);
+                m_audioConfig = BuildAudioConfigWithFallback();
+                if (m_audioConfig == null)
+                {
+                    Debug.LogError("[Azure ASR] Failed to build AudioConfig. Aborting start.");
+
+                    StopRecognizing();
+                    return;
+                }
+
+                m_speechRecognizer = new SpeechRecognizer(speechConfig, m_audioConfig);
 
                 m_speechRecognizer.Recognizing += OnSpeechPartialRecognizedEvent;
                 m_speechRecognizer.Recognized += OnSpeechRecognizedEvent;
+                m_speechRecognizer.Canceled += OnSpeechCanceledEvent;
+                m_speechRecognizer.SessionStopped += OnSessionStoppedEvent;
 
                 Confidence = 1;
+
+                Debug.Log("[Azure ASR] Calling StartContinuousRecognitionAsync...");
+
                 await m_speechRecognizer.StartContinuousRecognitionAsync();
+
+                Debug.Log("[Azure ASR] StartContinuousRecognitionAsync completed.");
             }
             catch (System.Exception ex)
             {
                 Debug.LogError($"[Azure ASR] Failed to start: {ex.GetType().Name}: {ex.Message}");
+
                 //OnSpeechRecognized("Microphone not available. Check OS mic privacy, default input device, or close other apps using the mic.", 0);
+
                 StopRecognizing(); 
                 return;
             }
@@ -170,24 +248,37 @@ namespace Ride.SpeechRecognition
 #endif
 
             if (CurrentInputSource == SpeechRecognitionType.FILE)
+            {
+                Debug.Log("[Azure ASR] FILE input source used - stopping after initial recognition start.");
+
                 StopSpeechRecognitionAsync();
+            }
         }
 
 #if !UNITY_WEBGL
         private AudioConfig BuildAudioConfigWithFallback()
         {
+            Debug.Log($"[Azure ASR] BuildAudioConfigWithFallback - CurrentInputSource={CurrentInputSource}, SelectedMicrophone='{SelectedMicrophone}'");
+
             switch (CurrentInputSource)
             {
                 case SpeechRecognitionType.FILE:
                     if (!string.IsNullOrEmpty(FilePath))
+                    {
+                        Debug.Log($"[Azure ASR] Using FILE input: '{FilePath}'");
                         return AudioConfig.FromWavFileInput(FilePath);
+                    }
                     Debug.LogWarning("[Azure ASR] FILE mode selected but FilePath is empty. Falling back to microphone.");
                     goto case SpeechRecognitionType.MICROPHONE;
 
                 case SpeechRecognitionType.SPEAKER:
                     // Not all platforms support this; if it fails, fall back to mic.
-                    try { return AudioConfig.FromDefaultSpeakerOutput(); }
-                    catch (System.Exception e)
+                    try
+                    {
+                        Debug.Log("[Azure ASR] Using default speaker output as input.");
+                        return AudioConfig.FromDefaultSpeakerOutput();
+                    }
+                    catch (Exception e)
                     {
                         Debug.LogWarning($"[Azure ASR] Default speaker output not available: {e.Message}. Falling back to microphone.");
                         goto case SpeechRecognitionType.MICROPHONE;
@@ -195,18 +286,30 @@ namespace Ride.SpeechRecognition
 
                 case SpeechRecognitionType.MICROPHONE:
                 default:
+#if UNITY_ANDROID && !UNITY_EDITOR
+                    Debug.Log("[Azure ASR] Forcing default microphone input on Android");
+                    return AudioConfig.FromDefaultMicrophoneInput();
+#else
                     // IMPORTANT: Unity’s Microphone.devices names don’t always match what Azure expects.
                     // Prefer default mic to avoid SPXERR_MIC_NOT_AVAILABLE from mismatched device names.
+                    // See SetMicrophone()
                     try
                     {
-                        if (!string.IsNullOrEmpty(SelectedMicrophone))
+                        if (!string.IsNullOrEmpty(SelectedMicrophone) && 
+                            SelectedMicrophone != DEFAULT_MICROHONE_NAME)
+                        {
+                            Debug.Log($"[Azure ASR] Using named microphone: '{SelectedMicrophone}'.");
                             return AudioConfig.FromMicrophoneInput(SelectedMicrophone);
+                        }
                     }
-                    catch (System.Exception e)
+                    catch (Exception e)
                     {
                         Debug.LogWarning($"[Azure ASR] Named microphone '{SelectedMicrophone}' not available: {e.Message}. Using default mic.");
                     }
+
+                    Debug.Log("[Azure ASR] Using default microphone input.");
                     return AudioConfig.FromDefaultMicrophoneInput();
+#endif
             }
         }
 #endif
@@ -221,14 +324,22 @@ namespace Ride.SpeechRecognition
             {
                 if (m_speechRecognizer != null)
                 {
+                    Debug.Log("[Azure ASR] Calling StopContinuousRecognitionAsync...");
+
                     await m_speechRecognizer.StopContinuousRecognitionAsync();
+
+                    Debug.Log("[Azure ASR] StopContinuousRecognitionAsync completed.");
+                    
                     m_speechRecognizer.Recognizing -= OnSpeechPartialRecognizedEvent;
                     m_speechRecognizer.Recognized -= OnSpeechRecognizedEvent;
+                    m_speechRecognizer.Canceled -= OnSpeechCanceledEvent;
+                    m_speechRecognizer.SessionStopped -= OnSessionStoppedEvent;
+
                     m_speechRecognizer.Dispose();
                     m_speechRecognizer = null;
                 }
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
                 Debug.LogWarning($"[Azure ASR] Stop failed (already closed?): {ex.GetType().Name}: {ex.Message}");
             }

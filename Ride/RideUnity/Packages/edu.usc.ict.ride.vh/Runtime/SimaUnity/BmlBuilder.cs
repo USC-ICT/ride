@@ -1,8 +1,10 @@
 using System;
-using UnityEngine;
 using System.Collections.Generic;
 using System.Xml.Linq;
+using UnityEngine;
 
+namespace Ride
+{
 /// <summary>
 /// Builds a complete BML (<act>…</act>) XML document from:
 /// 1) the speaker's name, 2) the utterance, and 3) the list of parsed behaviors.
@@ -146,4 +148,5 @@ public static class BmlBuilder
 
         return new XDocument(new XDeclaration("1.0", "utf-8", null), act);
     }
+}
 }

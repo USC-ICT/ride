@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 
 using size_t = System.UInt64;
@@ -171,77 +172,99 @@ namespace BllipParser.DotNet.Vanilla
             ECString wlistString = new ECString(path);
             //wlistString += "probSum.txt";
             wlistString += "pSgT.txt";
-            //string wlistStream = File.ReadAllText(wlistString);  //ifstream wlistStream(wlistString.c_str());
-            string wlistStream = "";
-            using (var streamReader = new StreamReader(streams[wlistString]))
-                wlistStream = streamReader.ReadToEnd();
 
-            string [] wlistStreamSplit = wlistStream.Split((char [])null, StringSplitOptions.RemoveEmptyEntries);
-            //assert(wlistStream);
             int wnum = 0;
-            ECString w;
+            //ECString w;
 
-            //wlistStream >> w;  //first entry is number of entries
-            w = wlistStreamSplit[0];
-
-            lastKnownWord = Convert.ToInt32(w) - 1;
-            for (int wlistStreamIdx = 1; wlistStreamIdx < wlistStreamSplit.Length;)  //while (wlistStream)
+            //ifstream wlistStream(wlistString.c_str());
+            using (var streamReader = new StreamReader(streams[wlistString]))
             {
-                //wlistStream >> w;
-                w = wlistStreamSplit[wlistStreamIdx++];
+                var tokenEnumerator = new TextReaderTokenStream(streamReader);
 
-                if (wlistStreamIdx >= wlistStreamSplit.Length)  //if (!wlistStream)
-                    break;
+                //if (!wlistStream) break;
 
-                ECString dummy;
-                WordAndPresence wap = new WordAndPresence(int.MaxValue, false);
-                // if we see a vocabulary hole, we increment the word counter and move on
-                if (w == "**VocabHole**")
+                //wlistStream >> w;  //first entry is number of entries
+                if (!tokenEnumerator.TryRead(out string w))
+                    throw new InvalidDataException("pSgT.txt is empty or malformed.");
+
+                //lastKnownWord = atoi(w.c_str())-1;
+                int wInt = int.Parse(w, NumberStyles.Integer, CultureInfo.InvariantCulture);
+                lastKnownWord = wInt - 1;
+
+                // Remaining tokens
+                while (tokenEnumerator.HasMore)  // while (wlistStream)
                 {
-                    //wlistStream >> dummy; // the word that would fill this hole
-                    dummy = wlistStreamSplit[wlistStreamIdx++];
+                    //wlistStream >> w;
+                    if (!tokenEnumerator.TryRead(out w))
+                        throw new InvalidDataException("Unexpected end of pSgT.txt while reading vocab hole filler.");
 
-                    wap = new WordAndPresence(wap.first, false);  //wap.second = false; // this is a hole
-                }
-                else
-                {
-                    wap = new WordAndPresence(wap.first, true);  //wap.second = true; // real word (not a hole)
-                    for ( ; ; )
+                    bool isRealWord = true; // assume real word unless we detect a hole
+
+                    string dummy;  //ECString dummy;
+                    //WordAndPresence wap;
+
+                    // if we see a vocabulary hole, we increment the word counter and move on
+                    if (w == "**VocabHole**")
                     {
-                        //wlistStream >> dummy;
-                        dummy = wlistStreamSplit[wlistStreamIdx++];
+                        //wlistStream >> dummy; // the word that would fill this hole
+                        if (!tokenEnumerator.TryRead(out dummy))
+                            throw new InvalidDataException("Unexpected end of pSgT.txt while reading vocab hole filler.");
 
-                        if (dummy == "|")
-                            break;
+                        //wap.second = false; // this is a hole
+                        isRealWord = false;  // this is a hole
+                    }
+                    else
+                    {
+                        //wap.second = true; // real word (not a hole)
+                        for ( ; ; )
+                        {
+                            //wlistStream >> dummy;
+                            if (!tokenEnumerator.TryRead(out dummy))
+                                throw new InvalidDataException("Unexpected end of pSgT.txt while reading tag/prob list.");
 
-                        int trmInt = Convert.ToInt32(dummy);
-                        float prb;
+                            if (dummy == "|")
+                                break;
 
-                        //wlistStream >> prb;
-                        prb = Convert.ToSingle(wlistStreamSplit[wlistStreamIdx++]);
+                            int trmInt = int.Parse(dummy, NumberStyles.Integer, CultureInfo.InvariantCulture);
 
-                        if (prb < .001)
-                            continue;
+                            float prb;
 
-                        Term trm = Term.fromInt(trmInt);
-                        Debug.Assert(trm != null);
-                        if (trm.terminal_p() == COLON)
-                            Term.Colons.push_back(w);
-                        else if (trm.terminal_p() == FINAL)
-                            Term.Finals.push_back(w);
+                            //wlistStream >> prb;
+                            if (!tokenEnumerator.TryRead(out string prbToken))
+                                throw new InvalidDataException("Unexpected end of pSgT.txt while reading probability.");
+                            prb = float.Parse(prbToken, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture);
+
+                            if (prb < 0.001f)
+                                continue;
+
+                            Term trm = Term.fromInt(trmInt);
+                            Debug.Assert(trm != null);
+                            if (trm.terminal_p() == COLON)
+                                Term.Colons.push_back(w);
+                            else if (trm.terminal_p() == FINAL)
+                                Term.Finals.push_back(w);
+                        }
+
+                        //int cnt;
+
+                        //wlistStream >> cnt;
+                        if (!tokenEnumerator.TryRead(out string cntToken))
+                            throw new InvalidDataException("Unexpected end of pSgT.txt while reading count.");
                     }
 
-                    int cnt;
+                    // convert to ECString
+                    ECString wECStr = w;
 
-                    //wlistStream >> cnt;
-                    cnt = Convert.ToInt32(wlistStreamSplit[wlistStreamIdx++]);
+                    /* TODO confirm that invWordMap is okay for holes */
+                    invWordMap[wnum] = wECStr;
+
+                    //wap.first = wnum;
+                    //wordMap[w] = wap;
+                    WordAndPresence wap = new WordAndPresence(wnum, isRealWord);  //wap.first = wnum;
+                    wordMap[wECStr] = wap;
+
+                    wnum++;
                 }
-
-                /* TODO confirm that invWordMap is okay for holes */
-                invWordMap[wnum] = w;
-                wap = new WordAndPresence(wnum, wap.second);  //wap.first = wnum;
-                wordMap[w] = wap;
-                wnum++;
             }
         }
 

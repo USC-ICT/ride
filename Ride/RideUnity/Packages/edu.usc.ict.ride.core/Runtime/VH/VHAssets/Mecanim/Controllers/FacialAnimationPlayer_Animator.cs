@@ -6,9 +6,10 @@ namespace VHAssets
 {
 public class FacialAnimationPlayer_Animator : FacialAnimationPlayer
 {
-    #region Variables
-    [SerializeField] Animator m_Animator;
-    HashSet<string> m_AnimatorParams = new HashSet<string>();
+    #region Fields
+    [SerializeField] private Animator m_Animator;
+
+    private HashSet<string> m_animatorParams = new();
     #endregion
 
     #region Functions
@@ -24,13 +25,13 @@ public class FacialAnimationPlayer_Animator : FacialAnimationPlayer
         {
             m_Animator = GetComponentInChildren<Animator>();
             if (m_Animator == null)
-                Debug.LogError("Gameobject " + name + " doesn't have an animator. Facial animations won't work");
+                Debug.LogError($"Gameobject {name} doesn't have an animator. Facial animations won't work");
         }
 
         if (m_Animator != null)
         {
-            foreach (AnimatorControllerParameter p in m_Animator.parameters)
-                m_AnimatorParams.Add(p.name);
+            foreach (var p in m_Animator.parameters)
+                m_animatorParams.Add(p.name);
         }
     }
 
@@ -39,30 +40,26 @@ public class FacialAnimationPlayer_Animator : FacialAnimationPlayer
         if (viseme.Contains("Pitch") || viseme.Contains("Yaw") || viseme.Contains("Roll"))
             return;
 
-        if (m_AnimatorParams.Contains(viseme) == false) { return; }
+        if (!m_animatorParams.Contains(viseme))
+            return;
 
-        if (viseme == "face_neutral")
-        {
-            foreach (var map in MecanimManager.VisemeMap)
-                foreach (var anim in map.Value)
-                    m_Animator.SetFloat(anim, 0);
-        }
-        else
-            m_Animator.SetFloat(viseme, weight * m_FacialVisemeMultiplier * GetVisemeModifierWeightMultiplier(viseme));
+        m_Animator.SetFloat(viseme, weight * m_FacialVisemeMultiplier * GetVisemeModifierWeightMultiplier(viseme));
     }
 
     protected override float GetViseme(string viseme)
     {
         float articulation = 0;
-        if (m_AnimatorParams.Contains(viseme))
+        if (m_animatorParams.Contains(viseme))
+        {
             articulation = m_Animator.GetFloat(viseme);
+        }
         else
         {
-            string[] effectedVisemes = MecanimManager.GetEffectedFaceParameterNames(viseme);
-            if (effectedVisemes != null && effectedVisemes.Length >= 1)
-                articulation =  m_Animator.GetFloat(effectedVisemes[0]);
+            var parameters = MecanimManager.GetAnimatorParametersForViseme(viseme);
+            if (parameters != null && parameters.Length > 0)
+                articulation = m_Animator.GetFloat(parameters[0]);
             else
-                Debug.LogError("Failed to find parameter " + viseme);
+                Debug.LogError($"Failed to find parameter {viseme}");
         }
 
         return articulation;

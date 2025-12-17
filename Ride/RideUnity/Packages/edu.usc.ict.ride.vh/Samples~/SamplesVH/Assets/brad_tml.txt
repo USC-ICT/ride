@@ -1,0 +1,1 @@
+The Virtual Human Toolkit is a collection of modules and tools designed to aid in the creation of virtual humans.

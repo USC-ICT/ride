@@ -1,15 +1,18 @@
-using Microsoft.CognitiveServices.Speech;
-using Microsoft.CognitiveServices.Speech.Audio;
-using NativeWebSocket;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Text;
 using System.Threading.Tasks;
 using UnityEngine;
-using static Ride.SpeechRecognition.SpeechRecognitionSystemAzure;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using Ride.Vendor.NativeWebSocket.NativeWebSocket;
+#if UNITY_ANDROID
+using UnityEngine.Android;
+#endif
+#if UNITY_IOS
+using UnityEngine.iOS;
+#endif
 
 namespace Ride.SpeechRecognition
 {
@@ -40,12 +43,16 @@ namespace Ride.SpeechRecognition
 #endif
 
         [Header("API Settings")]
+#pragma warning disable 0414  // (WebGL) The field '' is assigned but its value is never used
         [SerializeField] private string model = "gpt-4o-realtime-preview-2025-06-03";
+#pragma warning restore 0414
 
         [Header("Audio Settings")]
         [SerializeField] private int sampleRate = 24000; // Realtime API uses 24kHz
+#pragma warning disable 0414  // (WebGL) The field '' is assigned but its value is never used
         [SerializeField] private int chunkSize = 4800; // 200ms at 24kHz
         [SerializeField] private string microphoneDevice = null;
+#pragma warning restore 0414
 
         [Header("Response Settings")]
         [SerializeField] private bool transcriptOnly = false; // Toggle: true = text only, false = text + audio
@@ -115,6 +122,7 @@ namespace Ride.SpeechRecognition
 
             CheckMicrophonePermissions();
 
+#if !UNITY_WEBGL
             if (Microphone.devices.Length == 0)
             {
                 Debug.LogError("No microphone detected.");
@@ -122,6 +130,7 @@ namespace Ride.SpeechRecognition
             }
 
             Debug.Log($"Available microphones: {string.Join(", ", Microphone.devices)}");
+#endif
 
             InitializeAgentResponseAudio();  // Not needed for ASR, but included as integrated real-time ASR + NLP + TTS example
             StartCoroutine(StartSystem());
@@ -150,22 +159,6 @@ namespace Ride.SpeechRecognition
             websocket?.DispatchMessageQueue();
 #endif
             base.Update();
-        }
-
-        /// <summary>
-        /// Event handler for receiving partial recognition results.
-        /// </summary>
-        protected void OnSpeechPartialRecognizedEvent(object sender, SpeechRecognitionEventArgs e)
-        {
-            m_recognizedSpeechPartial = e.Result.Text;
-        }
-
-        /// <summary>
-        /// Event handler for receiving final recognition results.
-        /// </summary>
-        protected void OnSpeechRecognizedEvent(object sender, SpeechRecognitionEventArgs e)
-        {
-            m_recognizedSpeech = e.Result.Text;
         }
 
         /// <summary>
@@ -206,6 +199,7 @@ namespace Ride.SpeechRecognition
                     continue;
                 }
 
+#if !UNITY_WEBGL
                 int currentPosition = Microphone.GetPosition(microphoneDevice);
                 if (currentPosition >= 0)
                 {
@@ -219,6 +213,8 @@ namespace Ride.SpeechRecognition
                         lastSamplePosition = currentPosition;
                     }
                 }
+#endif
+
                 yield return null;
             }
 
@@ -657,7 +653,10 @@ namespace Ride.SpeechRecognition
                 return;
             }
 
+#if !UNITY_WEBGL
             recordingClip = Microphone.Start(microphoneDevice, true, 10, sampleRate);
+#endif
+
             IsRecognizing = true;
             lastSamplePosition = 0;
 
@@ -668,7 +667,10 @@ namespace Ride.SpeechRecognition
         {
             if (!IsRecognizing) return;
 
+#if !UNITY_WEBGL
             Microphone.End(microphoneDevice);
+#endif
+
             IsRecognizing = false;
 
             // Commit the audio buffer

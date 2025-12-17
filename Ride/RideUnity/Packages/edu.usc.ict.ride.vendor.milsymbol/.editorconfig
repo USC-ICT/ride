@@ -1,0 +1,11 @@
+root = false
+
+[*.cs]
+dotnet_diagnostic.IDE0031.severity = none  # Null check can be simplified
+dotnet_diagnostic.IDE0034.severity = none  # 'default' expression can be simplified
+dotnet_diagnostic.IDE0044.severity = none  # Make field readonly
+dotnet_diagnostic.IDE0057.severity = none  # "" can be simplified
+dotnet_diagnostic.IDE0063.severity = none  # 'using' statement can be simplified
+dotnet_diagnostic.IDE0090.severity = none  # 'new' expression can be simplified
+dotnet_diagnostic.IDE1006.severity = none  # Naming rule violation: These words must begin with upper case characters: 
+dotnet_diagnostic.UNT0001.severity = none  # The Unity message '' is empty.

@@ -125,14 +125,14 @@ namespace VHAssets
 public class BlinkController : MonoBehaviour
 {
     #region Constants
-    private enum BlinkMode
+    protected enum BlinkMode
     {
         Animation,
         BlendTree,
         BlendShape
     }
 
-    private enum BlinkState
+    protected enum BlinkState
     {
         Idle,
         BlinkClosing,
@@ -146,12 +146,12 @@ public class BlinkController : MonoBehaviour
     [Tooltip("The time in seconds it takes for the eyelid to close or open, therefore the full length of the blink will be twice this number.")]
     [SerializeField] float m_BlinkLength = 0.2f;
     [SerializeField] bool m_IsBlinkingOn = true;
-    [SerializeField] BlinkMode m_BlinkMode = BlinkMode.BlendTree;
-    [SerializeField] string m_BlinkAnimName = "";
+    [SerializeField] protected BlinkMode m_BlinkMode = BlinkMode.BlendTree;
+    [SerializeField] protected string m_BlinkAnimName = "";
     [SerializeField] float m_BlinkBlendMax = 1.0f;
-    [SerializeField] string[] m_EyeLidControllerParams = new string[] { "045_blink_lf", "045_blink_rt" };
-    [SerializeField] string[] m_EyeLidBlendShapes = new string[] { "045_blink_lf", "045_blink_rt" };
-    [SerializeField] string m_BlendShapeSkinnedMeshName = "";
+    [SerializeField] protected string[] m_EyeLidControllerParams = new string[] { "045_blink_lf", "045_blink_rt" };
+    [SerializeField] protected string[] m_EyeLidBlendShapes = new string[] { "045_blink_lf", "045_blink_rt" };
+    [SerializeField] protected string m_BlendShapeSkinnedMeshName = "";
     public SkinnedMeshRenderer skinnedMeshRenderer;
 
     Animator m_Animator;
@@ -188,6 +188,28 @@ public class BlinkController : MonoBehaviour
                 ResetBlinkImmediate();  // Stop blinking and open eyes fully so we never get "stuck".
             else
                 ScheduleNextBlink();  // Restart blink schedule when turned back on.
+        }
+    }
+
+    public float BlinkValue
+    {
+        get
+        {
+            // Animation mode does not drive params directly, and we do not try to infer
+            // blink value from the clip. Just return 0 for now.
+            if (m_BlinkMode == BlinkMode.Animation)
+                return 0f;
+
+            // When idle, the blink has finished and m_blinkProgress should be zero.
+            if (m_state == BlinkState.Idle)
+                return 0f;
+
+            //Debug.Log($"BlinkValue: {m_blinkProgress}. State: {m_state}. Mode: {m_BlinkMode}");
+
+            // Match the same shaping used in ApplyBlinkWeights, but normalized to [0..1].
+            float t = Mathf.Clamp01(m_blinkProgress);
+            float v = Mathf.SmoothStep(0.0f, 1.0f, t);
+            return v;
         }
     }
 
@@ -306,7 +328,7 @@ public class BlinkController : MonoBehaviour
     /// t is the blink factor [0..1]. We simply drive eyelids between 0 and m_BlinkBlendMax.
     /// This overrides any previous controller state.
     /// </summary>
-    private void ApplyBlinkWeights(float t)
+    protected virtual void ApplyBlinkWeights(float t)
     {
         if (m_BlinkMode == BlinkMode.Animation)
             return; // Nothing to do; animation mode uses clips only.

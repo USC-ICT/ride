@@ -113,21 +113,22 @@ namespace BllipParser.DotNet.Vanilla
                 ECString ftstr = new ECString(path);
                 ftstr += tmp;
                 ftstr += ".g";
-                //string fts = File.ReadAllText(ftstr);  //ifstream fts(ftstr.c_str());
-                string fts = "";
+                //ifstream fts(ftstr.c_str());
                 using (var streamReader = new StreamReader(streams[ftstr]))
-                    fts = streamReader.ReadToEnd();
+                {
+                    var tokenEnumerator = new TextReaderTokenStream(streamReader);
 
-                string [] ftsSplit = fts.Split((char [])null, StringSplitOptions.RemoveEmptyEntries);
-                if (fts == null)
-                    Console.WriteLine("could not find " + ftstr);
+                    //if(!fts) cerr << "could not find " << ftstr << endl;
+                    //assert(fts);
 
-                //assert(fts);
+                    var ft = new FeatureTree(tokenEnumerator); // puts it in root
+                }
 
-                FeatureTree ft = new FeatureTree(ftsSplit); //puts it in root;
                 //(void)ft; // stop compiler warning of unused var; want side-effect of ctor
+
                 if (tmp == "ww")
                     continue;
+
                 Feature.readLam(which, tmp, path, streams);
             }
 

@@ -1,8 +1,10 @@
-using UnityEngine;
+using System.Collections;
 using System.Collections.Generic;
-//using System.Diagnostics;
 using System.Xml.Linq;
+using UnityEngine;
 
+namespace Ride
+{
 public static class XmlSpeechBuilder
 {
     /// <summary>
@@ -43,4 +45,5 @@ public static class XmlSpeechBuilder
 
         return speechElement;
     }
+}
 }

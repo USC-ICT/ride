@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using UnityEngine;
 
+namespace Ride
+{
 /// <summary>
 /// A ScriptableObject that stores the configuration for asset groups and their global labels.
 /// Used as the main editable asset in the Asset Catalog Editor.
@@ -17,4 +19,5 @@ public class AssetCatalogProfile : ScriptableObject
     /// List of all asset groups configured in the catalog.
     /// </summary>
     public List<AssetCatalogGroup> groups = new();
+}
 }

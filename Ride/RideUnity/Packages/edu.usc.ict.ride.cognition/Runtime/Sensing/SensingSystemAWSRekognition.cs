@@ -47,60 +47,54 @@ namespace Ride.Sensing
 
 #if !UNITY_WEBGL
         protected AmazonRekognitionClient m_rekognitionClient;
-        public bool ConnectionActive => m_rekognitionClient != null;
 #endif
 
-        Dictionary<string, RequestState> m_requestLookup = new Dictionary<string, RequestState>();
+        Dictionary<string, RequestState> m_requestLookup = new();
 
         //Fixed Params for the 3 types of sensing
-        readonly string[] m_headRequestParameters = new string[] { "DEFAULT", "FACE_OCCLUDED" };
-        readonly string[] m_emotionRequestParameters = new string[] { "DEFAULT", "EMOTIONS" };
-        readonly string[] m_characteristicsRequestParameters = new string[] { "DEFAULT", "SMILE", "EYEGLASSES", "BEARD", "MUSTACHE", "GENDER", "AGE_RANGE", "SUNGLASSES" };
+        private readonly string[] m_headRequestParameters = new [] { "DEFAULT", "FACE_OCCLUDED" };
+        private readonly string[] m_emotionRequestParameters = new [] { "DEFAULT", "EMOTIONS" };
+        private readonly string[] m_characteristicsRequestParameters = new [] { "DEFAULT", "SMILE", "EYEGLASSES", "BEARD", "MUSTACHE", "GENDER", "AGE_RANGE", "SUNGLASSES" };
 
-        /// <inheritdoc/>
-        public override void SystemInit()
-        {
-            base.SystemInit();
 
 #if !UNITY_WEBGL
-            var configSystem = Globals.api.GetSystem<ConfigurationSystemUnity>();
-            string accessKey = configSystem.config.awsRekognition.accessKey;
-            string secretKey = configSystem.config.awsRekognition.secretKey;
-            m_rekognitionClient = new AmazonRekognitionClient(accessKey, secretKey, Amazon.RegionEndpoint.USWest2);
-#endif
+        public override void SystemShutdown()
+        {
+            base.SystemShutdown();
+
+            m_rekognitionClient?.Dispose();
+            m_rekognitionClient = null;
         }
+#endif
 
         /// <inheritdoc/>
         public override async void Request(string uri, object input, Action<SensingResponse> onComplete)
         {
 #if !UNITY_WEBGL
             //Check if we are already processing a request of this type
-            if (m_requestLookup[uri].processing) return;
+            if (m_requestLookup[uri].processing)
+                return;
 
             m_requestLookup[uri].processing = true;
 
-            DetectFacesRequest request = (DetectFacesRequest)input;
+            EnsureRekognitionClient();
 
-            DetectFacesResponse response = await m_rekognitionClient.DetectFacesAsync(request);
+            var request = (DetectFacesRequest)input;
+            var response = await m_rekognitionClient.DetectFacesAsync(request);
 
             FaceDetail face = null;
-
             if (response.FaceDetails != null && response.FaceDetails.Count > 0)
                 face = response.FaceDetails[0];
 
-            //Add the callbacks from all the outdated requests to this one, so any pending listeners recieve the latest repsonse.
+            // Add the callbacks from all the outdated requests to this one, so any pending listeners recieve the latest repsonse.
             foreach (var req in m_requestLookup[uri].outdatedRequests)
-            {
                 onComplete += req.onCompleteDelegate;
-            }
 
             m_requestLookup[uri].onResponseDelegate?.Invoke(onComplete, face);
-
             m_requestLookup[uri].outdatedRequests.Clear();
-
             m_requestLookup[uri].processing = false;
 
-            //If we have another request in the queue, send it
+            // If we have another request in the queue, send it
             if (m_requestLookup[uri].nextRequest != null)
             {
                 Request(m_requestLookup[uri].nextRequest.requestType, m_requestLookup[uri].nextRequest.requestData, m_requestLookup[uri].nextRequest.onCompleteDelegate);
@@ -153,13 +147,25 @@ namespace Ride.Sensing
 #endif
         }
 
+#if !UNITY_WEBGL
+        private void EnsureRekognitionClient()
+        {
+            if (m_rekognitionClient != null)
+                return;
+
+            var configSystem = Systems.Get<ConfigurationSystemUnity>();
+            string accessKey = configSystem.config.awsRekognition.accessKey;
+            string secretKey = configSystem.config.awsRekognition.secretKey;
+
+            m_rekognitionClient = new AmazonRekognitionClient(accessKey, secretKey, Amazon.RegionEndpoint.USWest2);
+        }
+
         /// <summary>
         /// Adds a generic AWS service request to the queue with a callback
         /// </summary>
         /// <param name="request">The request to process.</param>
         /// <param name="onResponseDelegate"> Callback that receives the <see cref="FaceDetail"/> result and invokes the appropriate<see cref="SensingResponse"/> via user-defined delegate. </param>
-#if !UNITY_WEBGL
-        void AddRequestToQueue(AWSRekognitionServiceRequest request, System.Action<Action<SensingResponse>, FaceDetail> onResponseDelegate)
+        void AddRequestToQueue(AWSRekognitionServiceRequest request, Action<Action<SensingResponse>, FaceDetail> onResponseDelegate)
         {
             // Check if a request of this type is already in the queue or being processed
             if (!m_requestLookup.TryGetValue(request.requestType, out RequestState requestState))
@@ -184,9 +190,7 @@ namespace Ride.Sensing
 
             // Otherwise, if a qued request exisits, mark it outdated
             if (requestState.nextRequest != null)
-            {
                 requestState.outdatedRequests.Add(requestState.nextRequest);
-            }
 
             // Mark this request as the next one in the queue
             requestState.nextRequest = request;
@@ -206,10 +210,11 @@ namespace Ride.Sensing
                 {
                     Bytes = new MemoryStream(image)
                 },
+
                 // Attributes can be "ALL" or "DEFAULT". 
                 // "DEFAULT": BoundingBox, Confidence, Landmarks, Pose, and Quality.
                 // "ALL": See https://docs.aws.amazon.com/sdkfornet/v3/apidocs/items/Rekognition/TFaceDetail.html
-                Attributes = new List<String>(attributes)
+                Attributes = new List<string>(attributes)
             };
         }
 
@@ -220,11 +225,12 @@ namespace Ride.Sensing
         /// <param name="face">Face detail returned from Rekognition.</param>
         void SendHeadResponse(Action<SensingResponse> onCompleteDelegate, FaceDetail face)
         {
-            if(face == null)
+            if (face == null)
             {
                 onCompleteDelegate?.Invoke(m_sensingHeadResponse);
                 return;
             }
+
             m_sensingHeadResponse.normalizedVectors = true;
             m_sensingHeadResponse.pitch = face.Pose.Pitch;
             m_sensingHeadResponse.roll = face.Pose.Roll;
@@ -233,14 +239,7 @@ namespace Ride.Sensing
             m_sensingHeadResponse.eyeOccluded = face.FaceOccluded.Value;
             m_sensingHeadResponse.mouthOccluded = face.FaceOccluded.Value;
             m_sensingHeadResponse.landmarks = ParseLandMarksResponse(face.Landmarks);
-            m_sensingHeadResponse.faceRectangle = new FaceRectangle()
-            {
-                width = face.BoundingBox.Width,
-                height = face.BoundingBox.Height,
-                left = face.BoundingBox.Left,
-                top = face.BoundingBox.Top
-            };
-
+            m_sensingHeadResponse.faceRectangle = new FaceRectangle(face.BoundingBox.Top, face.BoundingBox.Left, face.BoundingBox.Width, face.BoundingBox.Height);
             onCompleteDelegate?.Invoke(m_sensingHeadResponse);
         }
 
@@ -251,7 +250,7 @@ namespace Ride.Sensing
         /// <param name="face">The <see cref="FaceDetail"/> object returned by AWS Rekognition.</param>
         void SendEmotionResponse(Action<SensingResponse> onCompleteDelegate, FaceDetail face)
         {
-            if(face == null)
+            if (face == null)
             {
                 onCompleteDelegate?.Invoke(m_sensingEmotionResponse);
                 return;
@@ -266,16 +265,17 @@ namespace Ride.Sensing
             m_sensingEmotionResponse.sadness = 0;
             m_sensingEmotionResponse.surprise = 0;
 
-            //Set emotion float value ONLY if we detect that emotion in the response
-            foreach (Emotion emotion in face.Emotions)
+            // Set emotion float value ONLY if we detect that emotion in the response
+            foreach (var emotion in face.Emotions)
             {
-                m_sensingEmotionResponse.anger = emotion.Type == EmotionName.ANGRY ? emotion.Confidence : m_sensingEmotionResponse.anger;
-                m_sensingEmotionResponse.disgust = emotion.Type == EmotionName.DISGUSTED ? emotion.Confidence : m_sensingEmotionResponse.disgust;
-                m_sensingEmotionResponse.fear = emotion.Type == EmotionName.FEAR ? emotion.Confidence : m_sensingEmotionResponse.fear;
-                m_sensingEmotionResponse.happiness = emotion.Type == EmotionName.HAPPY ? emotion.Confidence : m_sensingEmotionResponse.happiness;
-                m_sensingEmotionResponse.neutral = emotion.Type == EmotionName.CALM ? emotion.Confidence : m_sensingEmotionResponse.neutral;
-                m_sensingEmotionResponse.sadness = emotion.Type == EmotionName.SAD ? emotion.Confidence : m_sensingEmotionResponse.sadness;
-                m_sensingEmotionResponse.surprise = emotion.Type == EmotionName.SURPRISED ? emotion.Confidence : m_sensingEmotionResponse.surprise;
+                if (emotion.Type == EmotionName.ANGRY) m_sensingEmotionResponse.anger = emotion.Confidence;
+                else if (emotion.Type == EmotionName.DISGUSTED) m_sensingEmotionResponse.disgust = emotion.Confidence;
+                else if (emotion.Type == EmotionName.FEAR) m_sensingEmotionResponse.fear = emotion.Confidence;
+                else if (emotion.Type == EmotionName.HAPPY) m_sensingEmotionResponse.happiness = emotion.Confidence;
+                else if (emotion.Type == EmotionName.CALM) m_sensingEmotionResponse.neutral = emotion.Confidence;
+                else if (emotion.Type == EmotionName.SAD) m_sensingEmotionResponse.sadness = emotion.Confidence;
+                else if (emotion.Type == EmotionName.SURPRISED) m_sensingEmotionResponse.surprise = emotion.Confidence;
+                // Note: Rekognition has CONFUSED/UNKNOWN; currently ignoring them.
             }
 
             onCompleteDelegate?.Invoke(m_sensingEmotionResponse);
@@ -288,19 +288,17 @@ namespace Ride.Sensing
         /// <param name="face">The <see cref="FaceDetail"/> data to extract attributes from.</param>
         void SendCharacteristicsResponse(Action<SensingResponse> onCompleteDelegate, FaceDetail face)
         {
-
-            if(face == null)
+            if (face == null)
             {
                 onCompleteDelegate?.Invoke(m_sensingCharacteristicsResponse);
                 return;
             }
 
             m_sensingCharacteristicsResponse.gender = face.Gender.Value.Value;
-            m_sensingCharacteristicsResponse.age = (face.AgeRange.High + face.AgeRange.Low) / 2;
+            m_sensingCharacteristicsResponse.age = (int)((face.AgeRange.High + face.AgeRange.Low) / 2.0f);
             m_sensingCharacteristicsResponse.glasses = ParseGlassesReponse(face.Eyeglasses, face.Sunglasses);
             m_sensingCharacteristicsResponse.moustache = face.Mustache.Confidence;
             m_sensingCharacteristicsResponse.beard = face.Beard.Confidence;
-
 
             onCompleteDelegate?.Invoke(m_sensingCharacteristicsResponse);
         }
@@ -313,21 +311,22 @@ namespace Ride.Sensing
         /// <returns>A user-friendly string representing the detected glasses type.</returns>
         string ParseGlassesReponse(Eyeglasses eyeglasses, Sunglasses sunglasses)
         {
-            string response = "None";
+            bool hasEyeglasses = eyeglasses?.Value == true;
+            bool hasSunglasses = sunglasses?.Value == true;
 
-            if (eyeglasses.Value && !sunglasses.Value) response = "Eyeglasses";
+            if (!hasEyeglasses && !hasSunglasses)
+                return "None";
 
-            else if (!eyeglasses.Value && sunglasses.Value) response = "Sunglasses";
+            if (hasEyeglasses && !hasSunglasses)
+                return "Eyeglasses";
 
-            else if (eyeglasses.Value && sunglasses.Value)
-            {
-                if (eyeglasses.Confidence > sunglasses.Confidence)
-                    response = "Eyeglasses";
-                else
-                    response = "Sunglasses";
-            }
+            if (!hasEyeglasses && hasSunglasses)
+                return "Sunglasses";
 
-            return response;
+            // Both flags true: prefer the higher-confidence match.
+            return eyeglasses.Confidence >= sunglasses.Confidence
+                ? "Eyeglasses"
+                : "Sunglasses";
         }
 
         /// <summary>
@@ -337,13 +336,12 @@ namespace Ride.Sensing
         /// <returns>An array of <see cref="RideVector2"/> with normalized face geometry positions.</returns>
         RideVector2[] ParseLandMarksResponse(List<Landmark> landmarks)
         {
-            RideVector2[] rideLandmarks = new RideVector2[landmarks.Count];
+            if (landmarks == null || landmarks.Count == 0)
+                return Array.Empty<RideVector2>();
 
+            var rideLandmarks = new RideVector2[landmarks.Count];
             for (int i = 0; i < rideLandmarks.Length; i++)
-            {
-                rideLandmarks[i].x = landmarks[i].X;
-                rideLandmarks[i].y = landmarks[i].Y;
-            }
+                rideLandmarks[i] = new RideVector2(landmarks[i].X, landmarks[i].Y);
 
             return rideLandmarks;
         }

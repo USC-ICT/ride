@@ -1,5 +1,8 @@
+using System.Collections;
 using System.Collections.Generic;
 
+namespace Ride
+{
 /// <summary>
 /// This class defines valid behaviors and the mapping from gesture types to the corresponding animations
 /// </summary>
@@ -37,4 +40,5 @@ public static class ValidBehaviorTypes
     {
         "au1", "au2", "au5", "au6", "au7"
     };
+}
 }

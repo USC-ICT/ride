@@ -9,6 +9,8 @@ namespace Ride.Samples
     public class SamplesVH : RideMonoBehaviour
     {
         [SerializeField] SamplesVHNonverbalBehaviorGeneratorSystem m_nvbg;
+        [SerializeField] SamplesVHHead m_head;
+        [SerializeField] SamplesVHFace m_face;
         [SerializeField] SamplesVHSIMA m_sima;
         [SerializeField] SamplesBMLParser m_bml;
         private DebugMenu m_debugMenu;
@@ -24,14 +26,15 @@ namespace Ride.Samples
 
             base.Start();
 
-            m_debugMenu = Globals.api.GetSystem<DebugMenu>();
-            m_assetBundleSystem = Globals.api.GetSystem<AssetLoadingSystemAssetBundles>();
+            m_debugMenu = Systems.Get<DebugMenu>();
+            m_assetBundleSystem = Systems.Get<AssetLoadingSystemAssetBundles>();
 
             m_debugMenu.InsertMenu(0, "SamplesVH", OnGUISamplesVH);
             m_debugMenu.InsertMenu(1, "Nonverbal Behavior Generation", m_nvbg.OnGUINonverbalBehaviorGeneration);
-            m_debugMenu.InsertMenu(2, "Nonverbal Behavior Generation", m_nvbg.OnGUIHeadControl);
-            m_debugMenu.InsertMenu(3, "SIMA", m_sima.OnGUINonverbalBehaviorGeneration);
-            m_debugMenu.InsertMenu(4, "BML", m_bml.OnGUIBMLParser);
+            m_debugMenu.InsertMenu(2, "Head Control", m_head.OnGUIHeadControl);
+            m_debugMenu.InsertMenu(3, "Face", m_face.OnGUIFace);
+            m_debugMenu.InsertMenu(4, "SIMA", m_sima.OnGUINonverbalBehaviorGeneration);
+            m_debugMenu.InsertMenu(5, "BML", m_bml.OnGUIBMLParser);
 
             m_debugMenu.SetMenu(0);
             m_debugMenu.ShowMenu(true);
@@ -47,15 +50,11 @@ namespace Ride.Samples
         /// </summary>
         protected override void Update()
         {
-            if (Globals.api.inputSystem.GetKeyDown(RideKeyCode.Escape))
-            {
+            if (Systems.Input.GetKeyDown(RideKeyCode.Escape))
                 RideUtils.QuitApplication();
-            }
 
-            if (Globals.api.inputSystem.GetKeyDown(RideKeyCode.F11))
-            {
+            if (Systems.Input.GetKeyDown(RideKeyCode.F11))
                 m_debugMenu.ToggleMenu();
-            }
         }
 
 

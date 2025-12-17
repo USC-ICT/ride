@@ -3,6 +3,8 @@ using System.Text;
 using System.Xml;
 using System.Xml.Linq;
 
+namespace Ride
+{
 /// <summary>
 /// Provides helper methods for saving and serializing BML XML documents.
 /// Supports saving to disk, retrieving XML as a string (with or without declaration),
@@ -69,4 +71,4 @@ public static class BmlSerializer
         return stringWriter.ToString();
     }
 }
-
+}

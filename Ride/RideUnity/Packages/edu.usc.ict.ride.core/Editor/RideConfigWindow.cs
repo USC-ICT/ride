@@ -115,6 +115,24 @@ namespace Ride
             w.Show();
         }
 
+        [MenuItem("Ride/Cache Clear (This Project)", priority = 140)]
+        public static void ClearAllCaches()
+        {
+            if (!EditorUtility.DisplayDialog(
+                "Clear cached AssetBundles?",
+                "This will delete all AssetBundle cache used by this project (" + Application.productName + ") on this machine.\n\n" +
+                "Other Unity projects’ caches will NOT be affected.",
+                "Clear Cache",
+                "Cancel"))
+                return;
+
+            bool success = Caching.ClearCache();
+
+            Debug.Log(success
+                ? "[Ride] Caching.ClearCache() completed successfully."
+                : "[Ride][Warning] Caching.ClearCache() returned false.");
+        }
+
         private void OnEnable()
         {
             TryLoadDefault();

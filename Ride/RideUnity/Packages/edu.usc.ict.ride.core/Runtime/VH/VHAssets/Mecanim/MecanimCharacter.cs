@@ -353,7 +353,10 @@ public class MecanimCharacter : ICharacter
 
     public override void PlayViseme(string viseme, float weight)
     {
-        animator.SetFloat(viseme, weight);
+        if (m_FacialAnimator != null)
+            m_FacialAnimator.RampViseme(viseme, weight, 0f, 0f, 0f);  // Permanent set (until changed)
+        else
+            animator.SetFloat(viseme, weight);
     }
 
     public override void PlayViseme(string viseme, float weight, float totalTime, float blendTime)

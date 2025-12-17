@@ -144,22 +144,5 @@ namespace Ride
         /// </summary>
         /// <returns>The number of entries.</returns>
         int GetEntryCount();
-
-        /// <summary>
-        /// Checks whether a specific asset is already loaded in memory.
-        /// </summary>
-        /// <param name="assetName">The name of the asset to check.</param>
-        /// <returns>True if the asset is cached; otherwise, false.</returns>
-        bool IsCached(string assetName);
-
-        /// <summary>
-        /// Unloads all loaded asset bundles but keeps catalog data intact.
-        /// </summary>
-        void UnloadAll();
-
-        /// <summary>
-        /// Clears the internal cache of loaded asset bundles.
-        /// </summary>
-        void ClearCache();
     }
 }

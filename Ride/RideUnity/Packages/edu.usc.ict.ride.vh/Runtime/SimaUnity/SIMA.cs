@@ -1,8 +1,9 @@
 using System;
 using UnityEngine;
-using YourProject.Json;
 using Ride.NLP;
 
+namespace Ride
+{
 /// <summary>
 /// 1. Sends an utterance to the OpenAI model (via <see cref="ModelBuilder"/>),
 /// 2. Receives behavior JSON, parses it into <see cref="Behavior"/> objects, and generates BML XML.
@@ -97,6 +98,5 @@ public class SIMA : MonoBehaviour
             Debug.LogError("❌ BehaviorManager: Error parsing or generating BML: " + ex.Message);
         }
     }
-
-
+}
 }

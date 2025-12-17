@@ -3,11 +3,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.IO;
 using System.Text;
-using System.Threading.Tasks;
 using UnityEngine;
 using Newtonsoft.Json;
 
-namespace YourProject.Json 
+namespace Ride
 {
     [Serializable]
     public class JsonOutput

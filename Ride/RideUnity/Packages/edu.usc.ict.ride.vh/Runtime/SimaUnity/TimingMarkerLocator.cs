@@ -1,7 +1,8 @@
 using System;
 using System.Linq;
 
-
+namespace Ride
+{
 /// <summary>
 /// Locates the timing marker index (T#) for a target token/phrase inside an utterance,
 /// given the broader phrase in which the target appears.
@@ -55,4 +56,5 @@ public static class TimingMarkerLocator
         Console.Error.WriteLine($"[TimingMarkerLocator] Target '{target}' not found in phrase.");
         return null;
     }
+}
 }

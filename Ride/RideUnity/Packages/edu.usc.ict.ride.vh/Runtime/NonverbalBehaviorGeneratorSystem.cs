@@ -15,9 +15,17 @@ namespace Ride
     /// System responsible for generating nonverbal behavior using the NVBG engine within a Unity environment.
     /// Loads required XSL/XML/text resources from TextAssets and manages character generation and behavior requests.
     /// </summary>
-    public sealed class NonverbalBehaviorGeneratorSystem : RideSystemMonoBehaviour, INonverbalGeneratorSystem
+    public class NonverbalBehaviorGeneratorSystem : RideSystemMonoBehaviour, INonverbalGeneratorSystem
     {
         private const string StoryPointId = "toolkitsession";
+
+        private class NvbgInitData
+        {
+            public string TransformXsl;
+            public string RuleXml;
+            public string SaliencyMapXml;
+            public Dictionary<string, Stream> Streams;
+        }
 
         /// <summary>
         /// Struct to represent an input stream for NVBG, containing the filename and the associated TextAsset.
@@ -27,57 +35,63 @@ namespace Ride
             [HideInInspector][SerializeField] public string fileName;
             public TextAsset textAsset;
             public override string ToString() => fileName;
+
+            public StreamInfo(string _filename) { fileName = _filename; textAsset = null; }
         }
 
         public List<StreamInfo> m_streams = new()
         {
-            new StreamInfo() { fileName = "NVBG_behavior_description.xsl", textAsset = null },
-            new StreamInfo() { fileName = "NVBG_rules.xsl", textAsset = null },
-            new StreamInfo() { fileName = "NVBG_transform.xsl", textAsset = null },
-            new StreamInfo() { fileName = "rule_input_ChrKevin.xml", textAsset = null },
-            new StreamInfo() { fileName = "saliency_map_init_kevin.xml", textAsset = null },
+            new("NVBG_behavior_description.xsl"),
+            new("NVBG_rules.xsl"),
+            new("NVBG_transform.xsl"),
+            new("rule_input_ChrKevin.xml"),
+            new("saliency_map_init_kevin.xml"),
             // ParserModelEN folder
-            new StreamInfo() { fileName = "endings.txt", textAsset = null },
-            new StreamInfo() { fileName = "featInfo.h", textAsset = null },
-            new StreamInfo() { fileName = "featInfo.l", textAsset = null },
-            new StreamInfo() { fileName = "featInfo.lm", textAsset = null },
-            new StreamInfo() { fileName = "featInfo.m", textAsset = null },
-            new StreamInfo() { fileName = "featInfo.r", textAsset = null },
-            new StreamInfo() { fileName = "featInfo.rm", textAsset = null },
-            new StreamInfo() { fileName = "featInfo.ru", textAsset = null },
-            new StreamInfo() { fileName = "featInfo.s", textAsset = null },
-            new StreamInfo() { fileName = "featInfo.t", textAsset = null },
-            new StreamInfo() { fileName = "featInfo.tt", textAsset = null },
-            new StreamInfo() { fileName = "featInfo.u", textAsset = null },
-            new StreamInfo() { fileName = "h.g", textAsset = null },
-            new StreamInfo() { fileName = "h.lambdas", textAsset = null },
-            new StreamInfo() { fileName = "headInfo.txt", textAsset = null },
-            new StreamInfo() { fileName = "l.g", textAsset = null },
-            new StreamInfo() { fileName = "l.lambdas", textAsset = null },
-            new StreamInfo() { fileName = "lm.g", textAsset = null },
-            new StreamInfo() { fileName = "lm.lambdas", textAsset = null },
-            new StreamInfo() { fileName = "m.g", textAsset = null },
-            new StreamInfo() { fileName = "m.lambdas", textAsset = null },
-            new StreamInfo() { fileName = "nttCounts.txt", textAsset = null },
-            new StreamInfo() { fileName = "pSgT.txt", textAsset = null },
-            new StreamInfo() { fileName = "pUgT.txt", textAsset = null },
-            new StreamInfo() { fileName = "r.g", textAsset = null },
-            new StreamInfo() { fileName = "r.lambdas", textAsset = null },
-            new StreamInfo() { fileName = "rm.g", textAsset = null },
-            new StreamInfo() { fileName = "rm.lambdas", textAsset = null },
-            new StreamInfo() { fileName = "ru.g", textAsset = null },
-            new StreamInfo() { fileName = "ru.lambdas", textAsset = null },
-            new StreamInfo() { fileName = "terms.txt", textAsset = null },
-            new StreamInfo() { fileName = "tt.g", textAsset = null },
-            new StreamInfo() { fileName = "tt.lambdas", textAsset = null },
-            new StreamInfo() { fileName = "u.g", textAsset = null },
-            new StreamInfo() { fileName = "u.lambdas", textAsset = null },
-            new StreamInfo() { fileName = "unitRules.txt", textAsset = null },
+            new("endings.txt"),
+            new("featInfo.h"),
+            new("featInfo.l"),
+            new("featInfo.lm"),
+            new("featInfo.m"),
+            new("featInfo.r"),
+            new("featInfo.rm"),
+            new("featInfo.ru"),
+            new("featInfo.s"),
+            new("featInfo.t"),
+            new("featInfo.tt"),
+            new("featInfo.u"),
+            new("h.g"),
+            new("h.lambdas"),
+            new("headInfo.txt"),
+            new("l.g"),
+            new("l.lambdas"),
+            new("lm.g"),
+            new("lm.lambdas"),
+            new("m.g"),
+            new("m.lambdas"),
+            new("nttCounts.txt"),
+            new("pSgT.txt"),
+            new("pUgT.txt"),
+            new("r.g"),
+            new("r.lambdas"),
+            new("rm.g"),
+            new("rm.lambdas"),
+            new("ru.g"),
+            new("ru.lambdas"),
+            new("terms.txt"),
+            new("tt.g"),
+            new("tt.lambdas"),
+            new("u.g"),
+            new("u.lambdas"),
+            new("unitRules.txt"),
         };
 
         public string CharacterId = "Kevin";
         public string IdlePostureId = "ChrGenericMleAdult@IdleStandingUpright01";
         public bool m_launchOnStartup = true;
+
+        private Dictionary<string, Nvbg> m_characters = new Dictionary<string, Nvbg>();
+        private Dictionary<string, Task<Nvbg>> m_characterInitTasks = new Dictionary<string, Task<Nvbg>>();
+
 
         #region IRideSystem
 
@@ -85,10 +99,9 @@ namespace Ride
         public override void SystemInit()
         {
             base.SystemInit();
+
             if (m_launchOnStartup)
-            {
                 StartProcess();
-            }
         }
 
         /// <inheritdoc/>
@@ -110,10 +123,7 @@ namespace Ride
         /// <summary>
         /// Starts the NVBG process using the current CharacterId.
         /// </summary>
-        public void StartProcess()
-        {
-            StartProcess(CharacterId);
-        }
+        public void StartProcess() => StartProcess(CharacterId);
 
         /// <summary>
         /// Starts the NVBG process for a specific character.
@@ -121,7 +131,9 @@ namespace Ride
         /// <param name="characterName">Name of the character to generate in NVBG.</param>
         public void StartProcess(string characterName)
         {
-            if (characters.ContainsKey(characterName)) { return; }
+            if (m_characters.ContainsKey(characterName))
+                return;
+
             CreateCharacter(characterName);
 
             //Timer not needed since Saliency Idle Gaze is not enabled
@@ -133,42 +145,29 @@ namespace Ride
         /// Creates a new character with configured options.
         /// </summary>
         /// <param name="characterName">The name of the character to create.</param>
-        void CreateCharacter(string characterName)
+        private void CreateCharacter(string characterName)
         {
-            //var transformXslFilename = $"{Application.streamingAssetsPath}/nvbg/NVBG_transform.xsl";
-            //var ruleXmlFilename = $"{Application.streamingAssetsPath}/nvbg/rule_input_ChrKevin.xml";
-            //var saliencyMapXmlFilename = $"{Application.streamingAssetsPath}/nvbg/saliency_map_init_kevin.xml";
-            string parserModelDirectory = "unused";  //string parserModelDirectory = $"{Application.streamingAssetsPath}/nvbg/ParserModelEN";
+            if (m_characters.ContainsKey(characterName))
+                return; // already created
 
-            var streams = new Dictionary<string, Stream>();
-            foreach (var stream in m_streams)
-            {
-                if (!string.IsNullOrEmpty(stream.fileName) && stream.textAsset != null)
-                    streams.Add($"{parserModelDirectory}/{stream.fileName}", new MemoryStream(Encoding.UTF8.GetBytes(stream.textAsset.text)));
-            }
+            if (m_characterInitTasks.ContainsKey(characterName))
+                return; // already initializing
 
-            var options = new NvbgOptions(
-                characterId: characterName,//CharacterId,
-                transformXsl: m_streams.Find(s => { return s.fileName == $"NVBG_transform.xsl"; }).textAsset.text,  //transformXsl: File.ReadAllText(transformXslFilename),
-                transformXslResolver: new TransformXslResolver(parserModelDirectory, streams),  //transformXslResolver: new TransformXslResolver(transformXslFilename),
-                ruleXml: m_streams.Find(s => { return s.fileName == $"rule_input_ChrKevin.xml"; }).textAsset.text,  //ruleXml: File.ReadAllText(ruleXmlFilename),
-                facialExpressionXml: null,
-                idlePostureId: IdlePostureId,
-                parserModelDirectory: parserModelDirectory,
-                streams: streams,
-                parseTreeCache: null,
-                saliencyMapXml: m_streams.Find(s => { return s.fileName == $"saliency_map_init_kevin.xml"; }).textAsset.text,  //saliencyMapXml: File.ReadAllText(saliencyMapXmlFilename),
-                storyPointId: StoryPointId,
-                allBehavior: true,
-                saliencyGlance: false,//not implemented at the time of writing
-                saliencyIdleGaze: false,//same as ChrKevin.ini
-                speakerGaze: true,
-                speakerGesture: true,
-                listenerGaze: true,
-                posRules: true
-            );
-            var character = new Nvbg(options, logger: null);
-            characters[characterName/*CharacterId*/] = character;
+            var initData = BuildInitData(); // main thread: safe for TextAsset.text access
+
+#if UNITY_WEBGL
+            // WebGL fallback: no real threading → do it synchronously (same behavior as today)
+            var character = CreateCharacterInternal(characterName, IdlePostureId, initData);
+            m_characters[characterName] = character;
+            ProcessLoaded = true;
+#else
+            // All other platforms: spin up a background task
+            var initTask = Task.Run(() => CreateCharacterInternal(characterName, IdlePostureId, initData));
+            m_characterInitTasks[characterName] = initTask;
+
+            // start a coroutine that observes this task and flips ProcessLoaded when done
+            StartCoroutine(WaitForCharacterInit(characterName, initTask));
+#endif
         }
 
         /// <summary>
@@ -177,24 +176,18 @@ namespace Ride
         public void StopProcess()
         {
             ProcessLoaded = false;
-            foreach (var character in characters.Values)
-            {
+            foreach (var character in m_characters.Values)
                 character.Dispose();
-            }
-            characters.Clear();
+
+            m_characters.Clear();
         }
         #endregion
 
         #region INonverbalGenerator
 
-        private Dictionary<string, Nvbg> characters = new Dictionary<string, Nvbg>();
-
         /// <inheritdoc/>
-        public void GetNonverbalBehavior(string characterName, string text, INonverbalGeneratorSystem.NonverbalBehaviorResult resultCallback)
-        {
-            text = text.Replace("&", " and ");
+        public void GetNonverbalBehavior(string characterName, string text, INonverbalGeneratorSystem.NonverbalBehaviorResult resultCallback) =>
             StartCoroutine(Coroutine(characterName, text, resultCallback));
-        }
 
         //public async Task SetPosture(string characterName, string posture)
 
@@ -224,8 +217,83 @@ namespace Ride
         /// <returns>Current posture ID string.</returns>
         public async Task<string> GetPosture(string characterName)
         {
-            var character = characters[characterName];
+            var character = m_characters[characterName];
             return await character.GetPostureIdAsync();
+        }
+
+        // main-thread helper to build the streams
+        private NvbgInitData BuildInitData()
+        {
+            //var transformXslFilename = $"{Application.streamingAssetsPath}/nvbg/NVBG_transform.xsl";
+            //var ruleXmlFilename = $"{Application.streamingAssetsPath}/nvbg/rule_input_ChrKevin.xml";
+            //var saliencyMapXmlFilename = $"{Application.streamingAssetsPath}/nvbg/saliency_map_init_kevin.xml";
+            string parserModelDirectory = "unused";  //string parserModelDirectory = $"{Application.streamingAssetsPath}/nvbg/ParserModelEN";
+
+            var streams = new Dictionary<string, Stream>();
+            foreach (var stream in m_streams)
+            {
+                if (!string.IsNullOrEmpty(stream.fileName) && stream.textAsset != null)
+                    streams.Add($"{parserModelDirectory}/{stream.fileName}", new MemoryStream(Encoding.UTF8.GetBytes(stream.textAsset.text)));
+            }
+
+            string transformXsl = m_streams.Find(s => s.fileName == "NVBG_transform.xsl").textAsset.text;
+            string ruleXml      = m_streams.Find(s => s.fileName == "rule_input_ChrKevin.xml").textAsset.text;
+            string saliencyXml  = m_streams.Find(s => s.fileName == "saliency_map_init_kevin.xml").textAsset.text;
+
+            return new NvbgInitData
+            {
+                TransformXsl    = transformXsl,
+                RuleXml         = ruleXml,
+                SaliencyMapXml  = saliencyXml,
+                Streams         = streams
+            };
+        }
+
+        // internal helper that constructs Nvbg (safe to run on worker thread)
+        private Nvbg CreateCharacterInternal(string characterName, string idlePostureId, NvbgInitData initData)
+        {
+            string parserModelDirectory = "unused";  //string parserModelDirectory = $"{Application.streamingAssetsPath}/nvbg/ParserModelEN";
+
+            var options = new NvbgOptions(
+                characterId: characterName,
+                transformXsl: initData.TransformXsl,
+                transformXslResolver: new TransformXslResolver(parserModelDirectory, initData.Streams),
+                ruleXml: initData.RuleXml,
+                facialExpressionXml: null,
+                idlePostureId: idlePostureId,
+                parserModelDirectory: parserModelDirectory,
+                streams: initData.Streams,
+                parseTreeCache: null,
+                saliencyMapXml: initData.SaliencyMapXml,
+                storyPointId: StoryPointId,
+                allBehavior: true,
+                saliencyGlance: false,
+                saliencyIdleGaze: false,
+                speakerGaze: true,
+                speakerGesture: true,
+                listenerGaze: true,
+                posRules: true
+            );
+
+            var character = new Nvbg(options, logger: null);
+            return character;
+        }
+
+        private IEnumerator WaitForCharacterInit(string characterName, Task<Nvbg> initTask)
+        {
+            while (!initTask.IsCompleted)
+                yield return null;
+
+            m_characterInitTasks.Remove(characterName);
+
+            if (initTask.IsFaulted)
+            {
+                Debug.LogError($"NVBG initialization failed for {characterName}: {initTask.Exception}");
+                yield break;
+            }
+
+            m_characters[characterName] = initTask.Result;
+            ProcessLoaded = true;
         }
 
         /// <summary>
@@ -233,33 +301,78 @@ namespace Ride
         /// </summary>
         private IEnumerator Coroutine(string characterName, string text, INonverbalGeneratorSystem.NonverbalBehaviorResult resultCallback)
         {
-            Debug.Assert(characters.ContainsKey(characterName));
+             text = text.Replace("&", " and ");
+
+            // Ensure character exists / is initialized
+            if (!m_characters.TryGetValue(characterName, out Nvbg character))
+            {
+                // If we haven't started init yet, start it now
+                if (!m_characterInitTasks.TryGetValue(characterName, out var initTask))
+                {
+                    CreateCharacter(characterName);
+                    m_characterInitTasks.TryGetValue(characterName, out initTask);
+                }
+
+                // If still no task (e.g., WebGL synchronous path), re-check characters
+                if (initTask == null)
+                {
+                    if (!m_characters.TryGetValue(characterName, out character))
+                    {
+                        Debug.LogError($"NVBG character '{characterName}' not created correctly.");
+                        yield break;
+                    }
+                }
+                else
+                {
+                    // Wait (non-blocking) until init is done
+                    while (!initTask.IsCompleted)
+                        yield return null;
+
+                    if (initTask.IsFaulted)
+                    {
+                        Debug.LogError($"NVBG initialization failed for {characterName}: {initTask.Exception}");
+                        yield break;
+                    }
+
+                    character = initTask.Result;
+                    m_characters[characterName] = character;
+                }
+            }
+
+            // character is ready
             var vrExpressXml = CreateVRExpressXml(characterName, text);
-            Debug.LogFormat("NVBG Request - text: {0}", text);
+
+            Debug.Log($"NVBG Request - text: {text}");
+
             var request = new NvbgRequest(
                 kind: NvbgRequestKind.None,
-                messageId: "1488584035542-92-1",//from ExternalProcessNVBG.cs
-                sourceId: characterName,//CharacterId,
+                messageId: "1488584035542-92-1",  //from ExternalProcessNVBG.cs
+                sourceId: characterName,  //CharacterId,
                 targetId: "all",
                 xml: vrExpressXml
             );
-            var character = characters[characterName];
             var responseTask = character.ProcessAsync(request);
 
             float startTime = Time.time;
             float timeOut = 18; // in seconds
             while (!responseTask.IsCompleted && Time.time - startTime < timeOut)
-            {
                 yield return new WaitForEndOfFrame();
+
+            if (!responseTask.IsCompleted)
+            {
+                Debug.LogError("NVBG response timed out.");
+                yield break;
             }
+
             var response = responseTask.Result;
             var xmlText = response.BehaviorMarkupLanguage.InnerXml;
             xmlText = Regex.Replace(xmlText, @"<\?.*?\?>", "");
             xmlText = xmlText.Replace("\r\n", "");
             xmlText = xmlText.Replace("\n", "");
             xmlText = xmlText.Replace("'", "&apos;");
-            Debug.LogFormat("NVBG Response - xmlText (Truncated): {0}", xmlText[..Mathf.Min(500, xmlText.Length)]);
-            //Debug.LogFormat("NVBG Response - xmlText: {0}", xmlText);
+
+            Debug.Log($"NVBG Response - xmlText (Truncated): {xmlText[..Mathf.Min(500, xmlText.Length)]}");
+
             resultCallback(xmlText);
         }
 
