@@ -7,21 +7,16 @@ namespace Ride.UI
     [Flags]
     public enum ViewSystemConfigFlags
     {
-        None,
-        Unit_Selection = 1,
+        None = 0,
+        Unit_Selection = 1 << 0,
 
-        Last,
-        All = (Last << 1) - 1
+        All = Unit_Selection
     }
 
+    [Serializable]
     public class ViewSystemParams
     {
-        public ViewSystemConfigFlags flags;
-
-        public static readonly ViewSystemParams Default = new ViewSystemParams()
-        {
-            flags = ViewSystemConfigFlags.All
-        };
+        public ViewSystemConfigFlags flags = ViewSystemConfigFlags.All;
     }
 
     /// <summary>
@@ -43,11 +38,6 @@ namespace Ride.UI
         /// The View System Menu for showing built-in functionality
         /// </summary>
         IViewSystemMenu viewSystemMenu { get; set; }
-
-        /// <summary>
-        /// Returns the deprecated ISelector
-        /// </summary>
-        ISelector<RideID> agentSelector { get; set; }
 
         /// <summary>
         /// Returns the ISelector

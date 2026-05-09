@@ -26,15 +26,106 @@ namespace Ride.TextToSpeech
         public GenerateAudioReplyViseme(string _type, double _start, double _articulation) { type = _type; start = _start; articulation = _articulation; }
     }
 
+    public struct WordTimingData
+    {
+        public string Text;
+        public double Start;
+        public double End;
+
+        public WordTimingData(string text, double start, double end)
+        {
+            Text = text;
+            Start = start;
+            End = end;
+        }
+    }
+
     /// <summary>
     /// Data container for mapped speech, sent to XML Builder
     /// </summary>
     public class AudioSpeechMap
     {
         public string soundFile;
-        public List<KeyValuePairS<double, double>> WordBreakList;  // start/end
+        public List<WordTimingData> WordTimingList;
         public List<KeyValuePairS<string, double>> MarkList;  // name/time
         public List<GenerateAudioReplyViseme> VisemeList;  // type/start/articulation
+
+
+        /// <summary>
+        /// Adjusts the end timings of words in the AudioSpeechMap for more accurate playback alignment.
+        /// </summary>
+        /// <param name="audioSpeechMap">The AudioSpeechMap to modify.<see cref = "AudioSpeechMap"/></ param>
+        public void AdjustWordTimings()
+        {
+            double lastTime = 0;
+
+            int wordCount = WordTimingList.Count;
+            for (int i = 0; i < wordCount; i++)
+            {
+                var wordTiming = WordTimingList[i];
+                double startTime = wordTiming.Start;
+                double endTime = wordTiming.End;
+                lastTime = endTime;
+
+                // Update the end time of the previous word
+                if (i > 0)
+                {
+                    var previousWordTiming = WordTimingList[i - 1];
+                    previousWordTiming.End = startTime;
+                    WordTimingList[i - 1] = previousWordTiming;
+                }
+            }
+
+            // Update the end time of the last word
+            if (wordCount > 0)
+            {
+                var lastWordTiming = WordTimingList[wordCount - 1];
+                lastWordTiming.End = lastTime;
+                WordTimingList[wordCount - 1] = lastWordTiming;
+            }
+        }
+
+        /// <summary>
+        /// Adjusts the end timings of mark entries in the AudioSpeechMap.
+        /// </summary>
+        /// <param name="audioSpeechMap">The AudioSpeechMap to modify.<see cref = "AudioSpeechMap"/></param>
+        public void AdjustEndMarkTimings()
+        {
+            double lastTime = 0;
+
+            int markCount = MarkList.Count;
+            for (int i = 0; i < markCount; i++)
+            {
+                var mark = MarkList[i];
+                double time = mark.Value;
+                lastTime = time;
+
+                // Update the mark time with the word end time, if the mark index is odd
+                if (i % 2 != 0)
+                    MarkList[i] = new(mark.Key, FindWordEndTime(time));
+            }
+
+            // Update the end time of the last mark if there are odd number of marks
+            if (markCount > 0 && markCount % 2 != 0)
+                MarkList[markCount - 1] = new(MarkList[markCount - 1].Key, lastTime);
+        }
+
+        /// <summary>
+        /// Finds the ending time of a word that contains the given mark time.
+        /// </summary>
+        /// <param name="audioSpeechMap">The speech map containing word data.<see cref = "AudioSpeechMap"/></param>
+        /// <param name="markTime">The time of the mark to resolve.</param>
+        /// <returns>The corresponding word's end time.</returns>
+        public double FindWordEndTime(double markTime)
+        {
+            foreach (var wordTiming in WordTimingList)
+            {
+                if (markTime >= wordTiming.Start && markTime <= wordTiming.End)
+                    return wordTiming.End;  // The mark is inside this word, return its end time
+            }
+
+            return markTime;  // If the mark is not found within any word, return the mark time itself
+        }
     }
 
     // used for sorting the events into the correct order to mimick the messages we've always sent
@@ -77,10 +168,10 @@ namespace Ride.TextToSpeech
 
 
                 var combinedList = new List<KeyValuePair<double, SortClass>>();
-                foreach (var kv in audioSpeechMap.WordBreakList)
+                foreach (var word in audioSpeechMap.WordTimingList)
                 {
-                    combinedList.Add(new KeyValuePair<double, SortClass>(kv.Key, new SortClass(SortEnum.StartWord, kv)));
-                    combinedList.Add(new KeyValuePair<double, SortClass>(kv.Value, new SortClass(SortEnum.EndWord, kv)));
+                    combinedList.Add(new KeyValuePair<double, SortClass>(word.Start, new SortClass(SortEnum.StartWord, word)));
+                    combinedList.Add(new KeyValuePair<double, SortClass>(word.End, new SortClass(SortEnum.EndWord, word)));
                 }
 
                 foreach (var kv in audioSpeechMap.MarkList)
@@ -127,10 +218,12 @@ namespace Ride.TextToSpeech
                     }
                     else if (value.sortEnum == SortEnum.StartWord)
                     {
-                        var v = (KeyValuePairS<double, double>)value.obj;
+                        var v = (WordTimingData)value.obj;
                         xml.WriteStartElement("word");
-                        xml.WriteAttributeString("start", v.Key.ToString());
-                        xml.WriteAttributeString("end", v.Value.ToString());
+                        xml.WriteAttributeString("start", v.Start.ToString());
+                        xml.WriteAttributeString("end", v.End.ToString());
+                        if (!string.IsNullOrEmpty(v.Text))
+                            xml.WriteString(v.Text);
 
                     }
                     else if (value.sortEnum == SortEnum.Viseme)

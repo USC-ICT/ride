@@ -14,7 +14,7 @@ namespace Ride
 public class AssetCatalogWindow : EditorWindow
 {
     [Flags]
-    private enum AssetCatalogBuildTargets
+    public enum AssetCatalogBuildTargets
     {
         // Add more as needed.  See BuildTarget enum for options.
         None                = 0,
@@ -43,6 +43,7 @@ public class AssetCatalogWindow : EditorWindow
 
     private List<bool> m_groupFoldouts = new();
 
+    private string m_artAssetSvnRevision = "0";
     private AssetCatalogBuildTargets m_selectedBuildTargets;
 
 
@@ -60,6 +61,7 @@ public class AssetCatalogWindow : EditorWindow
     {
         LoadOrCreateCatalogProfile();
 
+        m_artAssetSvnRevision = "0";
         m_selectedBuildTargets = MapBuildTargetToMask(EditorUserBuildSettings.activeBuildTarget);
     }
 
@@ -193,7 +195,24 @@ public class AssetCatalogWindow : EditorWindow
         EditorGUILayout.EndScrollView();
 
         EditorGUILayout.Space();
+        using (new EditorGUILayout.HorizontalScope(EditorStyles.helpBox))
+        {
+            if (GUILayout.Button("Refresh", GUILayout.Width(90)))
+                m_artAssetSvnRevision = AssetCatalogEditorUtility.GetProjectSvnLastChangedRevision();
 
+            EditorGUILayout.LabelField("Catalog Version Info", EditorStyles.boldLabel, GUILayout.Width(140));
+            EditorGUILayout.LabelField("rideBundleVersion", GUILayout.Width(120));
+            EditorGUILayout.SelectableLabel(AssetCatalogData.RIDE_VERSION, GUILayout.Width(30), GUILayout.Height(EditorGUIUtility.singleLineHeight));
+            EditorGUILayout.LabelField("--", GUILayout.Width(20));
+            EditorGUILayout.LabelField("artAssetVersion", GUILayout.Width(110));
+            EditorGUILayout.SelectableLabel(m_artAssetSvnRevision, GUILayout.Height(EditorGUIUtility.singleLineHeight));
+
+            GUILayout.FlexibleSpace();
+            if (GUILayout.Button("Query Remote Paths...", GUILayout.Width(160)))
+                AssetCatalogRemoteQueryWindow.ShowWindow(m_assetCatalogProfile);
+        }
+
+        EditorGUILayout.Space();
         m_selectedBuildTargets = (AssetCatalogBuildTargets)EditorGUILayout.EnumFlagsField("Build Targets", m_selectedBuildTargets);
 
         EditorGUILayout.Space();
@@ -557,7 +576,7 @@ public class AssetCatalogWindow : EditorWindow
         };
     }
 
-    private static List<BuildTarget> GetSelectedBuildTargets(AssetCatalogBuildTargets mask)
+    public static List<BuildTarget> GetSelectedBuildTargets(AssetCatalogBuildTargets mask)
     {
         List<BuildTarget> outList = new();
         if ((mask & AssetCatalogBuildTargets.StandaloneOSX) != 0) outList.Add(BuildTarget.StandaloneOSX);
@@ -569,6 +588,7 @@ public class AssetCatalogWindow : EditorWindow
         return outList;
     }
 }
+
 
 /// <summary>
 /// Editor popup window for managing global asset labels.
@@ -641,6 +661,297 @@ public class LabelManagerWindow : EditorWindow
             EditorUtility.SetDirty(m_profile);
             AssetDatabase.SaveAssets();
         }
+    }
+}
+
+
+/// <summary>
+/// Dialog window that queries remote catalog.json files via aws cli for sanity checking.
+/// </summary>
+class AssetCatalogRemoteQueryWindow : EditorWindow
+{
+    private sealed class Result
+    {
+        public string groupName;
+        public string renderPipeline;
+        public string platform;
+        public AssetCatalogData assetCatalogData;
+        public bool ok;
+        public string error;
+        public string remoteCatalogPath;
+    }
+
+    // see AssetCatalogUtility.GetRenderPipelineName().
+    private static readonly string[] renderPipelines = { "BuiltIn", "URP", "HDRP" };
+
+    private AssetCatalogProfile m_profile;
+    private Vector2 m_scroll;
+    private readonly List<Result> m_results = new();
+
+    public static void ShowWindow(AssetCatalogProfile profile)
+    {
+        var w = GetWindow<AssetCatalogRemoteQueryWindow>("Query Remote Catalogs");
+        w.minSize = new Vector2(900, 500);
+        w.m_profile = profile;
+    }
+
+    private void OnGUI()
+    {
+        if (m_profile == null)
+        {
+            EditorGUILayout.HelpBox("No AssetCatalogProfile provided.", MessageType.Error);
+            if (GUILayout.Button("Close")) Close();
+            return;
+        }
+
+        EditorGUILayout.LabelField("Remote Catalog Sanity Check", EditorStyles.boldLabel);
+        EditorGUILayout.HelpBox(
+            "Downloads catalog.json for each group/platform/render-pipeline using the AWS CLI (aws s3 cp). " +
+            "This does not use the runtime loading system. It is a sanity check only.",
+            MessageType.Info);
+
+        using (new EditorGUILayout.HorizontalScope())
+        {
+            if (GUILayout.Button("Run Query", GUILayout.Width(120)))
+                RunQuery();
+
+            if (GUILayout.Button("Clear", GUILayout.Width(80)))
+                m_results.Clear();
+
+            GUILayout.FlexibleSpace();
+
+            if (GUILayout.Button("Close", GUILayout.Width(100)))
+                Close();
+        }
+
+        EditorGUILayout.Space(8);
+
+        DrawResultsTable();
+    }
+
+    private void DrawResultsTable()
+    {
+        if (m_results.Count == 0)
+        {
+            EditorGUILayout.HelpBox("No results yet. Click 'Run Query'.", MessageType.None);
+            return;
+        }
+
+        using (new EditorGUILayout.HorizontalScope(EditorStyles.helpBox))
+        {
+            GUILayout.Label("Group", EditorStyles.boldLabel, GUILayout.Width(180));
+            GUILayout.Label("Pipeline", EditorStyles.boldLabel, GUILayout.Width(80));
+            GUILayout.Label("Platform", EditorStyles.boldLabel, GUILayout.Width(140));
+            GUILayout.Label("rideBundleVersion", EditorStyles.boldLabel, GUILayout.Width(130));
+            GUILayout.Label("artAssetVersion", EditorStyles.boldLabel, GUILayout.Width(110));
+            GUILayout.Label("OK", EditorStyles.boldLabel, GUILayout.Width(30));
+            GUILayout.Label("Remote catalog path / Error", EditorStyles.boldLabel);
+        }
+
+        m_scroll = EditorGUILayout.BeginScrollView(m_scroll);
+        foreach (var r in m_results)
+        {
+            using (new EditorGUILayout.HorizontalScope("box"))
+            {
+                GUILayout.Label(r.groupName ?? "", GUILayout.Width(180));
+                GUILayout.Label(r.renderPipeline ?? "", GUILayout.Width(80));
+                GUILayout.Label(r.platform ?? "", GUILayout.Width(140));
+                GUILayout.Label(r.assetCatalogData?.rideBundleVersion ?? "", GUILayout.Width(130));
+                GUILayout.Label(r.assetCatalogData?.artAssetVersion ?? "0", GUILayout.Width(110));
+                GUILayout.Label(r.ok ? "Y" : "N", GUILayout.Width(30));
+
+                string tail = r.ok ? (r.remoteCatalogPath ?? "") : (r.error ?? r.remoteCatalogPath ?? "");
+                EditorGUILayout.SelectableLabel(tail, GUILayout.Height(EditorGUIUtility.singleLineHeight));
+            }
+        }
+        EditorGUILayout.EndScrollView();
+    }
+
+    private void RunQuery()
+    {
+        m_results.Clear();
+
+        string unityFolder = AssetCatalogUtility.GetCompatibleUnityVersionName();
+        if (string.IsNullOrEmpty(unityFolder))
+            unityFolder = Application.unityVersion;
+
+        // get all targets
+        List<BuildTarget> buildTargets = AssetCatalogWindow.GetSelectedBuildTargets((AssetCatalogWindow.AssetCatalogBuildTargets)(-1));
+
+        // Put downloads in a unique temp folder for this run.
+        string tempRoot = Path.Combine(Path.GetTempPath(), "ride_asset_catalog_query", DateTime.Now.ToString("yyyyMMdd_HHmmss"));
+        Directory.CreateDirectory(tempRoot);
+
+        int total = m_profile.groups.Count * renderPipelines.Length * buildTargets.Count;
+        int done = 0;
+
+        try
+        {
+            foreach (var group in m_profile.groups)
+            {
+                if (group == null)
+                    continue;
+
+                string groupRemotePrefix = group.remotePrefixPath;
+                foreach (string renderPipeline in renderPipelines)
+                {
+                    foreach (var buildTarget in buildTargets)
+                    {
+                        done++;
+                        EditorUtility.DisplayProgressBar(
+                            "Query Remote Catalogs",
+                            $"{group.groupName} / {renderPipeline} / {buildTarget}",
+                            total > 0 ? (float)done / total : 1f);
+
+                        string platformFolder = buildTarget.ToString();
+                        string postfix = CombineRemotePath(unityFolder, renderPipeline, platformFolder);
+                        string remoteFolder = CombineRemotePath(groupRemotePrefix, postfix);
+                        string remoteCatalogPath = CombineRemotePath(remoteFolder, "catalog.json");
+
+                        string localDest = Path.Combine(tempRoot, SanitizeFileName(group.groupName), renderPipeline, platformFolder, "catalog.json");
+
+                        var result = new Result
+                        {
+                            groupName = group.groupName,
+                            renderPipeline = renderPipeline,
+                            platform = buildTarget.ToString(),
+                            ok = false,
+                            error = null,
+                            remoteCatalogPath = remoteCatalogPath
+                        };
+
+                        if (!TryAwsS3CopyToLocal(remoteCatalogPath, localDest, out string err))
+                        {
+                            result.error = string.IsNullOrEmpty(err) ? "aws s3 cp failed." : err.Trim();
+                            m_results.Add(result);
+                            continue;
+                        }
+
+                        try
+                        {
+                            string json = File.ReadAllText(localDest);
+                            var catalog = JsonUtility.FromJson<AssetCatalogData>(json);
+
+                            result.ok = catalog != null;
+                            result.assetCatalogData = catalog;
+                        }
+                        catch (Exception ex)
+                        {
+                            result.error = ex.Message;
+                            result.ok = false;
+                        }
+
+                        m_results.Add(result);
+                    }
+                }
+            }
+        }
+        finally
+        {
+            EditorUtility.ClearProgressBar();
+        }
+    }
+
+    private static string CombineRemotePath(params string[] parts)
+    {
+        if (parts == null || parts.Length == 0)
+            return string.Empty;
+
+        string s = parts[0] ?? string.Empty;
+        for (int i = 1; i < parts.Length; i++)
+        {
+            string p = parts[i] ?? string.Empty;
+            if (string.IsNullOrEmpty(p))
+                continue;
+
+            if (s.EndsWith("/"))
+                s = s.TrimEnd('/');
+            p = p.TrimStart('/');
+            s = s + "/" + p;
+        }
+
+        return s;
+    }
+
+    private static string SanitizeFileName(string s)
+    {
+        if (string.IsNullOrEmpty(s))
+            return "unnamed";
+
+        foreach (char c in Path.GetInvalidFileNameChars())
+            s = s.Replace(c, '_');
+        return s;
+    }
+
+
+    /// <summary>
+    /// Runs an 'aws s3 cp' to download a file from S3 to the local filesystem.
+    /// Returns true on success. On failure, returns false and fills error.
+    /// </summary>
+    public static bool TryAwsS3CopyToLocal(string s3SourcePath, string localDestPath, out string error)
+    {
+        error = null;
+
+        if (string.IsNullOrEmpty(s3SourcePath) || string.IsNullOrEmpty(localDestPath))
+        {
+            error = "Invalid source or destination path.";
+            return false;
+        }
+
+        // Ensure S3 URI starts with s3://
+        string normalizedSource = NormalizeToS3Uri(s3SourcePath);
+
+        if (!normalizedSource.StartsWith("s3://", StringComparison.OrdinalIgnoreCase))
+        {
+            error = $"Invalid S3 URI: {s3SourcePath}";
+            return false;
+        }
+
+        string destDir = Path.GetDirectoryName(localDestPath);
+        if (!string.IsNullOrEmpty(destDir) && !Directory.Exists(destDir))
+            Directory.CreateDirectory(destDir);
+
+        string args = $"s3 cp \"{normalizedSource}\" \"{localDestPath}\"";
+
+        if (!AssetCatalogEditorUtility.TryRunProcess("aws", args, workingDirectory: null, out string stdout, out string stderr))
+        {
+            error = string.IsNullOrEmpty(stderr) ? stdout : stderr;
+            return false;
+        }
+
+        if (!File.Exists(localDestPath))
+        {
+            error = "aws s3 cp reported success, but destination file was not found.";
+            return false;
+        }
+
+        return true;
+    }
+
+    private static string NormalizeToS3Uri(string path)
+    {
+        if (string.IsNullOrEmpty(path))
+            return path;
+
+        path = path.Replace("\\", "/").Trim();
+
+        // Already valid
+        if (path.StartsWith("s3://", StringComparison.OrdinalIgnoreCase))
+            return path;
+
+        // Remove https style URLs
+        if (path.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            // Convert https://s3.amazonaws.com/bucket/key
+            var uri = new Uri(path);
+            if (uri.Host.Contains("amazonaws.com") && uri.AbsolutePath.Length > 1)
+            {
+                return "s3://" + uri.AbsolutePath.TrimStart('/');
+            }
+        }
+
+        // Assume bucket/key format
+        return "s3://" + path.TrimStart('/');
     }
 }
 }

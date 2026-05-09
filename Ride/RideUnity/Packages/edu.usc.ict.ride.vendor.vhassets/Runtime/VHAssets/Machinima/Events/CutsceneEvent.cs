@@ -339,7 +339,16 @@ public class CutsceneEvent : CutsceneTrackItem
         }
         catch (Exception e)
         {
-            Debug.LogError(string.Format("Error occured when trying to fire event {0}. Exception {1}. Inner Exeception: {2}. Stack: {3}", Name, e.Message, e.InnerException, e.StackTrace));
+            var root = e;
+            while (root.InnerException != null) root = root.InnerException;
+
+            Debug.LogError(
+                $"Error occured when trying to fire event {Name}. " +
+                $"FunctionName={FunctionName}, OverloadIndex={FunctionOverloadIndex}, " +
+                $"Exception={e.GetType().FullName}: {e.Message}, " +
+                $"Root={root.GetType().FullName}: {root.Message}, " +
+                "Stack={e.StackTrace}"
+            );
         }
     }
 

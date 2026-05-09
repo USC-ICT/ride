@@ -65,6 +65,36 @@ namespace Ride.TextToSpeech
             }
         }
 
+        [Serializable]
+        private struct PollyRawWordMark
+        {
+            public string Value;
+            public double TimeSeconds;
+
+            public PollyRawWordMark(string value, double timeSeconds)
+            {
+                Value = value;
+                TimeSeconds = timeSeconds;
+            }
+
+            public override string ToString() => $"[{TimeSeconds:0.000}] '{Value}'";
+        }
+
+        [Serializable]
+        private struct PollyRawVisemeMark
+        {
+            public string Value;
+            public double TimeSeconds;
+
+            public PollyRawVisemeMark(string value, double timeSeconds)
+            {
+                Value = value;
+                TimeSeconds = timeSeconds;
+            }
+
+            public override string ToString() => $"[{TimeSeconds:0.000}] {Value}";
+        }
+
 #if UNITY_WEBGL
         [Serializable]
         class VoicesReply
@@ -199,18 +229,23 @@ namespace Ride.TextToSpeech
             var map = new AudioSpeechMap
             {
                 soundFile = $"{Application.persistentDataPath}/pollyTTS.mp3",
-                WordBreakList = new List<KeyValuePairS<double, double>>(),
+                WordTimingList = new List<WordTimingData>(),
                 MarkList = new List<KeyValuePairS<string, double>>(),
                 VisemeList = new List<GenerateAudioReplyViseme>(),
             };
 
             ParseMarks(marks, ref map);
+            LogPollyProviderDebug(marks);
             resultCallback?.Invoke(map);
 #else
             yield return WaitForVoices();
 
-            string lambda = "5seu6aym2kayhec2dw4m46udeq0xrfir";
-            string url = $"https://{lambda}.lambda-url.us-west-2.on.aws/visemes";
+            string url = ConfigurationSystemUnity.GetPollyTtsProxyEndpoint("visemes");
+            if (string.IsNullOrWhiteSpace(url))
+            {
+                resultCallback?.Invoke(null);
+                yield break;
+            }
 
             string jsonBody = JsonUtility.ToJson(new TTSRequest() { text = text, voice = voice });
 
@@ -244,12 +279,13 @@ namespace Ride.TextToSpeech
                 var map = new AudioSpeechMap
                 {
                     soundFile = "",
-                    WordBreakList = new List<KeyValuePairS<double, double>>(),
+                    WordTimingList = new List<WordTimingData>(),
                     MarkList = new List<KeyValuePairS<string, double>>(),
                     VisemeList = new List<GenerateAudioReplyViseme>(),
                 };
 
                 ParseMarks(marks, ref map);
+                LogPollyProviderDebug(marks);
                 resultCallback?.Invoke(map);
             }
 #endif
@@ -311,8 +347,13 @@ namespace Ride.TextToSpeech
 
             CompleteTextToSpeechGeneration(fileName);
 #else
-            string lambda = "5seu6aym2kayhec2dw4m46udeq0xrfir";
-            string url = $"https://{lambda}.lambda-url.us-west-2.on.aws/audio";
+            string url = ConfigurationSystemUnity.GetPollyTtsProxyEndpoint("audio");
+            if (string.IsNullOrWhiteSpace(url))
+            {
+                CompleteTextToSpeechGeneration(null);
+                yield break;
+            }
+
             string jsonBody = JsonUtility.ToJson(new TTSRequest() { text = text, voice = voice });
 
             using (var request = UnityWebRequest.Put(url, jsonBody))
@@ -372,7 +413,9 @@ namespace Ride.TextToSpeech
         /// </summary>
         private void OnAudioSpeechGeneration(AudioSpeechMap audioSpeechMap)
         {
-            CompleteLipsyncGeneration(TextToSpeechXMLBuilder.BuildSpeechXML(audioSpeechMap));
+            string xml = audioSpeechMap != null ? TextToSpeechXMLBuilder.BuildSpeechXML(audioSpeechMap) : string.Empty;
+            LogSpeechXmlDebug(audioSpeechMap, xml, "Polly");
+            CompleteLipsyncGeneration(xml);
         }
 
         /// <summary>
@@ -409,12 +452,12 @@ namespace Ride.TextToSpeech
                     generateAudioReplyReturn.MarkList.Add(new KeyValuePairS<string, double>("T" + markIndex, time));
                     generateAudioReplyReturn.MarkList.Add(new KeyValuePairS<string, double>("T" + (markIndex + 1), 0));
 
-                    generateAudioReplyReturn.WordBreakList.Add(new KeyValuePairS<double, double>(time, 0));
+                    generateAudioReplyReturn.WordTimingList.Add(new WordTimingData(mark.value, time, 0));
 
                     int prevWorldIndex = wordIndex - 1;
                     if (prevWorldIndex >= 0)
                     {
-                        ChangeEndWordTiming(generateAudioReplyReturn.WordBreakList, prevWorldIndex, time);
+                        ChangeEndWordTiming(generateAudioReplyReturn.WordTimingList, prevWorldIndex, time);
                         ChangeEndMarkTiming(generateAudioReplyReturn.MarkList, markIndex - 1, time);
                     }
 
@@ -423,24 +466,74 @@ namespace Ride.TextToSpeech
                 }
             }
 
-            if (generateAudioReplyReturn.WordBreakList.Count > 0)
+            if (generateAudioReplyReturn.WordTimingList.Count > 0)
             {
                 ChangeEndMarkTiming(generateAudioReplyReturn.MarkList, generateAudioReplyReturn.MarkList.Count - 1, lastTime);
-                ChangeEndWordTiming(generateAudioReplyReturn.WordBreakList, generateAudioReplyReturn.WordBreakList.Count - 1, lastTime);
+                ChangeEndWordTiming(generateAudioReplyReturn.WordTimingList, generateAudioReplyReturn.WordTimingList.Count - 1, lastTime);
             }
         }
 
+        private void LogPollyProviderDebug(IEnumerable<SpeechMark> marks)
+        {
+            if (!lipsyncDebugOutput || marks == null)
+                return;
+
+            const double millisecondsInSecond = 1000.0;
+
+            int totalMarks = 0;
+            int wordCount = 0;
+            int visemeCount = 0;
+            int sentenceCount = 0;
+            var words = new List<PollyRawWordMark>();
+            var visemes = new List<PollyRawVisemeMark>();
+            var unmappedTokens = new HashSet<string>(StringComparer.Ordinal);
+
+            foreach (var mark in marks)
+            {
+                if (mark == null)
+                    continue;
+
+                totalMarks++;
+                double timeSeconds = mark.time / millisecondsInSecond;
+
+                if (mark.type == "word")
+                {
+                    wordCount++;
+                    words.Add(new PollyRawWordMark(mark.value ?? string.Empty, timeSeconds));
+                    // Debug.Log($"[Polly Word Raw] {timeSeconds:0.000} '{mark.value}'");
+                }
+                else if (mark.type == "viseme")
+                {
+                    visemeCount++;
+                    visemes.Add(new PollyRawVisemeMark(mark.value ?? string.Empty, timeSeconds));
+                    // Debug.Log($"[Polly Viseme Raw] {timeSeconds:0.000} {mark.value}");
+
+                    if (string.IsNullOrEmpty(mark.value) || !m_IPAtoFacefxMap.ContainsKey(mark.value))
+                        unmappedTokens.Add(mark.value ?? "<null>");
+                }
+                else if (mark.type == "sentence")
+                {
+                    sentenceCount++;
+                }
+            }
+
+            Debug.Log($"[Polly Raw] TotalMarks={totalMarks}, Words={wordCount}, Visemes={visemeCount}, Sentences={sentenceCount}, MissingPhoneMappings={unmappedTokens.Count}");
+            Debug.Log($"[Polly Words] {(words.Count == 0 ? "<none>" : string.Join(", ", words))}");
+            Debug.Log($"[Polly Visemes] {(visemes.Count == 0 ? "<none>" : string.Join(", ", visemes))}");
+            Debug.Log($"[Polly FaceFX Map] MissingPhoneMappings={(unmappedTokens.Count == 0 ? "<none>" : string.Join(", ", unmappedTokens))}");
+        }
+
         /// <summary>
-        /// Updates the end time of a word in the WordBreakList.
+        /// Updates the end time of a word in the WordTimingList.
         /// </summary>
         /// <param name="wordTimings">The list of word timings.</param>
         /// <param name="index">The index of the word to update.</param>
         /// <param name="endTime">The end time to set.</param>
-        private static void ChangeEndWordTiming(List<KeyValuePairS<double, double>> wordTimings, int index, double endTime)
+        private static void ChangeEndWordTiming(List<WordTimingData> wordTimings, int index, double endTime)
         {
-            var pair = wordTimings[index];
-            pair.Value = endTime;
-            wordTimings[index] = pair;
+            var wordTiming = wordTimings[index];
+            wordTiming.End = endTime;
+            wordTimings[index] = wordTiming;
         }
 
         /// <summary>
@@ -523,8 +616,14 @@ namespace Ride.TextToSpeech
             m_voices = voices.ToArray();
             m_voicesReady = true;
 #else
-            string lambda = "5seu6aym2kayhec2dw4m46udeq0xrfir";
-            string lambdaUrl = $"https://{lambda}.lambda-url.us-west-2.on.aws/voices";
+            string lambdaUrl = ConfigurationSystemUnity.GetPollyTtsProxyEndpoint("voices");
+            if (string.IsNullOrWhiteSpace(lambdaUrl))
+            {
+                m_voices = new string[0];
+                m_voicesReady = true;
+                yield break;
+            }
+
             using (var request = UnityWebRequest.Get(lambdaUrl))
             {
                 request.SetRequestHeader("Content-Type", "application/json");

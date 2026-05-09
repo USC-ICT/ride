@@ -68,17 +68,61 @@ namespace Ride.AWS
         {
             objectKey = objectKey.Replace("\\", "/");
 
-            string uri = "https://cpg5yjn7apmqn3u3l5tnwqq22e0xixgd.lambda-url.us-west-2.on.aws";
+            string location = $"{bucketName}/{objectKey}";
+            string uri = ConfigurationSystemUnity.GetStorageSignedUrlEndpoint();
+            if (string.IsNullOrWhiteSpace(uri))
+            {
+                RideLog.LogError($"[GetSignedURL] FAILED signed URL endpoint is not configured location='{location}'");
+                onComplete?.Invoke(null);
+                return;
+            }
+
+            RideLog.Log($"[GetSignedURL] start - uri='{uri}' location='{location}'");
 
             Systems.Get<IWebRequesterSystem>().Put<GetPreSignedUrlRequest, GetPreSignedUrlResponse>(
                 uri,
                 null,
                 new GetPreSignedUrlRequest()
                 {
-                    location = $"{bucketName}/{objectKey}",
+                    location = location,
                     authenticationKey = m_cognitoIdentityPoolId
                 },
-                (result, error, response) => { onComplete?.Invoke(response.responseData.url); });
+                (result, error, response) =>
+                {
+                    try
+                    {
+                        if (result != WebRequestResult.Success)
+                        {
+                            RideLog.LogWarning($"[GetSignedURL] FAILED result={result} error='{error}' location='{location}'");
+                            onComplete?.Invoke(null);
+                            return;
+                        }
+
+                        if (response == null)
+                        {
+                            RideLog.LogWarning($"[GetSignedURL] FAILED response is null location='{location}'");
+                            onComplete?.Invoke(null);
+                            return;
+                        }
+
+                        string url = response.responseData.url;
+
+                        if (string.IsNullOrEmpty(url))
+                        {
+                            RideLog.LogError($"[GetSignedURL] FAILED url empty location='{location}'");
+                            onComplete?.Invoke(null);
+                            return;
+                        }
+
+                        RideLog.Log($"[GetSignedURL] OK location='{location}' url='{url}'");
+                        onComplete?.Invoke(url);
+                    }
+                    catch (Exception ex)
+                    {
+                        RideLog.LogWarning($"[GetSignedURL] EXCEPTION location='{location}': {ex}");
+                        onComplete?.Invoke(null);
+                    }
+                });
         }
 
         /// <inheritdoc/>

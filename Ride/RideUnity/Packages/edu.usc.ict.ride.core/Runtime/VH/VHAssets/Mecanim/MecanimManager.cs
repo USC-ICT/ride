@@ -49,13 +49,16 @@ public class MecanimManager : ICharacterController
     #endregion
 
     #region Fields
-    [SerializeField] private List<MecanimCharacter> m_characterList = new();
+    private bool m_includeInactiveInCache = true;
+    private readonly Dictionary<string, MecanimCharacter> m_characterByNameCache = new(StringComparer.Ordinal);
+    private bool m_characterCacheDirty = true;
+
     private AudioSpeechFile[] m_speechFiles;
     private static MecanimManager g_instance;
     #endregion
 
     #region Properties
-    public int NumCharacters => m_characterList.Count;
+    public int NumCharacters { get { EnsureCharacterCache(); return m_characterByNameCache.Count; } }
     #endregion
 
     #region Functions
@@ -71,9 +74,7 @@ public class MecanimManager : ICharacterController
 
     void Awake()
     {
-        var mecanimCharacters = FindObjectsByType<MecanimCharacter>(FindObjectsInactive.Include, FindObjectsSortMode.None);
-        foreach (var mecAnimCharacter in mecanimCharacters)
-            AddCharacter(mecAnimCharacter);
+        m_characterCacheDirty = true;
 
         m_speechFiles = FindObjectsByType<AudioSpeechFile>(FindObjectsSortMode.None);
     }
@@ -87,13 +88,18 @@ public class MecanimManager : ICharacterController
 
     public void AddCharacter(MecanimCharacter mecAnimCharacter)
     {
-        if (!m_characterList.Contains(mecAnimCharacter))
-            m_characterList.Add(mecAnimCharacter);
+        if (mecAnimCharacter == null)
+            return;
+
+        m_characterCacheDirty = true;  // Mark dirty so we re-scan and resolve duplicates consistently.
     }
 
     public void RemoveCharacter(MecanimCharacter mecAnimCharacter)
     {
-        m_characterList.Remove(mecAnimCharacter);
+        if (mecAnimCharacter == null)
+            return;
+
+        m_characterCacheDirty = true;  // Mark dirty so we re-scan and resolve duplicates consistently.
     }
 
     public void RemoveCharacter(string character)
@@ -107,26 +113,30 @@ public class MecanimManager : ICharacterController
 
     public void RemoveAllCharacters()
     {
-        while (m_characterList.Count > 0)
-            RemoveCharacter(m_characterList[0]);
-    }
-
-    public MecanimCharacter GetCharacter(int index)
-    {
-        MecanimCharacter ch = null;
-        if (VHUtils.IsIndexInRange(index, NumCharacters))
-            ch = m_characterList[index];
-
-        return ch;
+        m_characterByNameCache.Clear();
+        m_characterCacheDirty = true;
     }
 
     public MecanimCharacter GetCharacterByName(string character)
     {
-        var ch = m_characterList.Find(c => { return c != null && c.gameObject.activeSelf && c.CharacterName == character; });
-        if (ch == null)
-            Debug.LogWarning($"Can't find character {character} in ICharacterController {name}");
+        if (string.IsNullOrEmpty(character))
+            return null;
 
-        return ch;
+        EnsureCharacterCache();
+
+        if (TryGetCharacterFromCache(character, out var ch))
+            return ch;
+
+        // Defensive fallback: cache could be stale due to runtime spawn/destroy/disable
+        // without a scene event firing. Rebuild once and try again.
+        m_characterCacheDirty = true;
+        EnsureCharacterCache();
+
+        if (TryGetCharacterFromCache(character, out ch))
+            return ch;
+
+        Debug.LogWarning($"[MecanimManager] Can't find character {character} in ICharacterController {name}");
+        return null;
     }
 
     private GameObject GetPawn(string pawnName)
@@ -323,6 +333,13 @@ public class MecanimManager : ICharacterController
             ch.SetVisemeWeightMultiplier(multiplier);
     }
 
+    public void SetExpressionWeightMultiplier(string character, float multiplier)
+    {
+        var ch = GetCharacterByName(character);
+        if (ch != null)
+            ch.SetExpressionWeightMultiplier(multiplier);
+    }
+
     public override void SBNod(string character, float amount, float repeats, float time) => GetCharacterByName(character).Nod(amount, repeats, time);
     public override void SBShake(string character, float amount, float repeats, float time) => GetCharacterByName(character).Shake(amount, repeats, time);
     public override void SBTilt(string character, float amount, float repeats, float time) => Tilt(character, amount, repeats, time);
@@ -469,8 +486,86 @@ public class MecanimManager : ICharacterController
     {
     }
 
-    public override ICharacter[] GetControlledCharacters() => m_characterList.ToArray();
+    public override ICharacter[] GetControlledCharacters()
+    {
+        EnsureCharacterCache();
+
+        // Only return non-null + active, consistent with lookup rules.
+        var list = new List<ICharacter>(m_characterByNameCache.Count);
+        foreach (var kvp in m_characterByNameCache)
+        {
+            var ch = kvp.Value;
+            if (ch != null && ch.gameObject.activeSelf)
+                list.Add(ch);
+        }
+
+        return list.ToArray();
+    }
+
     public override ICharacter GetCharacter(string character) => GetCharacterByName(character);
+
+    private void EnsureCharacterCache()
+    {
+        if (!m_characterCacheDirty)
+            return;
+
+        RebuildCharacterCache();
+    }
+
+    private void RebuildCharacterCache()
+    {
+        m_characterByNameCache.Clear();
+
+        FindObjectsInactive inactiveMode = m_includeInactiveInCache ? FindObjectsInactive.Include : FindObjectsInactive.Exclude;
+        var mecanimCharacters = FindObjectsByType<MecanimCharacter>(inactiveMode, FindObjectsSortMode.None);
+
+        foreach (var character in mecanimCharacters)
+        {
+            if (character == null)
+                continue;
+
+            var name = character.CharacterName;
+            if (string.IsNullOrEmpty(name))
+                continue;
+
+            // If duplicates exist, prefer the first active one and warn.
+            if (!m_characterByNameCache.ContainsKey(name))
+            {
+                m_characterByNameCache.Add(name, character);
+            }
+            else
+            {
+                var existing = m_characterByNameCache[name];
+                if (existing == null || (!existing.gameObject.activeSelf && character.gameObject.activeSelf))
+                    m_characterByNameCache[name] = character;
+
+                Debug.LogWarning($"[MecanimManager] Duplicate CharacterName '{name}' detected. Using '{m_characterByNameCache[name].name}'.");
+            }
+        }
+
+        m_characterCacheDirty = false;
+    }
+
+    private bool TryGetCharacterFromCache(string character, out MecanimCharacter ch)
+    {
+        ch = null;
+
+        if (!m_characterByNameCache.TryGetValue(character, out var candidate))
+            return false;
+
+        if (candidate == null)
+        {
+            m_characterCacheDirty = true;  // Destroyed object; mark dirty so the next query rebuilds.
+            return false;
+        }
+
+        // only activeSelf counts.
+        if (!candidate.gameObject.activeSelf)
+            return false;
+
+        ch = candidate;
+        return true;
+    }
     #endregion
 }
 }

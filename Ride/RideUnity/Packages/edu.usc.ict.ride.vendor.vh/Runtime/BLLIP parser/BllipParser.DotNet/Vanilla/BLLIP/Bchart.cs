@@ -54,13 +54,13 @@ namespace BllipParser.DotNet.Vanilla
         static Item [] stops = new Item[MAXSENTLEN];
         EdgeHeap heap;
         int alreadyPoppedNum;
-        Edge [] alreadyPopped = new Edge[450000]; //was 350000;
+        //Edge [] alreadyPopped = new Edge[450000]; //was 350000;
 
 
         static ref int posStarts(int i, int j)
         {
-            Debug.Assert(i < MAXNUMNTTS);
-            Debug.Assert(j < MAXNUMNTS);
+            AssertInternal(i < MAXNUMNTTS);
+            AssertInternal(j < MAXNUMNTS);
             return ref posStarts_[i, j];
         }
 
@@ -79,6 +79,71 @@ namespace BllipParser.DotNet.Vanilla
         list<float> [] wordPlists = new list<float>[MAXSENTLEN];
 
 
+        // Scratch Buffers
+
+        public class meFHProb_ScratchBuffer
+        {
+            public FeatureTree[] GInfo;
+            public float[] SmoothedPs;
+
+            public meFHProb_ScratchBuffer()
+            {
+                GInfo = new FeatureTree[MAXNUMFS];
+                SmoothedPs = new float[MAXNUMFS];
+            }
+
+            public void Clear() { Array.Clear(GInfo, 0, GInfo.Length);  Array.Clear(SmoothedPs, 0, SmoothedPs.Length); }
+        }
+
+        public static meFHProb_ScratchBuffer [] m_meFHProb_ScratchBuffers = new meFHProb_ScratchBuffer[MAXNUMTHREADS];
+        private meFHProb_ScratchBuffer Get_meFHProb_ScratchBuffer(int thrdid)
+        {
+            var s = m_meFHProb_ScratchBuffers[thrdid];
+            if (s == null)
+                m_meFHProb_ScratchBuffers[thrdid] = s = new();
+            return s;
+        }
+
+        private readonly Item[][] m_lrGotIter_ScratchBuffers = new Item[MAXNUMTHREADS][];
+        public Item[] Get_lrGotIter_ScratchBuffer(int thrdid)
+        {
+            Item[] arr = m_lrGotIter_ScratchBuffers[thrdid];
+            if (arr == null)
+                m_lrGotIter_ScratchBuffers[thrdid] = arr = new Item[400];
+
+            return arr;
+        }
+
+        private readonly Item[][][] m_midGotIter_ScratchBuffers = new Item[MAXNUMTHREADS][][];
+        public Item[] Get_midGotIter_ScratchBuffer(int thrdid, int depth)
+        {
+            // Clamp depth defensively (your parsing depth shouldn't exceed wrd_count_ anyway)
+            if (depth < 0) depth = 0;
+            if (depth >= MAXSENTLEN) depth = MAXSENTLEN - 1;
+
+            Item[][] byDepth = m_midGotIter_ScratchBuffers[thrdid];
+            if (byDepth == null)
+                m_midGotIter_ScratchBuffers[thrdid] = byDepth = new Item[MAXSENTLEN][];
+
+            Item[] arr = byDepth[depth];
+            if (arr == null)
+                byDepth[depth] = arr = new Item[400];
+
+            return arr;
+        }
+
+        private readonly FullHist[] m_meEdgeProb_FullHistScratch = new FullHist[MAXNUMTHREADS];
+        private FullHist Get_meEdgeProb_FullHistScratch(int thrdid)
+        {
+            FullHist fh = m_meEdgeProb_FullHistScratch[thrdid];
+            if (fh == null)
+                m_meEdgeProb_FullHistScratch[thrdid] = fh = new FullHist();
+            return fh;
+        }
+
+        ////////////////////////////////////////////
+
+
         protected Bchart(SentRep sentence, int id)
             : base(sentence, id)
         {
@@ -89,13 +154,18 @@ namespace BllipParser.DotNet.Vanilla
             : base(sentence, id)
         {
             for (int i = 0; i < newWordMap.Length; i++)
-                newWordMap[i] = new map<ECString, int>();
+                if (newWordMap[i] == null) newWordMap[i] = new map<ECString, int>();  // newWordMap[i] = new map<ECString, int>();
 
             for (int i = 0; i < newWords.Length; i++)
-                newWords[i] = new vector<ECString>();
+                if (newWords[i] == null) newWords[i] = new vector<ECString>();  // newWords[i] = new vector<ECString>();
 
             for (int i = 0; i < wordPlists.Length; i++)
-                wordPlists[i] = new list<float>();
+            {
+                // wordPlists[i] = new list<float>();
+                if (wordPlists[i] == null) wordPlists[i] = new list<float>();
+                else wordPlists[i].clear();
+            }
+
 
 
             depth = 0;
@@ -109,7 +179,7 @@ namespace BllipParser.DotNet.Vanilla
             heap = new EdgeHeap();
             int len = sentence.length();
             lastWord[id] = lastKnownWord;
-            Debug.Assert(len <= MAXSENTLEN);
+            AssertInternal(len <= MAXSENTLEN);
             for (int i = 0; i < len; i++)
             {
                 ECString wl = langAwareToLower(sentence.op(i).lexeme());
@@ -123,6 +193,46 @@ namespace BllipParser.DotNet.Vanilla
         }
 
         //virtual ~Bchart();
+
+
+        protected void ResetBchart(SentRep sentence, ExtPos extPosOrNull)
+        {
+            // Reset base
+            ResetChartBase(sentence);
+
+            // The ctor clears wordPlists; do the same here (cheap, only MAXSENTLEN lists).
+            for (int i = 0; i < wordPlists.Length; i++)
+                wordPlists[i]?.clear();
+
+            // Sentence-specific / parse-specific state
+            extraPos = extPosOrNull;
+            depth = 0;
+            curDir = -1;
+            gcurVal = null;
+
+            alreadyPoppedNum = 0;
+            pretermNum = 0;
+
+            // Heap: ideally Clear() without realloc 
+            heap?.Clear();
+
+            // Recompute sentence_.toInt mapping (this is in ctor)
+            int len = sentence.length();
+            lastWord[thrdid] = lastKnownWord;
+            Debug.Assert(len <= MAXSENTLEN);
+
+            for (int i = 0; i < len; i++)
+            {
+                ECString wl = langAwareToLower(sentence.op(i).lexeme());
+                int val = wtoInt(wl);
+                sentence_.op(i).toInt() = val;
+            }
+
+            // Clear curDemerits
+            for (int i = 0; i < MAXSENTLEN; i++)
+                for (int j = 0; j < MAXSENTLEN; j++)
+                    curDemerits_[i, j] = 0;
+        }
 
 
         public override double parse()
@@ -205,7 +315,7 @@ namespace BllipParser.DotNet.Vanilla
                 }
 
                 poppedEdgeCount_++;
-                alreadyPopped[alreadyPoppedNum++] = edge;
+                alreadyPoppedNum++;  //alreadyPopped[alreadyPoppedNum++] = edge;
                 if (!haveS)
                     addToDemerits(edge);
 
@@ -280,15 +390,15 @@ namespace BllipParser.DotNet.Vanilla
                 numFor[i] = 0;
 
             FeatureTree ft = FeatureTree.roots(MCALC);
-            for (k = 0; k < ft.subtree.size(); k++)
+            for (k = 0; ft.subtree != null && k < ft.subtree.size(); k++)
             {
                 FeatureTree ft2 = ft.subtree.index(k);
                 i = ft2.ind(); // i = rule term
-                for (l = 0; l < ft2.feats.size(); l++)
+                for (l = 0; l < ft2.feats_size(); l++)
                 {
-                    Feat f = ft2.feats.index(l);
+                    ref readonly Feat f = ref ft2.feats_index_ref_readonly(l);
                     j = f.ind(); //j = rule head term;
-                    Debug.Assert(numFor[j] < MAXNUMNTTS);
+                    AssertInternal(numFor[j] < MAXNUMNTTS);
                     //cerr << "For posstart " << j << " headphrase = " << i << endl;
                     posStarts(j, numFor[j]) = i;
                     numFor[j]++;
@@ -317,7 +427,7 @@ namespace BllipParser.DotNet.Vanilla
             if (val < 0 || val >= MAXNUMNTTS)
             {
                 Console.WriteLine("Bad val = " + val);
-                Debug.Assert(val >= 0 && val < MAXNUMTS);
+                AssertInternal(val >= 0 && val < MAXNUMTS);
             }
 
             return ref pT_[val];
@@ -375,11 +485,11 @@ namespace BllipParser.DotNet.Vanilla
             {
                 int pos = right != 0 ? itm.start() : itm.finish();
                 //cerr<< "Look for " << *itm << " " << pos << " " << right << endl;
-                var edgeIter = waitingEdges[right, pos].First;  //Edges::iterator edgeIter = waitingEdges[right][pos].begin();
-                for ( ; edgeIter != null; edgeIter = edgeIter.Next)  //for( ; edgeIter != waitingEdges[right][pos].end() ; edgeIter++ )
+                Edge edgeIter = waitingEdges_Head[right, pos];  //var edgeIter = waitingEdges[right, pos].First;  //Edges::iterator edgeIter = waitingEdges[right][pos].begin();
+                for (; edgeIter != null; edgeIter = GetWaitNext(edgeIter, right))  //for ( ; edgeIter != null; edgeIter = edgeIter.Next)  //for( ; edgeIter != waitingEdges[right][pos].end() ; edgeIter++ )
                 {
-                    Edge edge = edgeIter.Value;  //Edge* edge = *edgeIter;
-                    extend_rule(edge, itm, right);
+                    //Edge edge = edgeIter.Value;  //Edge* edge = *edgeIter;
+                    extend_rule(edgeIter, itm, right);  //extend_rule(edge, itm, right);
                 }
             }
         }
@@ -423,7 +533,7 @@ namespace BllipParser.DotNet.Vanilla
   
             if (newEdge.finishedParent() != null)
             {
-                Debug.Assert(newEdge.finishedParent() == regi);
+                AssertInternal(newEdge.finishedParent() == regi);
             }
             else
             {
@@ -462,9 +572,12 @@ namespace BllipParser.DotNet.Vanilla
 
         float meEdgeProb(in Term trm, Edge edge, int whichInt)
         {
-            FullHist fh = new FullHist(edge);
-            fh.cb = this;
-            Debug.Assert(fh.cb != null);
+            //FullHist fh = new FullHist(edge);
+            //fh.cb = this;
+            FullHist fh = Get_meEdgeProb_FullHistScratch(thrdid);
+            fh.InitForEdge(edge, this);
+
+            AssertInternal(fh.cb != null);
             float ans = meFHProb(trm, fh, whichInt);
             return ans;
         }
@@ -472,7 +585,7 @@ namespace BllipParser.DotNet.Vanilla
 
         float meFHProb(in Term trm, FullHist fh, int whichInt)
         {
-            Debug.Assert(fh.cb != null);
+            AssertInternal(fh.cb != null);
             Edge edge = fh.e;
             int pos = 0;
             /* the left to right position we are working on is either the far left (0)
@@ -494,14 +607,17 @@ namespace BllipParser.DotNet.Vanilla
                     Console.WriteLine(fh.preTerm);
             }
 
-            FeatureTree [] ginfo = new FeatureTree[MAXNUMFS];  
+            var meFHProbScratch = Get_meFHProb_ScratchBuffer(thrdid);
+            FeatureTree [] ginfo = meFHProbScratch.GInfo;  //FeatureTree [] ginfo = new FeatureTree[MAXNUMFS];
             ginfo[0] = FeatureTree.roots(whichInt);
-            Debug.Assert(ginfo[0] != null);
-            float [] smoothedPs = new float[MAXNUMFS];
+            AssertInternal(ginfo[0] != null);
+            float [] smoothedPs = meFHProbScratch.SmoothedPs;  //float [] smoothedPs = new float[MAXNUMFS];
 
             float ans = 1;
 
-            for (int i = 1; i <= Feature.total[whichInt]; i++)
+            bool useNewBucketing = Feature.isLM || Feature.useExtraConditioning;
+            int featureTotal = Feature.total[whichInt];
+            for (int i = 1; i <= featureTotal; i++)
             {
                 ginfo[i] = null;
                 Feature feat = Feature.fromInt(i, whichInt); 
@@ -520,17 +636,19 @@ namespace BllipParser.DotNet.Vanilla
                 if (i == 1)
                 {
                     smoothedPs[0] = 1;
-                    Debug.Assert(histPt != null);
-                    Feat f = histPt.feats.find(cVal);
-                    if (f == null)
+                    AssertInternal(histPt != null);
+                    //Feat* f =histPt->feats.find(cVal);
+                    //if(!f)
+                    if (!histPt.try_feats_find_index(cVal, out int fIndex))
                         return 0.0f;
+                    ref readonly Feat f = ref histPt.feats_index_ref_readonly(fIndex);
 
                     smoothedPs[1] = f.g();
                     if (printDebug() > 238)
                         Console.WriteLine(i + " " + nfeatV + " " + smoothedPs[1]);
 
-                    for (int j = 2; j <= Feature.total[whichInt]; j++)
-                        smoothedPs[j] = 0;
+                    //for (int j = 2; j <= featureTotal; j++)
+                    //    smoothedPs[j] = 0;
 
                     ans = smoothedPs[1];
                     continue;
@@ -557,12 +675,12 @@ namespace BllipParser.DotNet.Vanilla
 
                 int b;
 
-                if (Feature.isLM || Feature.useExtraConditioning)
+                if (useNewBucketing)  //if (Feature.isLM || Feature.useExtraConditioning)
                 {
                     /*new bucketing */
-                    float sz = (float)histPt.feats.size();
+                    float sz = (float)histPt.feats_size();
                     float estm = (float)histPt.count / sz;
-                    Debug.Assert(i >= 2);
+                    AssertInternal(i >= 2);
                     b = bucket(estm, whichInt, i);
                 }
                 else
@@ -574,12 +692,12 @@ namespace BllipParser.DotNet.Vanilla
                     b = bucket(estm);
                 }
 
-                Feat ft = histPt.feats.find(cVal);
+                //Feat* ft = histPt->feats.find(cVal);
                 float unsmoothedVal;
-                if (ft == null)
+                if (!histPt.try_feats_find_index(cVal, out int ftIndex))
                     unsmoothedVal = 0;
                 else
-                    unsmoothedVal = ft.g();
+                    unsmoothedVal = histPt.feats_index_ref_readonly(ftIndex).g();
 
                 float lam = Feature.getLambda(whichInt, i, b);
                 float uspathprob = lam*unsmoothedVal;
@@ -593,6 +711,8 @@ namespace BllipParser.DotNet.Vanilla
                 smoothedPs[i] = nsmoothedVal;
                 ans *= nsmoothedVal / osmoothedVal;
             }
+
+            //meFHProbScratch.Clear();
 
             if (printDebug() > 128)
             {
@@ -619,7 +739,10 @@ namespace BllipParser.DotNet.Vanilla
                 Console.WriteLine("extend_rule " + edge + " " + item);
 
             Term itemTerm = item.term();
-            LeftRightGotIter lrgi = new LeftRightGotIter(newEdge);
+
+            //LeftRightGotIter lrgi = new LeftRightGotIter(newEdge);
+            Item [] lrGotIterScratch = Get_lrGotIter_ScratchBuffer(thrdid);
+            LeftRightGotIter lrgi = new LeftRightGotIter(newEdge, lrGotIterScratch);
             globalGi[thrdid] = lrgi;
 
             if (edge.loc() == edge.start())
@@ -673,10 +796,10 @@ namespace BllipParser.DotNet.Vanilla
             globalGi[thrdid] = null;
             if (newEdge.merit() == 0)
             {
-                Debug.Assert(alreadyPoppedNum < 450000);
-                alreadyPopped[alreadyPoppedNum++] = newEdge;
+                AssertInternal(alreadyPoppedNum < 450000);
+                alreadyPoppedNum++;  //alreadyPopped[alreadyPoppedNum++] = newEdge;
                 Edge prd = newEdge.pred();
-                prd?.sucs().pop_front();
+                prd?.PopFirstSuccessor();  //prd?.sucs().pop_front();
 
                 return;
             }
@@ -691,11 +814,13 @@ namespace BllipParser.DotNet.Vanilla
 
         void already_there_extention(int i, int start, int right, Edge edge)
         {
-            Debug.Assert(i >= 0 && i < MAXSENTLEN && start >= 0 && start < MAXSENTLEN);
-            var regsiter = regs[i, start].First;  //Items::iterator regsiter = regs[i][start].begin();
-            for( ; regsiter != null; regsiter = regsiter.Next)  //for( ; regsiter != regs[i][start].end() ; regsiter++)
+            AssertInternal(i >= 0 && i < MAXSENTLEN && start >= 0 && start < MAXSENTLEN);
+            //var regsiter = regs[i, start].First;  //Items::iterator regsiter = regs[i][start].begin();
+            var cell = regs[i, start];
+            int count = (int)cell.size();
+            for (int k = 0; k < count; k++)  //for( ; regsiter != null; regsiter = regsiter.Next)  //for( ; regsiter != regs[i][start].end() ; regsiter++)
             {
-                Item item = regsiter.Value;  //Item* item = *regsiter;
+                Item item = cell.at(k);  //Item item = regsiter.Value;  //Item* item = *regsiter;
                 extend_rule(edge, item, right);
             }
         }
@@ -728,8 +853,8 @@ namespace BllipParser.DotNet.Vanilla
                     already_there_extention(loc - i - 1, i, right, edge);
             }
 
-            Debug.Assert(loc >= 0 && loc < MAXSENTLEN);
-            waitingEdges[right, loc].push_back( edge ); 
+            AssertInternal(loc >= 0 && loc < MAXSENTLEN);
+            WaitListAddTail(right, loc, edge);  //waitingEdges[right, loc].push_back( edge ); 
         }
 
 
@@ -741,6 +866,12 @@ namespace BllipParser.DotNet.Vanilla
             if (diff < 0 || st < 0 || diff > MAXSENTLEN || st > MAXSENTLEN)
                 error("illegal indices in put_in_reg");
 
+            if (!regsTouched[diff, st])
+            {
+                regsTouched[diff, st] = true;
+                regsTouchedList.push_back(diff * MAXSENTLEN + st);
+            }
+
             regs[diff, st].push_back(itm);
         }
 
@@ -750,18 +881,18 @@ namespace BllipParser.DotNet.Vanilla
 
         Item in_chart(in Wrd hd, in Term trm, int start, int finish)
         {
-            Item itm;
-
             if (finish <= 0 || start < 0 || finish - start - 1 < 0)
             {
                 Console.WriteLine("For " + trm + "(" + start + ", " + finish + ")");
                 error( "bogus boundary params in in_chart" );
             }
 
-            var regsIter = regs[finish - start - 1, start].First;  //Items::iterator regsIter = regs[finish - start - 1][start].begin();
-            for ( ; regsIter != null; regsIter = regsIter.Next)  //for( ; regsIter != regs[finish - start - 1][start].end(); ++regsIter )
+            //var regsIter = regs[finish - start - 1, start].First;  //Items::iterator regsIter = regs[finish - start - 1][start].begin();
+            var cell = regs[finish - start - 1, start];
+            int count = (int)cell.size();
+            for (int k = 0; k < count; k++)  //for ( ; regsIter != null; regsIter = regsIter.Next)  //for( ; regsIter != regs[finish - start - 1][start].end(); ++regsIter )
             {
-                itm = regsIter.Value;  //itm = *regsIter;
+                Item itm = cell.at(k);  //itm = regsIter.Value;  //itm = *regsIter;
                 if (itm.term() == trm &&
                     //itm->head() == hd &&
                     itm.start() == start &&

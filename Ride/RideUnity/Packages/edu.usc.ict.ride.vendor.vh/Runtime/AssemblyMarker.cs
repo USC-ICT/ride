@@ -1,8 +1,8 @@
-// included to suppress Unity warning:
-// Assembly for Assembly Definition File '' will not be compiled, because it has no scripts associated with it.
+// This file intentionally exists so Unity will compile this asmdef even when
+// the package contains no regular C# source files, only precompiled plugins/assets.
 namespace Ride.Vendor.VH
 {
-    class Unused
+    internal static class AssemblyMarker
     {
     }
 }

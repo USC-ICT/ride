@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -9,18 +9,39 @@ using System.Text;
 
 namespace Ride
 {
+    /// <summary>
+    /// Shared AWS helper methods used by Ride systems for capability checks and Signature Version 4 request signing.
+    /// </summary>
+    /// <remarks>
+    /// The current callers primarily use these helpers when validating S3-backed Ride capabilities and when generating
+    /// AWS Signature Version 4 authorization headers for Lex requests.
+    /// See: https://docs.aws.amazon.com/general/latest/gr/signature-version-4.html
+    /// </remarks>
     public static class RideAWSUtils
     {
+        /// <summary>
+        /// Checks whether a named Ride capability is available by requesting a signed URL from the AWS file-storage system and then
+        /// probing the returned resource.
+        /// </summary>
+        /// <param name="behaviour">Behaviour used to run the internal web-request coroutine.</param>
+        /// <param name="capability">Capability object name or key to query from the <c>ride-capabilities</c> bucket.</param>
+        /// <param name="onComplete">
+        /// Callback invoked with <c>"success"</c> when the capability probe succeeds, or <c>null</c> when the signed URL cannot be
+        /// generated or the request fails.
+        /// </param>
+        /// <returns>
+        /// Coroutine that waits for the signed URL lookup and capability request to complete before invoking <paramref name="onComplete"/>.
+        /// </returns>
         public static IEnumerator CheckCapability(UnityEngine.MonoBehaviour behaviour, string capability, Action<string> onComplete)
         {
             // "valid-key"
             // "cache-enabled"
 
-            var configSystem = Globals.api.GetSystem<ConfigurationSystemUnity>();
+            var configSystem = Systems.Get<ConfigurationSystemUnity>();
             string cognitoIdentityPoolId = configSystem.GetTerrainKey();  // us-west-2:00x0xxx0-000x-000x-00x0-0000000xxxxx
             string region = configSystem.GetTerrainKeyRegion();
 
-            var aws = Globals.api.GetSystem<AWS.AWSFileStorageS3System>();
+            var aws = Systems.Get<AWS.AWSFileStorageS3System>();
             aws.m_cognitoIdentityPoolId = cognitoIdentityPoolId;
             aws.m_regionName = region;
             bool finished = false;
@@ -48,13 +69,9 @@ namespace Ride
             yield return behaviour.StartCoroutine(RideIO.Request(url, (ret) =>
             {
                 if (string.IsNullOrEmpty(ret))
-                {
                     RideLog.Log($"RideIO.CheckCapabilitiy() - Request Failed: {url} - {ret}");
-                }
                 else
-                {
                     capabilitiyReturn = "success";
-                }
             }));
 
             onComplete?.Invoke(capabilitiyReturn);
@@ -115,19 +132,28 @@ namespace Ride
         }
 
         /// <summary>
-        /// Calculates authorization header for AWS requests.
+        /// Builds the AWS Signature Version 4 <c>Authorization</c> header value for an HTTP request.
         /// </summary>
-        /// <param name="uri">URI to send request to</param>
-        /// <param name="content">Content to be sent</param>
-        /// <param name="httpMethod">HTPP method (e.g., POST, PUT)</param>
-        /// <param name="awsRegion">AWS region</param>
-        /// <param name="awsAccessKey">Access key</param>
-        /// <param name="awsSecretKey">Secret key</param>
-        /// <param name="awsHeaders">Headers used in the request, both keys and values (e.g., host, x-amz-date)</param>
-        /// <param name="awsDateTime">Date and time, in form yyyyMMddTHHmmssZ</param>
-        /// <param name="awsDate">Date, in form yyyyMMdd</param>
-        /// <param name="awsServiceName">AWS service request is sent to (e.g., lex)</param>
-        /// <returns>Value for authorization request header</returns>
+        /// <param name="uri">Full request URI that will be sent to AWS, including any query-string parameters.</param>
+        /// <param name="content">Serialized request body used as the payload when hashing and signing the request.</param>
+        /// <param name="httpMethod">HTTP method used by the request, such as <see cref="HttpMethod.Get"/>, <see cref="HttpMethod.Post"/>, or <see cref="HttpMethod.Put"/>.</param>
+        /// <param name="awsRegion">AWS region used in the credential scope, such as <c>us-west-2</c>.</param>
+        /// <param name="awsAccessKey">AWS access key identifier included in the generated credential scope.</param>
+        /// <param name="awsSecretKey">AWS secret key used to derive the Signature Version 4 signing key.</param>
+        /// <param name="awsHeaders">
+        /// Request headers that participate in canonicalization and signing, typically including at least <c>host</c> and <c>x-amz-date</c>.
+        /// </param>
+        /// <param name="awsDateTime">Timestamp used for signing, formatted as <c>yyyyMMddTHHmmssZ</c>.</param>
+        /// <param name="awsDate">Date portion of the signing timestamp, formatted as <c>yyyyMMdd</c>.</param>
+        /// <param name="awsServiceName">AWS service name used in the credential scope, such as <c>lex</c>.</param>
+        /// <returns>
+        /// Fully formatted value for the outgoing HTTP <c>Authorization</c> header, including the credential scope, signed headers list,
+        /// and computed request signature.
+        /// </returns>
+        /// <remarks>
+        /// This helper follows AWS Signature Version 4 canonical-request and string-to-sign rules.
+        /// See: https://docs.aws.amazon.com/general/latest/gr/sigv4_signing.html
+        /// </remarks>
         public static string GetAWSAuthorizationHeader(string uri, string content, HttpMethod httpMethod, string awsRegion, string awsAccessKey, string awsSecretKey, Dictionary<string, string> awsHeaders, string awsDateTime, string awsDate, string awsServiceName)
         {
             // Sign request per https://docs.aws.amazon.com/general/latest/gr/sigv4_signing.html
@@ -163,9 +189,7 @@ namespace Ride
             // Step 4: Canonical headers
 
             foreach (var header in awsHeaders)
-            {
                 req.Headers.Add(header.Key, header.Value);
-            }
 
             var headers = new List<string>();
             foreach (var header in req.Headers.OrderBy(a => a.Key.ToLower()))
@@ -208,23 +232,15 @@ namespace Ride
             return "AWS4-HMAC-SHA256 Credential=" + awsAccessKey + "/" + credentialScope + ", SignedHeaders=" + signedHeaders + ", Signature=" + signature;
         }
 
-        static string GetHash(string data)
-        {
-            return GetStringFromHash(SHA256.Create().ComputeHash(Encoding.UTF8.GetBytes(data)));
-        }
-
-        static byte[] GetKeyedHash(byte[] key, string content)
-        {
-            return new HMACSHA256(key).ComputeHash(Encoding.UTF8.GetBytes(content));
-        }
+        static string GetHash(string data) => GetStringFromHash(SHA256.Create().ComputeHash(Encoding.UTF8.GetBytes(data)));
+        static byte[] GetKeyedHash(byte[] key, string content) => new HMACSHA256(key).ComputeHash(Encoding.UTF8.GetBytes(content));
 
         static string GetStringFromHash(byte[] content)
         {
-            StringBuilder sb = new StringBuilder();
+            var sb = new StringBuilder();
             for (int i = 0; i < content.Length; i++)
-            {
                 sb.Append(content[i].ToString("x2"));
-            }
+
             return sb.ToString();
         }
     }

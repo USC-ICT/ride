@@ -1,0 +1,18 @@
+{
+    "name": "USC-ICT.Ride.Cognition.Editor",
+    "rootNamespace": "",
+    "references": [
+        "GUID:925050033004c334fb25bd207f080b17"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

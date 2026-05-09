@@ -9,10 +9,32 @@ namespace Ride.SpeechRecognition
     /// </summary>
     public abstract class SpeechRecognitionSystemUnity : RideSystemMonoBehaviour, ISpeechRecognitionSystem
     {
+        [SerializeField, Min(0f), Tooltip(
+            "Auto Silence Timeout (seconds).\n" +
+            "After speech has started, recognition will stop if no sound is detected for this duration.\n" +
+            "Controls how long pauses between words or sentences are allowed.")]
+        float m_autoSilenceTimeoutSeconds = 1.2f;
+
+        [SerializeField, Min(0f), Tooltip(
+            "Initial Silence Timeout (seconds).\n" +
+            "Maximum time to wait for the user to begin speaking after recognition starts.\n" +
+            "If no speech is detected within this time, recognition aborts.")]
+        float m_initialSilenceTimeoutSeconds = 10f;
+
         public abstract bool IsSupported { get; }
 
-        public abstract float AutoSilenceTimeoutSeconds { get; set; }
-        public abstract float InitialSilenceTimeoutSeconds { get; set; }
+        public virtual float AutoSilenceTimeoutSeconds
+        {
+            get => m_autoSilenceTimeoutSeconds;
+            set => m_autoSilenceTimeoutSeconds = Mathf.Max(0f, value);
+        }
+
+        public virtual float InitialSilenceTimeoutSeconds
+        {
+            get => m_initialSilenceTimeoutSeconds;
+            set => m_initialSilenceTimeoutSeconds = Mathf.Max(0f, value);
+        }
+
         public abstract bool SupportsContinuousRecognition { get; }
 
         public virtual bool IsRecognizing { get; protected set; }

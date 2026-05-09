@@ -5,6 +5,7 @@ using BstMap = BllipParser.DotNet.Vanilla.map<BllipParser.DotNet.Vanilla.CntxArr
 using Bsts = BllipParser.DotNet.Vanilla.list<BllipParser.DotNet.Vanilla.Bst>;  //typedef list<Bst*> Bsts;
 
 using static BllipParser.DotNet.Vanilla.Bst_global;
+using static BllipParser.DotNet.Vanilla.utils;
 
 
 namespace BllipParser.DotNet.Vanilla
@@ -57,7 +58,7 @@ namespace BllipParser.DotNet.Vanilla
 
 
             trm_ = (short)e.lhs().toInt();
-            Debug.Assert(trm_ >= 0 && trm_ < 400);
+            AssertInternal(trm_ >= 0 && trm_ < 400);
         }
 
         public Val(Val oval)
@@ -148,7 +149,7 @@ namespace BllipParser.DotNet.Vanilla
             //int hsz = heap.size();
             //cerr << "Need " << n << "th variation out of " << num()
             // << " with " << hsz << " on heap. " << done_<< endl;
-            Debug.Assert(n <= num());
+            AssertInternal(n <= num());
 
             if (num() > n)
                 return nbest[n];
@@ -159,7 +160,7 @@ namespace BllipParser.DotNet.Vanilla
             double oprob = 1;
             if (n > 0)
             {
-                Debug.Assert(nbest[n - 1] != null);
+                AssertInternal(nbest[n - 1] != null);
                 oprob = nbest[n - 1].prob();
             }
 

@@ -86,15 +86,15 @@ namespace BllipParser.DotNet.Vanilla
                 throw new NotImplementedException();
 #if false
                 extPosIfstream = new ifstream(nm);
-                Debug.Assert(extPosIfstream);
+                AssertInternal(extPosIfstream);
 #endif
             }
 
             if (args.isset('p'))
             {
                 float smoothPosAmount = Convert.ToSingle(args.value('p'));
-                Debug.Assert(smoothPosAmount >= 0);
-                Debug.Assert(smoothPosAmount <= 1);
+                AssertInternal(smoothPosAmount >= 0);
+                AssertInternal(smoothPosAmount <= 1);
                 Bchart.smoothPosAmount = smoothPosAmount;
             }
 

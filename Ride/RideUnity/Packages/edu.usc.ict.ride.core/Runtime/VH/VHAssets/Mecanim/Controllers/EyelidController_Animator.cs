@@ -1,5 +1,5 @@
-using Ride;
 using UnityEngine;
+using Ride;
 
 namespace VHAssets
 {
@@ -22,8 +22,10 @@ namespace VHAssets
         private int[] m_eyelidHashes;
 
 
-        void Start()
+        protected override void Start()
         {
+            base.Start();
+
             if (!TryGetComponent(out ILoadableAsset loadedAsset))
                 InitializeLoadedAsset();
         }
@@ -39,8 +41,10 @@ namespace VHAssets
                 m_animator.SetFloat(m_eyelidHashes[i], v);
         }
 
-        public void InitializeLoadedAsset()
+        public override void InitializeLoadedAsset()
         {
+            base.InitializeLoadedAsset();
+
             if (m_animator == null)
                 m_animator = GetComponentInChildren<Animator>();
 
@@ -50,6 +54,15 @@ namespace VHAssets
             m_eyelidHashes = new int[m_eyelidParams.Length];
             for (int i = 0; i < m_eyelidParams.Length; i++)
                 m_eyelidHashes[i] = Animator.StringToHash(m_eyelidParams[i]);
+        }
+
+        public override void ResetLoadedAsset()
+        {
+            base.ResetLoadedAsset();
+
+            // Drop references into unloaded hierarchy.
+            m_animator = null;
+            m_eyelidHashes = null;
         }
     }
 }

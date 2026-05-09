@@ -1,0 +1,20 @@
+{
+    "name": "USC-ICT.Ride.VH.Editor",
+    "rootNamespace": "",
+    "references": [
+        "GUID:6581efa823ee97c419222e80baa44c0e",
+        "GUID:6c1ba14c9cbf010418e9e28bda64acaa",
+        "GUID:925050033004c334fb25bd207f080b17"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

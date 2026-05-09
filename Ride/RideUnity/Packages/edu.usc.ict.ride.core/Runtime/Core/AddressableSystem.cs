@@ -124,12 +124,6 @@ namespace Ride
 
         public override void SystemAwake()
         {
-            //    if (Instance != null && Instance != this)
-            //    {
-            //        Destroy(gameObject);
-            //        return;
-            //    }
-            //    Instance = this;
             base.SystemAwake();
         }
 
@@ -207,7 +201,8 @@ namespace Ride
 
             if (!File.Exists(localCatalogPath))
             {
-                // populate these so that the rest of the system isn't waiting on this entry (see ValidateCatalogLoadStatus(), ValidateAssetBundleLoadStatus()
+                // Populate these so that the rest of the system isn't waiting on this entry
+                // (see ValidateCatalogLoadStatus(), ValidateAssetBundleLoadStatus()
                 addressableInfo.IsCatalogLoaded = true;
                 addressableInfo.AssetBundlesReady = true;
                 addressableInfo.AddAssetBundleKey($"{localCatalogPath}-unused");
@@ -299,7 +294,7 @@ namespace Ride
             {
                 addressableInfo.AssetBundlesReady = true;
                 ValidateAssetBundleLoadStatus();
-                yield break; //Skip AWS S3 signed URL fetching for local bundles
+                yield break; // Skip AWS S3 signed URL fetching for local bundles
             }
 
             foreach (string assetBundleKey in addressableInfo.AssetBundleKeys)
@@ -506,7 +501,7 @@ namespace Ride
                 {
                     foreach (var location in locations)
                     {
-                        //If we find an exact match where the PrimaryKey is the key, it's an asset
+                        // If we find an exact match where the PrimaryKey is the key, it's an asset
                         if (location.PrimaryKey == key)
                             foundAsAsset = true;
                         else
@@ -514,7 +509,7 @@ namespace Ride
                     }
                 }
             }
-            //If the key exists as both a label and an asset, treat it as an asset.
+            // If the key exists as both a label and an asset, treat it as an asset.
             return foundAsLabel && !foundAsAsset;
         }
 
@@ -537,7 +532,7 @@ namespace Ride
                     }
                 }
             }
-            //Remove asset name from labels list unless it was explicitly assigned as a label
+            // Remove asset name from labels list unless it was explicitly assigned as a label
             if (!assetNameIsARealLabel)
                 labels.Remove(assetName);
 
@@ -590,7 +585,7 @@ namespace Ride
 
         private bool IsLikelyHash(string label)
         {
-            //Check if hex string (like a GUID or hash)
+            // Check if hex string (like a GUID or hash)
             return label.Length > 30 && System.Text.RegularExpressions.Regex.IsMatch(label, @"^[a-fA-F0-9]{30,}$");
         }
 
@@ -644,9 +639,10 @@ namespace Ride
                         Debug.LogError($"Failed to load catalog: {catalogPath}");
                 };
             }
-            #if UNITY_EDITOR
+
+#if UNITY_EDITOR
             EditorApplication.update += MonitorCatalogLoading;
-            #endif
+#endif
         }
 
         private void MonitorCatalogLoading()
@@ -665,17 +661,16 @@ namespace Ride
             if (allLoaded)
             {
                 Debug.Log("All Addressable catalogs finished loading. Populating asset labels...");
-                #if UNITY_EDITOR
+#if UNITY_EDITOR
                 EditorApplication.update -= MonitorCatalogLoading; 
-                #endif
+#endif
                 m_allCatalogsLoaded = true;
                 PopulateAssetLabels();
                 
-                #if UNITY_EDITOR
+#if UNITY_EDITOR
                 EditorUtility.SetDirty(this);
-                #endif
+#endif
             }
         }
     }
 }
-

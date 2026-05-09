@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using VHAssets;
@@ -8,35 +8,33 @@ using Ride.WorldState;
 
 namespace Ride.UI
 {
-    public class ViewSystemMono : RideSystemMonoBehaviour, IViewSystem
+    public class ViewSystemUnity : RideSystemMonoBehaviour, IViewSystem
     {
         List<IMenu> m_menus = new List<IMenu>();
-        IScenarioSystem scenarioSystem { get { return Globals.api.scenarioSystem; } }
-        IAgentSystem agentSystem { get { return Globals.api.agentSystem; } }
-        IWorldStateSystem worldStateSystem { get { return Globals.api.worldStateSystem; } }
-        public ISelector<RideID> agentSelector { get; set; } // deprecated || TODO: Remove
+        IScenarioSystem scenarioSystem => Systems.Scenario;
+        IAgentSystem agentSystem => Systems.Agent;
+        IWorldStateSystem worldStateSystem => Systems.WorldState;
         public ISelector<RideID> entitySelector { get; set; }
         public IGrouperSystem<RideID> grouperSystem { get; set; }
-        public IEnumerable<RideID> selectedEntities { get => grouperSystem.GetCurrentGroup(); }
+        public IEnumerable<RideID> selectedEntities => grouperSystem.GetCurrentGroup();
         public IGroupIdCreatorSystem groupIdCreatorSystem { get; set; }
-        public ViewSystemParams config { get; set; }
+        public ViewSystemParams config { get => m_config; set => m_config = value; }
         public IViewSystemMenu viewSystemMenu { get; set; }
 
-        [SerializeField] bool useLegacyAgentSelector = false;
+        [SerializeField] ViewSystemParams m_config = new();
+        [SerializeField] GameObject m_viewSystemMenuPrefab;
+
         [SerializeField] bool showDebugEntityData = false;
         [SerializeField] UI.EntityDebugUICard debugEntityUICard = null;
-        Dictionary<RideID, UI.EntityDebugUICard> debugEntityCardList = new Dictionary<RideID, UI.EntityDebugUICard>();
+        Dictionary<RideID, UI.EntityDebugUICard> debugEntityCardList = new();
 
 
         public override void SystemAwake()
         {
             base.SystemAwake();
 
-            config = ViewSystemParams.Default;
-            config.flags = ViewSystemConfigFlags.All;
-
-            Globals.api.worldStateSystem?.AddListener<SelectionEvent>(WorldEvent.entitySelectionChanged, onSelectionChanged);
-            Globals.api.worldStateSystem?.AddListener<EntityDataEvent>(WorldEvent.entityDataUpdate, onEntityDataUpdate);
+            worldStateSystem?.AddListener<SelectionEvent>(WorldEvent.entitySelectionChanged, onSelectionChanged);
+            worldStateSystem?.AddListener<EntityDataEvent>(WorldEvent.entityDataUpdate, onEntityDataUpdate);
 
             // Entity selector system
             var entitySelectorComponent = new GameObject("RideEntitySelectorSystem").AddComponent<RideEntitySelectorSystem>();
@@ -44,26 +42,18 @@ namespace Ride.UI
             entitySelectorComponent.transform.SetParent(this.transform);
             entitySelector = entitySelectorComponent;
 
-            // Create ability to do agent selection
-            var agentSelectorComponent = new GameObject("AgentSelectorInputSystem").AddComponent<AgentSelectorInputSystem>();
-            agentSelectorComponent.selectorDisplayMenu = GetComponentFromMenu<ISelectorDisplay>();
-            agentSelectorComponent.transform.SetParent(this.transform);
-            agentSelector = agentSelectorComponent;
-            agentSelector.enabled = useLegacyAgentSelector;
         }
-
-        public GameObject m_viewSystemMenuPrefab;
 
         public override void SystemInit()
         {
             base.SystemInit();
 
-            // Find all the mono menus, inject and store them
-            List<MenuMono> menuMonos = VHUtils.FindObjectsOfTypeAll<MenuMono>();
-            foreach (MenuMono menuMono in menuMonos)
+            // Find all Unity-backed menus, inject them, and store them.
+            var menuUnities = VHUtils.FindObjectsOfTypeAll<MenuUnity>();
+            foreach (var menuUnity in menuUnities)
             {
-                menuMono.Inject(this, scenarioSystem, agentSystem, worldStateSystem);
-                m_menus.Add(menuMono);
+                menuUnity.Inject(this, scenarioSystem, agentSystem, worldStateSystem);
+                m_menus.Add(menuUnity);
             }
 
             // Create ability to do agent grouping
@@ -75,7 +65,7 @@ namespace Ride.UI
             var groupIdCreatorSystemComponent = new GameObject("GroupIdCreatorKeyboardInputSystem").AddComponent<GroupIdCreatorKeyboardInputSystem>();
             groupIdCreatorSystemComponent.transform.SetParent(this.transform);
             groupIdCreatorSystem = groupIdCreatorSystemComponent;
-                        
+
             GameObject viewSystemMenuPrefab = GameObject.Instantiate(m_viewSystemMenuPrefab);
             viewSystemMenuPrefab.name = viewSystemMenuPrefab.name.Replace("(Clone)", "");
             viewSystemMenuPrefab.transform.SetParent(this.transform);
@@ -91,43 +81,21 @@ namespace Ride.UI
         public override void SystemUpdate(float dt)
         {
             if (CurrentMouseButtonEventIsForGuiControls())
-            {
-                return; // Prevent mouse GUI click through
-            }
+                return;  // Prevent mouse GUI click through
 
             if (IsOn(ViewSystemConfigFlags.Unit_Selection))
             {
-                // Test for agent selection
-                if (agentSelector.isFinishedSelecting && agentSelector.enabled)
-                {
-                    IEnumerable<RideID> selectedAgents = agentSelector.PerformSelection();
-
-                    List<RideID> deselectedAgents = new List<RideID>(agentSystem.GetSelectedAgents());
-
-                    // Unselect the currently selected
-                    agentSystem.SetAgentsSelected(deselectedAgents, false);
-
-                    // Select the new ones
-                    grouperSystem.SetGroup(selectedAgents);
-                    agentSystem.SetAgentsSelected(selectedAgents, true);
-
-                    deselectedAgents.RemoveAll(i => (new List<RideID>(agentSystem.GetSelectedAgents())).Contains(i));
-
-                    worldStateSystem.DispatchEvent<SelectionEvent>(WorldEvent.entitySelectionChanged, new SelectionEvent(deselectedAgents.ToArray(), agentSystem.GetSelectedAgents()));
-                }
-
                 // Test for group creation and selection
                 if (groupIdCreatorSystem.IsGroupCreationTriggered())
-                {
                     grouperSystem.SaveGroup(groupIdCreatorSystem.CreateGroupId());
-                }
+
                 if (groupIdCreatorSystem.IsGroupSelectionTriggered())
                 {
                     // unselect all current
-                    agentSystem.SetAgentsSelected(grouperSystem.GetCurrentGroup(), false);
+                    agentSystem?.SetAgentsSelected(grouperSystem.GetCurrentGroup(), false);
 
                     grouperSystem.SetGroup(groupIdCreatorSystem.GetGroupSelection());
-                    agentSystem.SetAgentsSelected(grouperSystem.GetCurrentGroup(), true);
+                    agentSystem?.SetAgentsSelected(grouperSystem.GetCurrentGroup(), true);
                 }
             }
         }
@@ -135,8 +103,8 @@ namespace Ride.UI
         public override void SystemShutdown()
         {
             base.SystemShutdown();
+
             grouperSystem.SystemInit();
-            agentSelector.SystemShutdown();
             entitySelector.SystemShutdown();
         }
 
@@ -145,17 +113,14 @@ namespace Ride.UI
             T comp = default;
             foreach (var imenu in m_menus)
             {
-                MenuMono menu = imenu as MenuMono;
+                MenuUnity menu = imenu as MenuUnity;
                 comp = menu.GetComponent<T>();
                 if (!EqualityComparer<T>.Default.Equals(comp, default)) return comp;  //if (comp != default) return comp;  // https://developercommunity.visualstudio.com/content/problem/744160/1640-preview-does-not-compile-x-default.html
             }
             return comp;
         }
 
-        bool IsOn(ViewSystemConfigFlags flags)
-        {
-            return (config.flags & flags) == flags;
-        }
+        bool IsOn(ViewSystemConfigFlags flags) => (config.flags & flags) == flags;
 
         void onSelectionChanged(WorldEventMarker sim, SelectionEvent e)
         {
@@ -174,7 +139,7 @@ namespace Ride.UI
         {
             if (debugEntityCardList.ContainsKey(e.entityID))
             {
-                foreach(EntityDataEvent.EntityDataPoint dataPoint in e.dataPoints)
+                foreach (var dataPoint in e.dataPoints)
                     debugEntityCardList[e.entityID].UpdateDataPoint(dataPoint.category, dataPoint.value);
             }
         }
@@ -183,8 +148,9 @@ namespace Ride.UI
         {
             while (true)
             {
-                foreach(RideID entityId in debugEntityCardList.Keys)
-                    Globals.api.worldStateSystem.DispatchEvent<EntityEvent>(WorldEvent.entityDataRequest, new EntityEvent(entityId));
+                foreach (RideID entityId in debugEntityCardList.Keys)
+                    worldStateSystem?.DispatchEvent(WorldEvent.entityDataRequest, new EntityEvent(entityId));
+
                 yield return new WaitForSeconds(0.1f);
             }
         }
@@ -208,7 +174,7 @@ namespace Ride.UI
             if (!debugEntityCardList.ContainsKey(entityId))
             {
                 EntityDebugUICard newDebugDataCard = Instantiate(debugEntityUICard, cnv.transform);
-                newDebugDataCard.AttachedGameObject = Globals.api.componentSystem.GetComponent<Transform>(entityId).gameObject;
+                newDebugDataCard.AttachedGameObject = Systems.Component.GetComponent<Transform>(entityId).gameObject;
                 debugEntityCardList.Add(entityId, newDebugDataCard);
 
                 newDebugDataCard.UpdateDataPoint("RideID", entityId.ToString());
@@ -217,7 +183,7 @@ namespace Ride.UI
 
         void RemoveEntityDebugData(RideID entityId)
         {
-            if(debugEntityCardList.ContainsKey(entityId))
+            if (debugEntityCardList.ContainsKey(entityId))
             {
                 Destroy(debugEntityCardList[entityId].gameObject);
                 debugEntityCardList.Remove(entityId);
@@ -239,13 +205,15 @@ namespace Ride.UI
             if (mouseButtonDownOnGuiControl)
             {
                 m_bypassNextMouseButtonUpEvent = true;
-                return true;//prevent mouse DOWN GUI click through
+                return true;  // prevent mouse DOWN GUI click through
             }
-            if (m_bypassNextMouseButtonUpEvent && Input.GetMouseButtonUp(0)) //hard code button id to 0, because related field in AgentSelectorInputSystem is not accessible
+
+            if (m_bypassNextMouseButtonUpEvent && Input.GetMouseButtonUp(0))
             {
                 m_bypassNextMouseButtonUpEvent = false;
-                return true;//prevent mouse UP GUI click through
+                return true;  // prevent mouse UP GUI click through
             }
+
             return false;
         }
         #endregion

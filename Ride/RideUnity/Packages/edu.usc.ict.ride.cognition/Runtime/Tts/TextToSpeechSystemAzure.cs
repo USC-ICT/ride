@@ -69,6 +69,38 @@ namespace Ride.TextToSpeech
     /// </remarks>
     public class TextToSpeechSystemAzure : TextToSpeechSystemLipsynced, ILipsyncMapper
     {
+        [Serializable]
+        private struct AzureRawVisemeEvent
+        {
+            public int VisemeId;
+            public double TimeSeconds;
+
+            public AzureRawVisemeEvent(int visemeId, double timeSeconds)
+            {
+                VisemeId = visemeId;
+                TimeSeconds = timeSeconds;
+            }
+
+            public override string ToString() => $"[{TimeSeconds:0.000}] id={VisemeId}";
+        }
+
+        [Serializable]
+        private struct AzureRawWordBoundaryEvent
+        {
+            public string Word;
+            public double StartTimeSeconds;
+            public double EndTimeSeconds;
+
+            public AzureRawWordBoundaryEvent(string word, double startTimeSeconds, double endTimeSeconds)
+            {
+                Word = word;
+                StartTimeSeconds = startTimeSeconds;
+                EndTimeSeconds = endTimeSeconds;
+            }
+
+            public override string ToString() => $"[{StartTimeSeconds:0.000}-{EndTimeSeconds:0.000}] '{Word}'";
+        }
+
         #region IPAtoFacefxMap
         /// <summary>
         /// Represents a mapping from an IPA phoneme to corresponding FaceFX visemes and their blend amounts.
@@ -202,14 +234,17 @@ namespace Ride.TextToSpeech
             // Initialize collections to store the visemes and other marks
             var visemeList = new List<GenerateAudioReplyViseme>();
             var markList = new List<KeyValuePairS<string, double>>();
-            var wordBreakList = new List<KeyValuePairS<double, double>>();
+            var wordTimingList = new List<WordTimingData>();
+            var rawVisemeEvents = new List<AzureRawVisemeEvent>();
+            var rawWordBoundaryEvents = new List<AzureRawWordBoundaryEvent>();
+            var unmappedVisemeIds = new HashSet<int>();
             int markIndex = 0;
 
             using (var synthesizer = new Microsoft.CognitiveServices.Speech.SpeechSynthesizer(speechConfig))
             {
                 // Hook events before kicking off synthesis
-                synthesizer.VisemeReceived += (s, e) => HandleVisemeReceived(e, visemeList);
-                synthesizer.WordBoundary  += (s, e) => HandleWordBoundary(e, markList, wordBreakList, ref markIndex, text);
+                synthesizer.VisemeReceived += (s, e) => HandleVisemeReceived(e, visemeList, rawVisemeEvents, unmappedVisemeIds);
+                synthesizer.WordBoundary  += (s, e) => HandleWordBoundary(e, markList, wordTimingList, rawWordBoundaryEvents, ref markIndex, text);
 
                 //Debug.Log("Starting text-to-speech synthesis...");
 
@@ -256,18 +291,23 @@ namespace Ride.TextToSpeech
                     soundFile = $"{Application.persistentDataPath}/azureTTS.mp3",
                     VisemeList = visemeList,
                     MarkList = markList,
-                    WordBreakList = wordBreakList
+                    WordTimingList = wordTimingList
                 };
 
-                AdjustWordTimings(ref map);
-                AdjustEndMarkTimings(ref map);
+                map.AdjustWordTimings();
+                map.AdjustEndMarkTimings();
+                LogAzureProviderDebug(rawVisemeEvents, rawWordBoundaryEvents, unmappedVisemeIds);
 
                 resultCallback?.Invoke(map);
             }
 #else
             // WebGL: call the proxy /visemes, then build AudioSpeechMap from the events
-            string lambda = "ik5zqibyechvqdv2w4zkstfb2m0hybqr";
-            string url = $"https://{lambda}.lambda-url.us-west-2.on.aws/visemes";
+            string url = ConfigurationSystemUnity.GetAzureTtsProxyEndpoint("visemes");
+            if (string.IsNullOrWhiteSpace(url))
+            {
+                resultCallback?.Invoke(null);
+                yield break;
+            }
 
             var payload = new TTSRequest { text = text, voice = voice };
             byte[] body = Encoding.UTF8.GetBytes(JsonUtility.ToJson(payload));
@@ -300,7 +340,7 @@ namespace Ride.TextToSpeech
 
                 var visemeList    = new List<GenerateAudioReplyViseme>();
                 var markList      = new List<KeyValuePairS<string, double>>();
-                var wordBreakList = new List<KeyValuePairS<double, double>>();
+                var wordTimingList = new List<WordTimingData>();
                 int markIndex     = 0;
 
                 if (reply?.visemes != null)
@@ -323,7 +363,7 @@ namespace Ride.TextToSpeech
                             // Mark before and after the word; set provisional end to start (fixed below)
                             double t = m.time;
                             markList.Add(new KeyValuePairS<string, double>($"T{markIndex++}", t));
-                            wordBreakList.Add(new KeyValuePairS<double, double>(t, t));
+                            wordTimingList.Add(new WordTimingData(m.value, t, t));
                             markList.Add(new KeyValuePairS<string, double>($"T{markIndex++}", t));
                         }
                     }
@@ -334,12 +374,38 @@ namespace Ride.TextToSpeech
                     soundFile     = "",
                     VisemeList    = visemeList,
                     MarkList      = markList,
-                    WordBreakList = wordBreakList
+                    WordTimingList = wordTimingList
                 };
 
                 // Normalize timings to fill word ends and end-marks
-                AdjustWordTimings(ref mapOut);
-                AdjustEndMarkTimings(ref mapOut);
+                mapOut.AdjustWordTimings();
+                mapOut.AdjustEndMarkTimings();
+
+                if (lipsyncDebugOutput)
+                {
+                    var rawVisemeEvents = new List<AzureRawVisemeEvent>();
+                    var rawWordBoundaryEvents = new List<AzureRawWordBoundaryEvent>();
+                    var unmappedVisemeIds = new HashSet<int>();
+
+                    foreach (var m in reply?.visemes ?? Array.Empty<SpeechMark>())
+                    {
+                        if (m == null)
+                            continue;
+
+                        if (m.type == "viseme")
+                        {
+                            rawVisemeEvents.Add(new AzureRawVisemeEvent(int.TryParse(m.value, out int visemeId) ? visemeId : -1, m.time));
+                            if (!m_IPAtoFacefxMap.ContainsKey(m.value))
+                                unmappedVisemeIds.Add(int.TryParse(m.value, out visemeId) ? visemeId : -1);
+                        }
+                        else if (m.type == "word")
+                        {
+                            rawWordBoundaryEvents.Add(new AzureRawWordBoundaryEvent(m.value ?? string.Empty, m.time, m.time));
+                        }
+                    }
+
+                    LogAzureProviderDebug(rawVisemeEvents, rawWordBoundaryEvents, unmappedVisemeIds);
+                }
 
                 resultCallback?.Invoke(mapOut);
             }
@@ -447,8 +513,12 @@ namespace Ride.TextToSpeech
             }
 #else
             // WebGL: POST /audio to proxy, then download the MP3 locally
-            string lambda = "ik5zqibyechvqdv2w4zkstfb2m0hybqr";
-            string postUrl = $"https://{lambda}.lambda-url.us-west-2.on.aws/audio";
+            string postUrl = ConfigurationSystemUnity.GetAzureTtsProxyEndpoint("audio");
+            if (string.IsNullOrWhiteSpace(postUrl))
+            {
+                CompleteTextToSpeechGeneration(null);
+                yield break;
+            }
 
             var payload = new TTSRequest { text = text, voice = voice };
             byte[] body = Encoding.UTF8.GetBytes(JsonUtility.ToJson(payload));
@@ -500,7 +570,9 @@ namespace Ride.TextToSpeech
         /// <param name="audioSpeechMap">The generated speech data including visemes and timings.<see cref="AudioSpeechMap"/></param>
         void OnAudioSpeechGeneration(AudioSpeechMap audioSpeechMap)
         {
-            CompleteLipsyncGeneration(TextToSpeechXMLBuilder.BuildSpeechXML(audioSpeechMap));
+            string xml = audioSpeechMap != null ? TextToSpeechXMLBuilder.BuildSpeechXML(audioSpeechMap) : string.Empty;
+            LogSpeechXmlDebug(audioSpeechMap, xml, "Azure");
+            CompleteLipsyncGeneration(xml);
         }
 
         /// <summary>
@@ -569,8 +641,14 @@ namespace Ride.TextToSpeech
                 speechConfig = null;
             }
 #else
-            string lambda = "ik5zqibyechvqdv2w4zkstfb2m0hybqr";
-            string lambdaUrl = $"https://{lambda}.lambda-url.us-west-2.on.aws/voices";
+            string lambdaUrl = ConfigurationSystemUnity.GetAzureTtsProxyEndpoint("voices");
+            if (string.IsNullOrWhiteSpace(lambdaUrl))
+            {
+                m_voices = new string[0];
+                m_voicesReady = true;
+                yield break;
+            }
+
             using (var request = UnityEngine.Networking.UnityWebRequest.Get(lambdaUrl))
             {
                 request.SetRequestHeader("Content-Type", "application/json");
@@ -609,18 +687,23 @@ namespace Ride.TextToSpeech
         /// </summary>
         /// <param name="e">The viseme event data.< see cref = "SpeechSynthesisVisemeEventArgs" /></param>
         /// <param name="visemeList">The list to populate with mapped visemes.< see cref = "GenerateAudioReplyViseme" /></param>
-        private void HandleVisemeReceived(Microsoft.CognitiveServices.Speech.SpeechSynthesisVisemeEventArgs e, List<GenerateAudioReplyViseme> visemeList)
+        private void HandleVisemeReceived(Microsoft.CognitiveServices.Speech.SpeechSynthesisVisemeEventArgs e, List<GenerateAudioReplyViseme> visemeList, List<AzureRawVisemeEvent> rawVisemeEvents, HashSet<int> unmappedVisemeIds)
         {
+            double timeSeconds = e.AudioOffset / 10000000.0;
+            rawVisemeEvents?.Add(new AzureRawVisemeEvent((int)e.VisemeId, timeSeconds));
+            // Debug.Log($"[Azure Viseme Raw] {timeSeconds:0.000}s id={e.VisemeId}");
+
             // Mapping viseme ID to facefx visemes
             if (m_IPAtoFacefxMap.TryGetValue(e.VisemeId.ToString(), out IPAtoFacefxMap map))
             {
                 for (int i = 0; i < map.facefxVisemes.Length; i++)
                 {
-                    visemeList.Add(new GenerateAudioReplyViseme(map.facefxVisemes[i], e.AudioOffset / 10000000.0, map.amounts[i]));
+                    visemeList.Add(new GenerateAudioReplyViseme(map.facefxVisemes[i], timeSeconds, map.amounts[i]));
                 }
             }
             else
             {
+                unmappedVisemeIds?.Add((int)e.VisemeId);
                 Debug.Log($"Failed to map viseme ID {e.VisemeId} to facefx. Discarding.");
             }
         }
@@ -630,10 +713,10 @@ namespace Ride.TextToSpeech
         /// </summary>
         /// <param name="e">The word boundary event data.</param>
         /// <param name="markList">List to store marks.</param>
-        /// <param name="wordBreakList">List to store word boundaries.</param>
+        /// <param name="wordTimingList">List to store word boundaries.</param>
         /// <param name="markIndex">Current mark index.</param>
         /// <param name="text">The full input text.</param>
-        private void HandleWordBoundary(Microsoft.CognitiveServices.Speech.SpeechSynthesisWordBoundaryEventArgs e, List<KeyValuePairS<string, double>> markList, List<KeyValuePairS<double, double>> wordBreakList, ref int markIndex, string text)
+        private void HandleWordBoundary(Microsoft.CognitiveServices.Speech.SpeechSynthesisWordBoundaryEventArgs e, List<KeyValuePairS<string, double>> markList, List<WordTimingData> wordTimingList, List<AzureRawWordBoundaryEvent> rawWordBoundaryEvents, ref int markIndex, string text)
         {
             char[] punctuationMarks = { '.', ',', '!', '?', ';', ':' };
             double startTime = e.AudioOffset / 10000000.0; // Convert to seconds
@@ -649,12 +732,15 @@ namespace Ride.TextToSpeech
                 // Skip if the word is just a punctuation mark
                 if (word.Length > 0 && !punctuationMarks.Contains(word[0]))
                 {
+                    rawWordBoundaryEvents?.Add(new AzureRawWordBoundaryEvent(word, startTime, endTime));
+                    // Debug.Log($"[Azure WordBoundary Raw] {startTime:0.000}-{endTime:0.000} '{word}'");
+
                     // Add a mark before the word starts
                     markList.Add(new KeyValuePairS<string, double>($"T{markIndex}", startTime));
                     markIndex++;
 
                     // Add the word boundaries
-                    wordBreakList.Add(new KeyValuePairS<double, double>(startTime, endTime));
+                    wordTimingList.Add(new WordTimingData(word, startTime, endTime));
 
                     // Add a mark after the word ends
                     markList.Add(new KeyValuePairS<string, double>($"T{markIndex}", endTime));
@@ -664,100 +750,27 @@ namespace Ride.TextToSpeech
         }
 #endif
 
-        /// <summary>
-        /// Adjusts the end timings of words in the AudioSpeechMap for more accurate playback alignment.
-        /// </summary>
-        /// <param name="audioSpeechMap">The AudioSpeechMap to modify.<see cref = "AudioSpeechMap"/></ param>
-        private static void AdjustWordTimings(ref AudioSpeechMap audioSpeechMap)
+        private void LogAzureProviderDebug(List<AzureRawVisemeEvent> rawVisemeEvents, List<AzureRawWordBoundaryEvent> rawWordBoundaryEvents, HashSet<int> unmappedVisemeIds)
         {
-            double lastTime = 0;
+            if (!lipsyncDebugOutput)
+                return;
 
-            for (int i = 0; i < audioSpeechMap.WordBreakList.Count; i++)
-            {
-                var wordBreak = audioSpeechMap.WordBreakList[i];
-                double startTime = wordBreak.Key;
-                double endTime = wordBreak.Value;
-                lastTime = endTime;
+            Debug.Log($"[Azure Raw] VisemeEvents={(rawVisemeEvents?.Count ?? 0)}, WordBoundaries={(rawWordBoundaryEvents?.Count ?? 0)}, MissingVisemeMappings={(unmappedVisemeIds?.Count ?? 0)}");
 
-                if (i > 0)
-                {
-                    // Update the end time of the previous word
-                    ChangeEndWordTiming(audioSpeechMap.WordBreakList, i - 1, startTime);
-                }
-            }
+            string visemeSummary = rawVisemeEvents == null || rawVisemeEvents.Count == 0
+                ? "<none>"
+                : string.Join(", ", rawVisemeEvents);
+            Debug.Log($"[Azure Visemes] {visemeSummary}");
 
-            // Update the end time of the last word
-            if (audioSpeechMap.WordBreakList.Count > 0)
-                ChangeEndWordTiming(audioSpeechMap.WordBreakList, audioSpeechMap.WordBreakList.Count - 1, lastTime);
-        }
+            string wordSummary = rawWordBoundaryEvents == null || rawWordBoundaryEvents.Count == 0
+                ? "<none>"
+                : string.Join(", ", rawWordBoundaryEvents);
+            Debug.Log($"[Azure Words] {wordSummary}");
 
-        /// <summary>
-        /// Updates the end time of a word timing entry.
-        /// </summary>
-        /// <param name="wordTimings">List of word timings.</param>
-        /// <param name="index">Index of the word to update.</param>
-        /// <param name="endTime">The new end time.</param>
-        private static void ChangeEndWordTiming(List<KeyValuePairS<double, double>> wordTimings, int index, double endTime)
-        {
-            var pair = wordTimings[index];
-            pair.Value = endTime;
-            wordTimings[index] = pair;
-        }
-
-        /// <summary>
-        /// Adjusts the end timings of mark entries in the AudioSpeechMap.
-        /// </summary>
-        /// <param name="audioSpeechMap">The AudioSpeechMap to modify.<see cref = "AudioSpeechMap"/></param>
-        private static void AdjustEndMarkTimings(ref AudioSpeechMap audioSpeechMap)
-        {
-            double lastTime = 0;
-
-            for (int i = 0; i < audioSpeechMap.MarkList.Count; i++)
-            {
-                var mark = audioSpeechMap.MarkList[i];
-                double time = mark.Value;
-                lastTime = time;
-
-                // Check if the mark index is odd
-                if (i % 2 != 0)
-                {
-                    // Find the corresponding end time of the word the mark is inside
-                    double endTime = FindWordEndTime(audioSpeechMap, time);
-
-                    // Update the mark time with the word end time
-                    audioSpeechMap.MarkList[i] = new KeyValuePairS<string, double>(mark.Key, endTime);
-                }
-            }
-
-            // Update the end time of the last mark if there are odd number of marks
-            if (audioSpeechMap.MarkList.Count > 0 && audioSpeechMap.MarkList.Count % 2 != 0)
-            {
-                audioSpeechMap.MarkList[audioSpeechMap.MarkList.Count - 1] = new KeyValuePairS<string, double>(
-                    audioSpeechMap.MarkList[audioSpeechMap.MarkList.Count - 1].Key,
-                    lastTime
-                );
-            }
-        }
-
-        /// <summary>
-        /// Finds the ending time of a word that contains the given mark time.
-        /// </summary>
-        /// <param name="audioSpeechMap">The speech map containing word data.<see cref = "AudioSpeechMap"/></param>
-        /// <param name="markTime">The time of the mark to resolve.</param>
-        /// <returns>The corresponding word's end time.</returns>
-        private static double FindWordEndTime(AudioSpeechMap audioSpeechMap, double markTime)
-        {
-            foreach (var wordBreak in audioSpeechMap.WordBreakList)
-            {
-                if (markTime >= wordBreak.Key && markTime <= wordBreak.Value)
-                {
-                    // The mark is inside this word, return its end time
-                    return wordBreak.Value;
-                }
-            }
-
-            // If the mark is not found within any word, return the mark time itself
-            return markTime;
+            string missingSummary = unmappedVisemeIds == null || unmappedVisemeIds.Count == 0
+                ? "<none>"
+                : string.Join(", ", unmappedVisemeIds);
+            Debug.Log($"[Azure FaceFX Map] MissingVisemeMappings={missingSummary}");
         }
 
         private IEnumerator WaitForVoices()

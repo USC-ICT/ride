@@ -945,6 +945,26 @@ xmlns:external="http://ExternalFunction.xslt.isi.edu"
 				</xsl:element>
 			</xsl:when>
 
+			<xsl:when test="$rule_name='domain_topics_animation'">
+			<xsl:element name="rule">
+			<xsl:attribute name="participant"><xsl:value-of select="./@participant" /></xsl:attribute>
+			<xsl:attribute name="ready"><xsl:value-of select="$ani_start" /></xsl:attribute>
+			<xsl:attribute name="relax"><xsl:value-of select="$ani_stroke" /></xsl:attribute>
+			<xsl:attribute name="type"><xsl:value-of select="$rule_name" /></xsl:attribute>
+			<xsl:attribute name="priority"><xsl:value-of select="./@priority" /></xsl:attribute>
+			<xsl:text>&#10;	</xsl:text>	
+			
+				<xsl:call-template name="domain_topics_animation" >	
+					<xsl:with-param name="participant" select="./@participant"/>							
+					<xsl:with-param name="speech_id" select="$sp_id" />
+					<xsl:with-param name="start_time" select="$ani_start"/>
+					<xsl:with-param name="stroke" select="$ani_stroke" />			
+					<xsl:with-param name="priority" select="./@priority" />			
+					<xsl:with-param name="posture" select="./@pose"/>					
+				</xsl:call-template>		
+				</xsl:element>
+			</xsl:when>	
+
       <xsl:when test="$rule_name='intensification'">
         <xsl:element name="rule">
           <xsl:attribute name="participant"><xsl:value-of select="./@participant" /></xsl:attribute>

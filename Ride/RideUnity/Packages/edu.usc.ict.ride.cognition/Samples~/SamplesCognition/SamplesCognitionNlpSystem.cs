@@ -4,7 +4,7 @@ using Ride.NLP;
 namespace Ride.Samples
 {
     /// <summary>
-    /// Demonstrates integration and GUI interaction with various NLP (LLM) systems like ChatGPT, AWS Lex, etc.
+    /// Demonstrates integration and GUI interaction with various NLP systems like ChatGPT, AWS Lex, etc.
     /// </summary>
     public class SamplesCognitionNlpSystem : RideMonoBehaviour
     {
@@ -22,7 +22,7 @@ namespace Ride.Samples
         private string m_initialPromptText = string.Empty;
 
         /// <summary>
-        /// Initializes NLP systems and sets the default LLM system at the start of the scene.
+        /// Initializes NLP systems and sets the default system at the start of the scene.
         /// </summary>
         protected override void Start()
         {
@@ -45,16 +45,16 @@ namespace Ride.Samples
         }
 
         /// <summary>
-        /// Draws the GUI elements for selecting the LLM system, setting parameters (temperature, token limit),
+        /// Draws the GUI elements for selecting the NLP system, setting parameters (e.g., LLM temperature, token limit),
         /// sending input, and displaying the NLP response.
         /// </summary>
         public void OnGUISystemSelection()
         {
-            int llmMode = m_debugMenu.SelectionGrid(m_llmMode, new string[] { "ChatGPT", "Anthropic", "Lex" }, 3);
+            int nlpMode = m_debugMenu.SelectionGrid(m_llmMode, new string[] { "ChatGPT", "Anthropic", "Lex" }, 3);
 
-            if (m_llmMode != llmMode)
+            if (m_llmMode != nlpMode)
             {
-                m_llmMode = llmMode;
+                m_llmMode = nlpMode;
                 if (m_llmMode == 0) m_currentLlm = m_chatGpt;
                 else if (m_llmMode == 1) m_currentLlm = m_anthropic;
                 else if (m_llmMode == 2) m_currentLlm = m_awsLex;

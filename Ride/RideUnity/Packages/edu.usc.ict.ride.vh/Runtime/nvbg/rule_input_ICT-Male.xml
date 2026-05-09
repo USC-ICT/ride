@@ -28,12 +28,9 @@
 	</rule>
 	
 	<!-- inclusivity -->
-	<rule keyword="inclusivity" priority="4" >
-		<pattern>everything</pattern>
-		<pattern>all</pattern>
-		<pattern>whole</pattern>
+	<rule keyword="inclusivity" priority="4" >		
 		<pattern>plenty</pattern>
-		<pattern>full</pattern>
+		<pattern>fully</pattern>
 		<pattern>completely</pattern>
 	</rule>
 	
@@ -79,13 +76,15 @@
 				<clip>Standing01_BeatLowLf01</clip>
 				<clip>Standing01_BeatMidLf01</clip>
 			</posture>
-				<!--   <clip>IdleStandingUpright01_YouLf01</clip> -->
 			<posture name="ChrGenericMleAdult@IdleStandingUpright01">
 				<clip>IdleStandingUpright01_BeatLowLf01</clip>
 			</posture>
 			<posture name="OG_IdleStandingUpright01">
-				<!--   <clip>OG_IdleStandingUpright01_YouLf01</clip>  -->
 				<clip>OG_IdleStandingUpright01_BeatLowLf01</clip>
+				<clip>OG_IdleStandingUpright01_BeatLowLf01</clip>
+				<clip>OG_IdleStandingUpright01_BeatLowLf01</clip>
+				<clip>OG_IdleStandingUpright01_YouLf01</clip>				
+				<clip>OG_IdleStandingUpright01_BeatMidLf01</clip>
 			</posture>
 			<posture name="ChrGenericMleAdult@IdleSittingUpright01">
 				<clip>IdleSittingUpright01_IndicateSmLf01</clip>
@@ -101,6 +100,7 @@
 	<!--   me animation  -->
 	<rule keyword="me_animation" priority="5" >
 		<pattern>i</pattern> 
+		<pattern>i'm</pattern> 
 		<pattern>me</pattern>
 		<pattern>my</pattern>
 		<pattern>mine</pattern>		
@@ -116,8 +116,10 @@
 				<clip>IdleStandingUpright01_BeatLowRt01</clip>
 			</posture>
 			<posture name="OG_IdleStandingUpright01">
-				<clip>OG_IdleStandingUpright01_MeLf01</clip>
 				<clip>OG_IdleStandingUpright01_BeatLowRt01</clip>
+				<clip>OG_IdleStandingUpright01_BeatLowRt01</clip>
+				<clip>OG_IdleStandingUpright01_BeatLowRt01</clip>
+				<clip>OG_IdleStandingUpright01_MeLf01</clip>				
 			</posture>
 			<posture name="ChrGenericMleAdult@IdleSittingUpright01">
 				<clip>IdleSittingUpright01_SelfMedLf01</clip>
@@ -267,8 +269,7 @@
 		<pattern>where</pattern>
 		<pattern>who</pattern>
 		<pattern>how</pattern>
-		<pattern>when</pattern>
-		<pattern>do</pattern>
+		<pattern>when</pattern>		
 		<animation>
 			<posture name="Standing01">
 				<clip>Standing01_Shrug01</clip>
@@ -328,7 +329,7 @@
 	</rule>
 	
 	<!--   first_VP animation  -->
-	<rule keyword="first_VP" priority="5" >		
+	<!-- <rule keyword="first_VP" priority="5" >		
 		<pattern>first_VP</pattern>		
 		<animation>
 			<posture name="ChrGenericMleAdult@IdleStandingUpright01">
@@ -341,11 +342,12 @@
 				<clip>IdleSittingUpright01_IndicateSmLf01</clip>
 			</posture>
 		</animation>
-	</rule>
+	</rule> -->
 	
 	<!--   obligation animation  -->
 	<rule keyword="obligation_animation" priority="5" >
 		<pattern>must</pattern>		
+		<pattern>have to</pattern>
 		<animation>
 			<posture name="Standing01">
 				<clip>Standing01_ChopLf01</clip>
@@ -355,7 +357,8 @@
 				<clip>IdleStandingUpright01_ChopLf01</clip>
 			</posture>
 			<posture name="OG_IdleStandingUpright01">
-				<clip>OG_IdleStandingUpright01_ChopLf01</clip>
+				<clip>OG_IdleStandingUpright01_ChopBoth01</clip>
+				<clip>OG_IdleStandingUpright01_ChopRt01</clip>
 			</posture>
 			<posture name="ChrGenericMleAdult@IdleSittingUpright01">
 				<clip>IdleSittingUpright01_SingleTapSmLf01</clip>
@@ -364,19 +367,35 @@
 		</animation>
 	</rule>
 
-	<!-- add new rule here -->
+		<!-- add new rule here -->
+		<!-- new rules need to be added for inclusion in NVBG_behavior_description_xsl,
+		     NVBG_rules.xsl, and NVBG_transform.xsl -->
 
-	<!--   domain topic animation  -->
-	<!--<rule keyword="domain_animation" priority="5" >
+		<!--   domain topics animation  -->
+		<rule keyword="domain_topics_animation" priority="5" >
 		<pattern>terrain</pattern>
-		<pattern>human</pattern>
-		<pattern>speech</pattern>
-		<pattern>sensing</pattern>
-		<pattern>text</pattern>
-		<animation>
+		<pattern>platform</pattern>
+		<pattern>platforms</pattern>
+		<pattern>sensing</pattern>		
+		<pattern>recognition</pattern>		
+		<pattern>processing</pattern>
+		<pattern>generation</pattern>		
+		<pattern>real-time</pattern>
+		<pattern>GitHub</pattern>
+		<pattern>edu</pattern>
+			<animation>
 			<posture name="ChrGenericMleAdult@IdleStandingUpright01">				
 				<clip>IdleStandingUpright01_BeatLowLf01</clip>
 				<clip>IdleStandingUpright01_BeatLowRt01</clip>
+			</posture>
+			<posture name="OG_IdleStandingUpright01">
+				<clip>OG_IdleStandingUpright01_BeatLowLf01</clip>
+				<clip>OG_IdleStandingUpright01_BeatLowLf01</clip>
+				<clip>OG_IdleStandingUpright01_BeatLowLf01</clip>
+				<clip>OG_IdleStandingUpright01_BeatLowRt01</clip>
+				<clip>OG_IdleStandingUpright01_BeatLowRt01</clip>
+				<clip>OG_IdleStandingUpright01_BeatLowRt01</clip>				
+				<clip>OG_IdleStandingUpright01_BeatMidLf01</clip>
 			</posture>
 			<posture name="ChrGenericMleAdult@IdleSittingUpright01">
 				<clip>IdleSittingUpright01_IndicateSmLf01</clip>
@@ -387,8 +406,7 @@
 				<clip>IdleSittingUpright01_SingleTapSmRt01</clip>
 			</posture>
 		</animation>
-	</rule>-->
-
+	</rule>
 
 </nvb_rules>
 </rule_input>

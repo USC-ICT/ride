@@ -10,6 +10,7 @@ dotnet_diagnostic.IDE0059.severity = none  # Unnecessary assignment of a value t
 dotnet_diagnostic.IDE0060.severity = none  # Remove unused parameter '' if it is not part of a shipped public API
 dotnet_diagnostic.IDE0063.severity = none  # 'using' statement can be simplified
 dotnet_diagnostic.IDE0066.severity = none  # Use 'switch' expression
+dotnet_diagnostic.IDE0074.severity = none  # Use compound assignment
 dotnet_diagnostic.IDE0090.severity = none  # 'new' expression can be simplified
 dotnet_diagnostic.IDE0251.severity = none  # Member can be made 'readonly'
 dotnet_diagnostic.IDE1006.severity = none  # Naming rule violation: These words must begin with upper case characters: 

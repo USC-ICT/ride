@@ -13,7 +13,9 @@ public class MecanimPlayableBehaviour : PlayableBehaviour
     // Called when the owning graph starts playing
     public override void OnGraphStart(Playable playable)
     {
-        m_CharacterController = VHUtils.FindObjectOfType<ICharacterController>(GetType().ToString());
+        m_CharacterController = GameObject.FindFirstObjectByType<ICharacterController>();
+        if (m_CharacterController == null)
+            Debug.LogError($"{GetType()} couldn't find object in scene with component {typeof(ICharacterController)}");
     }
 
     // Called when the owning graph stops playing

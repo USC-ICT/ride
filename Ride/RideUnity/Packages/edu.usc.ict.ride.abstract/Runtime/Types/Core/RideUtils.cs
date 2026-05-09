@@ -723,7 +723,11 @@ namespace Ride
             if (Application.isEditor)
             {
 #if UNITY_EDITOR
+#if UNITY_6000_0_OR_NEWER
+                UnityEditor.EditorApplication.ExitPlaymode();
+#else
                 UnityEditor.EditorApplication.ExecuteMenuItem("Edit/Play");
+#endif
 #endif
             }
             else

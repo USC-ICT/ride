@@ -35,6 +35,69 @@ public static class AssetCatalogEditorUtility
         Console.WriteLine(message);
     }
 
+    public static string GetProjectSvnLastChangedRevision()
+    {
+        string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+        return GetSvnLastChangedRevision(projectRoot);
+    }
+
+    /// <summary>
+    /// Returns the SVN "last-changed-revision" for a working copy path.
+    /// Returns 0 if SVN is not available or the path is not a working copy.
+    /// </summary>
+    private static string GetSvnLastChangedRevision(string workingCopyPath)
+    {
+        if (string.IsNullOrWhiteSpace(workingCopyPath))
+            return "0";
+
+        // If svn is not installed or this isn't a working copy, we'll fail gracefully and return 0.
+        if (!TryRunProcess("svn", "info --show-item last-changed-revision", workingCopyPath, out string stdout, out _))
+            return "0";
+
+        stdout = stdout?.Trim();
+        if (string.IsNullOrEmpty(stdout))
+            return "0";
+
+        if (!int.TryParse(stdout, out int revision))
+            return "0";
+
+        return revision < 0 ? "0" : revision.ToString();
+    }
+
+    public static bool TryRunProcess(string exeName, string arguments, string workingDirectory, out string stdout, out string stderr)
+    {
+        stdout = string.Empty;
+        stderr = string.Empty;
+
+        try
+        {
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = exeName,
+                Arguments = arguments,
+                WorkingDirectory = string.IsNullOrEmpty(workingDirectory) ? Environment.CurrentDirectory : workingDirectory,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            };
+
+            using (var p = System.Diagnostics.Process.Start(psi))
+            {
+                stdout = p.StandardOutput.ReadToEnd();
+                stderr = p.StandardError.ReadToEnd();
+                p.WaitForExit();
+
+                return p.ExitCode == 0;
+            }
+        }
+        catch (Exception ex)
+        {
+            stderr = ex.Message;
+            return false;
+        }
+    }
+
     /// <summary>
     /// Adds a new asset group to the asset catalog profile. Ensures uniqueness if the name already exists.
     /// </summary>
@@ -495,7 +558,9 @@ public static class AssetCatalogEditorUtility
 
         var catalog = new AssetCatalogData
         {
+            catalogName = group.groupName,
             rideBundleVersion = AssetCatalogData.RIDE_VERSION,
+            artAssetVersion = GetProjectSvnLastChangedRevision(),
             unityVersion = Application.unityVersion,
             platform = GetPlatformId(buildTarget),
             renderPipeline = AssetCatalogUtility.GetRenderPipelineName(),
@@ -575,7 +640,7 @@ public static class AssetCatalogEditorUtility
 
                 LogToEditorAndCLI(
                     $"[BUNDLE] {entry.bundleFileName} | Asset: '{entry.assetName}' | " +
-                    $"Size: {sizeMB:F2} MB | Labels: [{labels}] | Hash: {hash}");
+                    $"Size: {sizeMB:F2} MB | Labels: [{labels}] | Hash: {hash} | RideVer: {catalog.rideBundleVersion} | AssetVer: {catalog.artAssetVersion}");
             }
         }
 

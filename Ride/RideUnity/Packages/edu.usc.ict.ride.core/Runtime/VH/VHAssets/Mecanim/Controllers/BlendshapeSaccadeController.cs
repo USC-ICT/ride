@@ -21,8 +21,8 @@ public class BlendshapeSaccadeController : SaccadeController
     [SerializeField] BlendshapeID eyesLeftBlendShape;
     [SerializeField] BlendshapeID eyesRightBlendShape;
 
-    float m_yWeight = 0;
-    float m_xWeight = 0;
+    //float m_yWeight = 0;
+    //float m_xWeight = 0;
 
     protected override void Awake()
     {
@@ -38,8 +38,15 @@ public class BlendshapeSaccadeController : SaccadeController
 
 
 
-    protected override void ApplyProcessedSaccade(float lerpValue)
+    protected override void ApplyProcessedSaccade()
     {
+        // This function needs revisiting after SaccadeController refactoring.
+
+        throw new NotImplementedException("This function needs revisiting after SaccadeController refactoring.");
+
+#if false
+        const float lerpValue = 0.5f;
+
         Quaternion rot = default;
         if (m_SaccadeState == SaccadeState.FadeIn)
         {
@@ -103,6 +110,7 @@ public class BlendshapeSaccadeController : SaccadeController
             targetSkinnedMesh.SetBlendShapeWeight(eyesLeftBlendShape.index, 0);
             targetSkinnedMesh.SetBlendShapeWeight(eyesRightBlendShape.index, 0);
         }
+#endif
     }
 }
 }

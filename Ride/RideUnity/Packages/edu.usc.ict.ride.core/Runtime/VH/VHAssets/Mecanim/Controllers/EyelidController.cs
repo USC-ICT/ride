@@ -5,10 +5,17 @@ namespace VHAssets
     public abstract class EyelidController : MonoBehaviour
     {
         [Header("Dependencies")]
+        [Tooltip(
+            "Optional. If set, this component will be used as the Blink controller. " +
+            "If empty, EyelidController will try GetComponent on this GameObject; " +
+            "if still missing, it will search children recursively. Logs an error if not found.")]
         [SerializeField]
         private BlinkController m_blinkController;
 
-        [Tooltip("Component that implements IEyeGazeProvider (for example, your eye gaze controller).")]
+        [Tooltip(
+            "Optional. If set, this component will be used as the Gaze provider. " +
+            "If empty, EyelidController will try GetComponent on this GameObject; " +
+            "if still missing, it will search children recursively. Logs an error if not found.")]
         [SerializeField]
         private GazeController m_gazeProvider;
 
@@ -41,12 +48,39 @@ namespace VHAssets
         [SerializeField]
         private float m_smoothingTime = 0.02f;
 
+        private bool m_isLoadedAssetInitialized = true;
         private float m_currentLidValue = 0f;
         private float m_lidVelocity = 0f; // used by SmoothDamp
 
 
+        protected virtual void Start()
+        {
+            // Blink controller resolution (inspector -> self -> children -> error)
+            if (m_blinkController == null)
+                m_blinkController = GetComponent<BlinkController>();
+
+            if (m_blinkController == null)
+                m_blinkController = GetComponentInChildren<BlinkController>(true);
+
+            if (m_blinkController == null)
+                Debug.LogError($"{nameof(EyeController)}: No BlinkController controller found. Assign one, or add a BlinkController to this GameObject or its children.", this);
+
+            // Gaze provider resolution (inspector -> self -> children -> error)
+            if (m_gazeProvider == null)
+                m_gazeProvider = GetComponent<GazeController>();
+
+            if (m_gazeProvider == null)
+                m_gazeProvider = GetComponentInChildren<GazeController>(true);
+
+            if (m_gazeProvider == null)
+                Debug.LogError($"{nameof(EyeController)}: No GazeController found. Assign one, or add a GazeController to this GameObject or its children.", this);
+        }
+
         protected virtual void Update()
         {
+            if (!m_isLoadedAssetInitialized)
+                return;
+
             float baseLid = ComputeBaseLidFromGaze();
             float blinkLid = ComputeBlinkContribution();
 
@@ -66,6 +100,23 @@ namespace VHAssets
 
             // Let the concrete implementation push this to Animator / blendshapes / bones.
             ApplyLid(m_currentLidValue);
+        }
+
+        public virtual void InitializeLoadedAsset()
+        {
+            m_isLoadedAssetInitialized = true;
+        }
+
+        public virtual void ResetLoadedAsset()
+        {
+            // Stop driving until the loaded art is ready again.
+            m_isLoadedAssetInitialized = false;
+
+            // Reset smoothing state so reload starts clean.
+            m_currentLidValue = 0f;
+            m_lidVelocity = 0f;
+
+            ApplyLid(0f);
         }
 
         /// <summary>

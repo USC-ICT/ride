@@ -11,7 +11,7 @@ GameObject:
   - component: {fileID: 823136784296828003}
   - component: {fileID: 5469366662577773611}
   m_Layer: 0
-  m_Name: NlpScriptedSystemAWSLex
+  m_Name: NlpSystemAWSLex
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -55,8 +55,6 @@ GameObject:
   m_Component:
   - component: {fileID: 823344498816676831}
   - component: {fileID: 9175979732837367927}
-  - component: {fileID: 4188785874511733151}
-  - component: {fileID: 603552834598375001}
   m_Layer: 0
   m_Name: TextToSpeechSystemElevenLabs
   m_TagString: Untagged
@@ -76,7 +74,9 @@ Transform:
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children: []
+  m_Children:
+  - {fileID: 5445281713636694914}
+  - {fileID: 8984374342789002663}
   m_Father: {fileID: 6777710542778667853}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &9175979732837367927
@@ -97,44 +97,151 @@ MonoBehaviour:
   <textToSpeechProcessing>k__BackingField: 0
   <lipsyncSchedule>k__BackingField: 
   <lipsyncProcessing>k__BackingField: 0
-  m_useProxy: 1
-  textToSpeech: {fileID: 4188785874511733151}
---- !u!114 &4188785874511733151
+  m_TrimMergeDenseClustersUsingShapeRules: 1
+  m_TrimClusterSpanSeconds: 0.1
+  <lipsyncDebugOutput>k__BackingField: 0
+  textToSpeech: {fileID: 8131584513790576218}
+--- !u!1 &1999673345169118671
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 8984374342789002663}
+  - component: {fileID: 7103896499711585711}
+  m_Layer: 0
+  m_Name: IpaDictionary
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &8984374342789002663
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1999673345169118671}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 823344498816676831}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &7103896499711585711
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1422827510614694484}
+  m_GameObject: {fileID: 1999673345169118671}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a77cb441920c30c48a7d6d21f828754c, type: 3}
+  m_Script: {fileID: 11500000, guid: 2adfcce3b23bed74da8fe2bc50575d91, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  savedFilePath: 
-  audioSource: {fileID: 0}
-  selectedVoiceIndex: 0
-  Voices: []
-  VoicesReady: 0
-  currentModel: 2
---- !u!114 &603552834598375001
+  m_ipaTsv: {fileID: 4900000, guid: e49777053ed82b142a1d2a5822f77635, type: 3}
+  m_loadOnAwake: 1
+  m_keepFirstPronunciationOnly: 1
+  m_stripSlashes: 1
+  m_stripEdgePunctuation: 1
+--- !u!1 &2093947918647406919
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 6336951278583311594}
+  - component: {fileID: 1738969634232111351}
+  m_Layer: 0
+  m_Name: SpeechRecognitionSystemAzureWebGL
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &6336951278583311594
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2093947918647406919}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 6811919131651479337}
+  m_Father: {fileID: 7155888745045487287}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1738969634232111351
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1422827510614694484}
+  m_GameObject: {fileID: 2093947918647406919}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6734fcf168d9123478d9ed1a2221e251, type: 3}
+  m_Script: {fileID: 11500000, guid: 38a6a3023a78e5747a6ef064593f33b0, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  <timeout>k__BackingField: 10
-  <generatedAudioFilePath>k__BackingField: 
-  <generatedAudioLength>k__BackingField: 0
-  <textToSpeechProcessing>k__BackingField: 0
-  <lipsyncSchedule>k__BackingField: 
-  <lipsyncProcessing>k__BackingField: 0
+  m_autoSilenceTimeoutSeconds: 1.2
+  m_initialSilenceTimeoutSeconds: 10
+  m_azureAsrBridge: {fileID: 2467734584975687138}
+--- !u!1 &2446645095205799387
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 5942307439150560854}
+  - component: {fileID: 6180150290577009490}
+  m_Layer: 0
+  m_Name: NlpSystemRasa
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &5942307439150560854
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2446645095205799387}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 550305525390966339}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &6180150290577009490
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2446645095205799387}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: eec2fe7e4ee55274b989ad7bba31d243, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1 &2453610177937855133
 GameObject:
   m_ObjectHideFlags: 0
@@ -146,7 +253,7 @@ GameObject:
   - component: {fileID: 3956583476354985575}
   - component: {fileID: 4418936448647219780}
   m_Layer: 0
-  m_Name: NlpLlmSystemAnthropic
+  m_Name: NlpSystemAnthropic
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -179,6 +286,105 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7b03b5d282135e74a91206fcfba4f662, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+--- !u!1 &2629703546318969200
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 5445281713636694914}
+  - component: {fileID: 8131584513790576218}
+  m_Layer: 0
+  m_Name: ElevenLabsTextToSpeech
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &5445281713636694914
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2629703546318969200}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 823344498816676831}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &8131584513790576218
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2629703546318969200}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a77cb441920c30c48a7d6d21f828754c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  savedFilePath: 
+  audioSource: {fileID: 0}
+  selectedVoiceIndex: 0
+  Voices: []
+  VoicesReady: 0
+  currentModel: 1
+  stabilityParameter: 0.9
+  similarityParameter: 0.75
+  ipaDictionaries:
+  - {fileID: 7103896499711585711}
+--- !u!1 &2959533472197430774
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 4091265840078016140}
+  - component: {fileID: 9029931232506788484}
+  m_Layer: 0
+  m_Name: SensingSystemDeepFace
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &4091265840078016140
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2959533472197430774}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 4022829584896086463}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &9029931232506788484
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2959533472197430774}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0e62b1dfd5c5b1f48a6c95ddc8d8cb14, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  modelName: 5
 --- !u!1 &2996951997171778854
 GameObject:
   m_ObjectHideFlags: 0
@@ -223,6 +429,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: fbe2361f047fde049891ef2c4d29bcdc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  m_autoSilenceTimeoutSeconds: 1.2
+  m_initialSilenceTimeoutSeconds: 10
 --- !u!1 &3866502476597097769
 GameObject:
   m_ObjectHideFlags: 0
@@ -247,13 +455,14 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 3866502476597097769}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 3511943799022543035}
   - {fileID: 1336744405711290849}
+  - {fileID: 4091265840078016140}
   m_Father: {fileID: 8344103313544686372}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &3926556005596981935
@@ -306,6 +515,9 @@ MonoBehaviour:
   <textToSpeechProcessing>k__BackingField: 0
   <lipsyncSchedule>k__BackingField: 
   <lipsyncProcessing>k__BackingField: 0
+  m_TrimMergeDenseClustersUsingShapeRules: 0
+  m_TrimClusterSpanSeconds: 0.1
+  <lipsyncDebugOutput>k__BackingField: 0
 --- !u!1 &4890860483632333946
 GameObject:
   m_ObjectHideFlags: 0
@@ -369,9 +581,10 @@ Transform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
-  - {fileID: 1253329023668912061}
   - {fileID: 3956583476354985575}
   - {fileID: 823136784296828003}
+  - {fileID: 1253329023668912061}
+  - {fileID: 5942307439150560854}
   m_Father: {fileID: 8344103313544686372}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &5241023513186261982
@@ -418,6 +631,55 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 560a6fb3949d00642be8e8887916472c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  m_autoSilenceTimeoutSeconds: 1.2
+  m_initialSilenceTimeoutSeconds: 10
+--- !u!1 &5394021172590433007
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 6811919131651479337}
+  - component: {fileID: 2467734584975687138}
+  m_Layer: 0
+  m_Name: AzureAsrBridge
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &6811919131651479337
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5394021172590433007}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 6336951278583311594}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2467734584975687138
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5394021172590433007}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fc4a5faf313baef41929feb1bcd22f44, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_azureSpeechKey: YOUR_AZURE_SPEECH_KEY
+  m_azureSpeechRegion: westus
+  m_language: en-US
 --- !u!1 &5624495247750243275
 GameObject:
   m_ObjectHideFlags: 0
@@ -468,6 +730,9 @@ MonoBehaviour:
   <textToSpeechProcessing>k__BackingField: 0
   <lipsyncSchedule>k__BackingField: 
   <lipsyncProcessing>k__BackingField: 0
+  m_TrimMergeDenseClustersUsingShapeRules: 0
+  m_TrimClusterSpanSeconds: 0.1
+  <lipsyncDebugOutput>k__BackingField: 0
 --- !u!1 &5830870871728775496
 GameObject:
   m_ObjectHideFlags: 0
@@ -543,8 +808,8 @@ Transform:
   m_Children:
   - {fileID: 7155888745045487287}
   - {fileID: 550305525390966339}
-  - {fileID: 6777710542778667853}
   - {fileID: 4022829584896086463}
+  - {fileID: 6777710542778667853}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &6417386880578305179
@@ -577,6 +842,7 @@ Transform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 250032498786347542}
+  - {fileID: 6336951278583311594}
   - {fileID: 6563466127580120213}
   - {fileID: 1306618731624871739}
   m_Father: {fileID: 8344103313544686372}
@@ -625,20 +891,21 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 16ded78137cde61499bb02722b4f4a14, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  m_autoSilenceTimeoutSeconds: 1.2
+  m_initialSilenceTimeoutSeconds: 10
   model: gpt-4o-realtime-preview-2025-06-03
   sampleRate: 24000
   chunkSize: 4800
   microphoneDevice: 
   transcriptOnly: 1
   voice: alloy
-  autoStartOnConnect: 0
   postPlaybackDelay: 0.3
   streamingStartBufferSeconds: 1
   streamingEndBufferSeconds: 3
   maxStreamingClipSeconds: 300
   vadThreshold: 0.7
   vadPrefixPaddingMs: 300
-  vadSilenceDurationMs: 500
+  vadSilenceDurationMs: 700
 --- !u!1 &8916280520738937985
 GameObject:
   m_ObjectHideFlags: 0
@@ -650,7 +917,7 @@ GameObject:
   - component: {fileID: 1253329023668912061}
   - component: {fileID: 6248595823330784136}
   m_Layer: 0
-  m_Name: NlpLlmSystemChatGPT
+  m_Name: NlpSystemChatGPT
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -683,8 +950,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e365640269b358646a082ec2558bf61b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  temperature: 0.3
-  max_tokens: 200
+  m_temperature: 0.3
+  m_maxTokens: 200
 --- !u!1 &9120045423269580850
 GameObject:
   m_ObjectHideFlags: 0

@@ -10,7 +10,7 @@ namespace BllipParser.DotNet.Vanilla
     }
 
 
-    class Feat
+    struct Feat
     {
         public int ind_;
         ////int cnt_;
@@ -20,10 +20,14 @@ namespace BllipParser.DotNet.Vanilla
 
 
         //friend ostream& operator<< ( ostream& os, Feat& t );
-        public ref float g() { return ref g_; }
+        public readonly float g() { return g_; }
         ////float& lambda() { return uVals[1]; }
         ////float& u(int i) { return uVals[i+1]; }
         ////int& cnt() { return cnt_; }
-        public ref int ind() { return ref ind_; }
+        public readonly int ind() { return ind_; }
+
+
+        public static ref int ind_ref(ref Feat f) => ref f.ind_;
+        public static ref float g_ref(ref Feat f) => ref f.g_;
     }
 }

@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 
 using static BllipParser.DotNet.Vanilla.MeChart_global;
+using static BllipParser.DotNet.Vanilla.utils;
 
 
 namespace BllipParser.DotNet.Vanilla
@@ -21,9 +22,9 @@ namespace BllipParser.DotNet.Vanilla
             if (stopTermInt < 0)
                 stopTermInt = Term.stopTerm.toInt();
 
-            Debug.Assert(fh.cb != null);
+            AssertInternal(fh.cb != null);
             LeftRightGotIter lrgi = globalGi[fh.cb.thrdid];
-            Debug.Assert(lrgi != null);
+            AssertInternal(lrgi != null);
 
             int pos = fh.pos;
             /* the left to right position we are working on is either the far left (0)
@@ -44,7 +45,7 @@ namespace BllipParser.DotNet.Vanilla
                 return stopTermInt;
 
             Item got = lrgi.index(m);
-            Debug.Assert(got != null);
+            AssertInternal(got != null);
             int ans = got.term().toInt();
             return ans;
         }
@@ -61,7 +62,7 @@ namespace BllipParser.DotNet.Vanilla
         {
             //Edge* edge = fh->e;
             int pos = fh.pos;
-            Debug.Assert(fh.cb != null);
+            AssertInternal(fh.cb != null);
             LeftRightGotIter lrgi = globalGi[fh.cb.thrdid];
             Item got;
             int i;

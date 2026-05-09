@@ -13,6 +13,7 @@ namespace Ride.Samples
         private SpeechRecognitionSystemAzure m_asr_azure;
         private SpeechRecognitionSystemWindows m_asr_windows;
         private SpeechRecognitionSystemOpenAI m_asr_openai;
+        private SpeechRecognitionSystemAzureWebGL m_asr_azure_webgl;
         private SpeechRecognitionSystemUnity m_current_asr;
         private int m_asr_mode;
         private string m_filePath = "<Enter path to .wav audio file>";
@@ -30,6 +31,7 @@ namespace Ride.Samples
             m_asr_azure = Systems.Get<SpeechRecognitionSystemAzure>();
             m_asr_windows = Systems.Get<SpeechRecognitionSystemWindows>();
             m_asr_openai = Systems.Get<SpeechRecognitionSystemOpenAI>();
+            m_asr_azure_webgl = Systems.Get<SpeechRecognitionSystemAzureWebGL>();
             m_current_asr = m_asr_azure;
             m_timeout_autoSilence = m_current_asr.AutoSilenceTimeoutSeconds.ToString();
             m_timeout_initialSilence = m_current_asr.InitialSilenceTimeoutSeconds.ToString();
@@ -44,7 +46,7 @@ namespace Ride.Samples
         {
             m_debugMenu.Label($"<b>ASR</b>");
 
-            int asrMode = m_debugMenu.SelectionGrid(m_asr_mode, new string[] { "Azure", "Windows", "OpenAI" }, 2);
+            int asrMode = m_debugMenu.SelectionGrid(m_asr_mode, new string[] { "Azure", "Windows", "OpenAI", "AzureWebGL" }, 2);
 
             if (m_asr_mode != asrMode)
             {
@@ -53,6 +55,7 @@ namespace Ride.Samples
                 if (m_asr_mode == 0) m_current_asr = m_asr_azure;
                 else if (m_asr_mode == 1) m_current_asr = m_asr_windows;
                 else if (m_asr_mode == 2) m_current_asr = m_asr_openai;
+                else if (m_asr_mode == 3) m_current_asr = m_asr_azure_webgl;
             }
 
             m_debugMenu.Space();

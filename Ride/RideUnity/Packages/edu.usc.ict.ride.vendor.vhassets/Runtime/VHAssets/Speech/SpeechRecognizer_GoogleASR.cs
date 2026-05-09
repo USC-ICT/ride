@@ -1,13 +1,35 @@
-﻿using System.Collections;
+using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using UnityEngine;
 using UnityEngine.Networking;
-using SimpleJSON;
 
 namespace VHAssets
 {
 public class SpeechRecognizer_GoogleASR : SpeechRecognizer
 {
+    [Serializable]
+    class GoogleAsrAlternative
+    {
+        public string transcript;
+        public float confidence;
+    }
+
+    [Serializable]
+    class GoogleAsrResult
+    {
+        public GoogleAsrAlternative[] alternative;
+        public bool final;
+    }
+
+    [Serializable]
+    class GoogleAsrResponse
+    {
+        public GoogleAsrResult[] result;
+        public int result_index;
+    }
+
     #region Constants
     const string AsrUrl = "https://www.google.com/speech-api/v2/recognize";
     #endregion
@@ -65,27 +87,73 @@ public class SpeechRecognizer_GoogleASR : SpeechRecognizer
         // parse the json results
         //Debug.Log(www.text);
 
-        JSONNode node = JSON.Parse(wwwtext);
-
-        JSONArray results = node["result"].AsArray;
-        for (int resultIndex = 0; resultIndex < results.Count; resultIndex++)
-        {
-            JSONArray alternativeArray = results[resultIndex]["alternative"].AsArray;
-
-            for (int alternativeIndex = 0; alternativeIndex < alternativeArray.Count; alternativeIndex++)
-            {
-                float confidence = 0;
-                JSONNode currNode = alternativeArray[alternativeIndex];
-                if (currNode["confidence"] != null)
-                {
-                    confidence = currNode["confidence"].AsFloat;
-                }
-                //Debug.Log(currNode["utterance"] + " " + confidence);
-                recognizerResults.Add(new RecognizerResult(currNode["transcript"], confidence));
-            }
-        }
+        AppendRecognitionResults(wwwtext, recognizerResults);
 
         DispatchResults(recognizerResults);
+    }
+
+    /// <summary>
+    /// Parses Google ASR response text and appends any recognized alternatives to <paramref name="recognizerResults"/>.
+    /// </summary>
+    /// <remarks>
+    /// This endpoint needs special handling because the legacy Google Speech API v2 response is not always returned as a
+    /// single JSON document. In practice, it may return multiple JSON objects separated by newlines, commonly including
+    /// an initial line with an empty <c>result</c> array followed by a later line containing the actual recognition data.
+    ///
+    /// Unity's <see cref="JsonUtility"/> can only deserialize one JSON object at a time, so this method reads the
+    /// response line-by-line and deserializes each non-empty line independently.
+    ///
+    /// This code previously used SimpleJSON, whose parser was tolerant of this multiline payload format. The parser was
+    /// recently refactored to remove that dependency, so this method preserves the same behavior explicitly while using
+    /// Unity's built-in JSON support.
+    ///
+    /// Only the subset of fields used by this recognizer is modeled: <c>result</c>, <c>alternative</c>,
+    /// <c>transcript</c>, and optional <c>confidence</c>. Extra fields are ignored.
+    /// </remarks>
+    /// <param name="responseText">Raw response body returned by the Google ASR request.</param>
+    /// <param name="recognizerResults">Destination list that receives parsed recognition alternatives.</param>
+    static void AppendRecognitionResults(string responseText, List<RecognizerResult> recognizerResults)
+    {
+        // Google Speech API v2 responses can contain multiple JSON documents separated by newlines.
+        using StringReader reader = new StringReader(responseText);
+        string line;
+
+        while ((line = reader.ReadLine()) != null)
+        {
+            line = line.Trim();
+            if (string.IsNullOrEmpty(line))
+                continue;
+
+            GoogleAsrResponse response;
+            try
+            {
+                response = JsonUtility.FromJson<GoogleAsrResponse>(line);
+            }
+            catch (ArgumentException ex)
+            {
+                Debug.LogWarning($"GoogleASR failed to parse response line: {ex.Message}");
+                continue;
+            }
+
+            if (response?.result == null)
+                continue;
+
+            foreach (GoogleAsrResult result in response.result)
+            {
+                if (result?.alternative == null)
+                    continue;
+
+                foreach (GoogleAsrAlternative alternative in result.alternative)
+                {
+                    if (alternative == null || string.IsNullOrEmpty(alternative.transcript))
+                        continue;
+
+                    //Debug.Log(alternative.transcript + " " + alternative.confidence);
+
+                    recognizerResults.Add(new RecognizerResult(alternative.transcript, alternative.confidence));
+                }
+            }
+        }
     }
     #endregion
 }

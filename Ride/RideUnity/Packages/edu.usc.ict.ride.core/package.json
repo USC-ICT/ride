@@ -1,6 +1,6 @@
 {
   "name": "edu.usc.ict.ride.core",
-  "version": "0.0.8825",
+  "version": "1.0.9676",
   "displayName": "RIDE Core",
   "description": "This is the USC ICT RIDE Core Package",
   "unity": "2022.1",
@@ -9,10 +9,10 @@
     "com.unity.addressables": "1.21.8",
     "com.unity.ai.navigation": "2.0.0",
     "com.unity.inputsystem": "1.7.0",
-    "edu.usc.ict.ride.vendor.crc32net": "0.0.8825",
-    "edu.usc.ict.ride.vendor.milsymbol": "0.0.8825",
-    "edu.usc.ict.ride.vendor.vhassets": "0.0.8825",
-    "edu.usc.ict.ride.abstract": "0.0.8825"
+    "edu.usc.ict.ride.vendor.crc32net": "1.0.9659",
+    "edu.usc.ict.ride.vendor.milsymbol": "1.0.9659",
+    "edu.usc.ict.ride.vendor.vhassets": "1.0.9659",
+    "edu.usc.ict.ride.abstract": "1.0.9659"
   },
   "homepage": "https://ride.ict.usc.edu",
   "documentationUrl": "https://ride.ict.usc.edu",
@@ -42,11 +42,6 @@
       "displayName": "RIDE Core Sample",
       "description": "Sample scene demonstrating RIDE Core systems",
       "path": "Samples~/SamplesCore"
-    },
-    {
-      "displayName": "RIDE Core Addressables Sample",
-      "description": "Sample scene demonstrating RIDE Addressables system",
-      "path": "Samples~/SamplesAddressables"
     }
   ]
 }

@@ -1,6 +1,8 @@
 using System;
 using System.Diagnostics;
 
+using static BllipParser.DotNet.Vanilla.utils;
+
 
 namespace BllipParser.DotNet.Vanilla
 {
@@ -32,15 +34,31 @@ namespace BllipParser.DotNet.Vanilla
     }
 
 
+    // see Edge and others where thrdid is not known, or needed
+    internal static class LeftRightGotIterThreadLocal
+    {
+        [ThreadStatic] private static Item[] s_leftRightArray;
+
+        public static Item[] Get_lrGotIter_ScratchBuffer()
+        {
+            Item[] arr = s_leftRightArray;
+            if (arr == null)
+                s_leftRightArray = arr = new Item[400];
+            return arr;
+        }
+    }
+
+
     class LeftRightGotIter
     {
-        Item [] lrarray = new Item[400];
+        Item [] lrarray;  //Item [] lrarray = new Item[400];
         int pos_;
         int size_;
 
 
-        public LeftRightGotIter(Edge edge)
+        public LeftRightGotIter(Edge edge, Item [] scratchArray)
         {
+            lrarray = scratchArray ?? throw new ArgumentNullException(nameof(scratchArray));
             makelrgi(edge);
         }
 
@@ -51,13 +69,13 @@ namespace BllipParser.DotNet.Vanilla
             if (pos_ >= size_)
                 return false;
 
-            Debug.Assert(pos_ < 400);
+            AssertInternal(pos_ < 400);
             itm = lrarray[pos_];
             pos_++;
             return true;
         }
 
-        public Item index(int i) { Debug.Assert(i < 400); return lrarray[i]; }
+        public Item index(int i) { AssertInternal(i < 400); return lrarray[i]; }
         public int size() { return size_; }
         //int&    pos() { return pos_; }
 
@@ -67,12 +85,19 @@ namespace BllipParser.DotNet.Vanilla
             GotIter gi = new GotIter(ri);
             bool finishedRight = false;
             int spos = ri.start();
+
+            int insertPos = 0;
+            int size = 0;
+
             /* gotiter return a b head c d in the order d c a b head */
             //list<Item*>::iterator lri;
-            list<Item> lrlist = new list<Item>();
-            var lri = lrlist.First;
+
+            //list<Item> lrlist = new list<Item>();
+            //var lri = lrlist.First;
             while (gi.next(out Item itm))
             {
+                AssertInternal(size < 400);
+
                 //cerr << "lrgi " << *itm << endl;
                 if (finishedRight || itm.start() == spos)
                 {
@@ -80,53 +105,79 @@ namespace BllipParser.DotNet.Vanilla
                     if (itm.start() == spos && !finishedRight)
                     {
                         finishedRight = true;
-                        lri = lrlist.First;  //lri = lrlist.begin();
+                        insertPos = 0;  //lri = lrlist.First;  //lri = lrlist.begin();
                     }
 
                     //lri = lrlist.insert(lri, itm);
-                    if (lri == null)
-                    {
-                        lrlist.push_back(itm);
-                        lri = lrlist.Last;
-                    }
-                    else
-                    {
-                        lri = lrlist.insert(lri, itm);
-                    }
-                    lri = lri.Next;  //lri++;
+                    //if (lri == null)
+                    //{
+                    //    lrlist.push_back(itm);
+                    //    lri = lrlist.Last;
+                    //}
+                    //else
+                    //{
+                    //    lri = lrlist.insert(lri, itm);
+                    //}
+                    //lri = lri.Next;  //lri++;
+
+                    // Insert at insertPos
+                    if (insertPos < size)
+                        Array.Copy(lrarray, insertPos, lrarray, insertPos + 1, size - insertPos);
+
+                    lrarray[insertPos] = itm;
+                    insertPos++;
+                    size++;
                 }
                 else
                 {
-                    lrlist.push_front(itm);
+                    //lrlist.push_front(itm);
+
+                    // push_front
+                    if (size > 0)
+                        Array.Copy(lrarray, 0, lrarray, 1, size);
+
+                    lrarray[0] = itm;
+                    size++;
+                    insertPos++; // because we shifted everything right by one
                 }
             }
 
-            lri = lrlist.First;  //lri = lrlist.begin();
-            int i = 0;
-            for ( ; lri != null; lri = lri.Next)  //for ( ; lri != lrlist.end() ; lri++)
-            {
-                Debug.Assert(i < 400);
-                lrarray[i] = lri.Value;  //lrarray[i] = (*lri);
-                i++;
-            }
+            //lri = lrlist.First;  //lri = lrlist.begin();
+            //int i = 0;
+            //for ( ; lri != null; lri = lri.Next)  //for ( ; lri != lrlist.end() ; lri++)
+            //{
+            //    AssertInternal(i < 400);
+            //    lrarray[i] = lri.Value;  //lrarray[i] = (*lri);
+            //    i++;
+            //}
 
-            size_ = i;
+            //size_ = i;
+            //pos_ = 0;
+
+            size_ = size;
             pos_ = 0;
+
+            // clear unused slots so we don't retain references
+            if (size_ < 400)
+                Array.Clear(lrarray, size_, 400 - size_);
         }
     }
 
 
     class MiddleOutGotIter
     {
-        Item [] lrarray = new Item[400];
+        Item [] lrarray;  //Item [] lrarray = new Item[400];
         int pos_;
         int size_;
         int dir_;
         Item firstRight_;
 
 
-        public MiddleOutGotIter(Edge e)
+        public MiddleOutGotIter(Edge e, Item [] scratchArray)
         {
+            lrarray = scratchArray ?? throw new ArgumentNullException(nameof(scratchArray));
+            Array.Clear(lrarray, 0, lrarray.Length);
+
             GotIter gi = new GotIter(e);
             bool startRight = false;
             int spos = e.start();
@@ -134,13 +185,13 @@ namespace BllipParser.DotNet.Vanilla
             int i = 0;
             while (gi.next(out Item itm))
             {
-                Debug.Assert(i < 400);
+                AssertInternal(i < 400);
                 lrarray[i] = itm;
                 //cerr << "lrgi " << *itm << endl;
                 if (itm.start() == spos && !startRight)
                 {
                     startRight = true;
-                    Debug.Assert(i > 0);
+                    AssertInternal(i > 0);
                     firstRight_ = lrarray[i - 1];
                 }
 
@@ -150,6 +201,9 @@ namespace BllipParser.DotNet.Vanilla
             size_ = i;
             pos_ = i-1;
             //if(i > 20) cerr << "MOGII " << size_ << " " << *firstRight_ << endl;
+
+            if (size_ < 400)
+                Array.Clear(lrarray, size_, 400 - size_);
         }
 
 
@@ -162,7 +216,7 @@ namespace BllipParser.DotNet.Vanilla
             if (pos_ < 0)
                 return false;
 
-            Debug.Assert(pos_ < 400);
+            AssertInternal(pos_ < 400);
             itm = lrarray[pos_];
             //if(pos_ > 20) cerr << "MOGI itm " << *itm << endl;
             dir = dir_;
@@ -225,7 +279,12 @@ namespace BllipParser.DotNet.Vanilla
 
             e = stack.back();
             stack.pop_back();
-            stack.AddRange(e.sucs().GetList());
+
+            //if (e.sucs() != null)
+            //    stack.AddRange(e.sucs().GetList());
+            for (Edge s = e.sucsHead(); s != null; s = s.sucsNext())
+                stack.push_back(s);
+
             return true;
         }
     }

@@ -15,9 +15,8 @@ namespace Ride.Timeline
 
         public Dictionary<string, EntityData> m_entityDictionary = new Dictionary<string, EntityData>();    //-Key: Entity Name, Value: EntityData
         private Dictionary<PlayableDirector, double> m_pausedDirectors = new Dictionary<PlayableDirector, double>();  // Key: Timeline director, Value: Time is was paused
-        //private List<PlayableDirector> m_directors = new();
         private List<PlayableDirector> m_directors = new List<PlayableDirector>();
-        private List<MecanimCharacter> m_cutsceneCharacters = new List<MecanimCharacter>();
+        private List<MecanimCharacter> m_cutsceneCharacters = new List<MecanimCharacter>();        
 
         protected override void Start()
         {

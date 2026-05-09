@@ -115,7 +115,7 @@ namespace BllipParser.DotNet.Vanilla
                 if (pTstreamIdx >= pTstreamSplit.Length)  //if (!pTstream)
                     break;
 
-                Debug.Assert(i < numpT);
+                AssertInternal(i < numpT);
 
                 //pTstream >> e;
                 e = pTstreamSplit[pTstreamIdx++];
@@ -147,7 +147,7 @@ namespace BllipParser.DotNet.Vanilla
                 if (ppTstreamIdx >= ppTstreamSplit.Length)  //if (!ppTstream)
                     break;
       
-                Debug.Assert(t < MAXNUMNTTS);
+                AssertInternal(t < MAXNUMNTTS);
 
                 //ppTstream >> nums[t];
                 nums[t] = Convert.ToDouble(ppTstreamSplit[ppTstreamIdx++]);
@@ -230,15 +230,14 @@ namespace BllipParser.DotNet.Vanilla
                             float prb;
 
                             //wlistStream >> prb;
-                            if (!tokenEnumerator.TryRead(out string prbToken))
+                            if (!tokenEnumerator.TryReadSingle(out prb))
                                 throw new InvalidDataException("Unexpected end of pSgT.txt while reading probability.");
-                            prb = float.Parse(prbToken, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture);
 
                             if (prb < 0.001f)
                                 continue;
 
                             Term trm = Term.fromInt(trmInt);
-                            Debug.Assert(trm != null);
+                            AssertInternal(trm != null);
                             if (trm.terminal_p() == COLON)
                                 Term.Colons.push_back(w);
                             else if (trm.terminal_p() == FINAL)
@@ -248,7 +247,7 @@ namespace BllipParser.DotNet.Vanilla
                         //int cnt;
 
                         //wlistStream >> cnt;
-                        if (!tokenEnumerator.TryRead(out string cntToken))
+                        if (!tokenEnumerator.TryReadToken(out TokenSpan cntToken))
                             throw new InvalidDataException("Unexpected end of pSgT.txt while reading count.");
                     }
 
@@ -292,7 +291,7 @@ namespace BllipParser.DotNet.Vanilla
                 startState = eosInt; 
 
             parray[startState, 0] = 1;
-            Debug.Assert(wrd_count_ < 1000);
+            AssertInternal(wrd_count_ < 1000);
             /* compute p(w_0,n t) for all n */
             for (i = 0; i < wrd_count_; i++)
             {
@@ -310,7 +309,7 @@ namespace BllipParser.DotNet.Vanilla
                     if (prb == 0)
                         Console.WriteLine("Zero prob from wordPlist, " + sentence_.op(i) + ", " + trmInt);
 
-                    Debug.Assert(prb >= 0);
+                    AssertInternal(prb >= 0);
                     for (int k = 0; k < MAXNUMNTS; k++)
                     {
                         float pk = parray[k, 0];
@@ -324,7 +323,7 @@ namespace BllipParser.DotNet.Vanilla
                         if (smb == 0)
                             continue;
 
-                        Debug.Assert(pk > 0);
+                        AssertInternal(pk > 0);
                         pw0nt += pk * prb * smb;
                     }
 
@@ -354,7 +353,7 @@ namespace BllipParser.DotNet.Vanilla
                     }
                 }
 
-                Debug.Assert(pw0n > 0);
+                AssertInternal(pw0n > 0);
                 /* now compute the pwarray value we care about */
                 denomProbs[i] = pw0n;
                 if (printDebug(1000))
@@ -465,7 +464,7 @@ namespace BllipParser.DotNet.Vanilla
 
             if (!extraPos.empty())
             {
-                Debug.Assert(word_num < (int)extraPos.size());
+                AssertInternal(word_num < (int)extraPos.size());
                 vector<Term> vct = extraPos[word_num];
                 float prb = 1.0f;
                 if (!vct.empty())
@@ -507,7 +506,7 @@ namespace BllipParser.DotNet.Vanilla
                     if (prob == 0)
                         continue;
 
-                    Debug.Assert(prob > 0);
+                    AssertInternal(prob > 0);
                     ans.push_back((float)i);
                     ans.push_back(prob);
                     //if(printDebug(7777))
@@ -535,7 +534,7 @@ namespace BllipParser.DotNet.Vanilla
                 if (prob == 0)
                     continue;
 
-                Debug.Assert(prob > 0);
+                AssertInternal(prob > 0);
 
                 if (printDebug(7777))
                     Console.WriteLine("Uk\t" + i + "\t" + prob);
@@ -561,7 +560,7 @@ namespace BllipParser.DotNet.Vanilla
             {
                 Console.WriteLine(phcp + " " + put);
                 Console.WriteLine("psktt( " + shU + " | " + t + " ) = " + ans);
-                Debug.Assert(ans >= 0);
+                AssertInternal(ans >= 0);
             }
 
             return ans;
@@ -604,18 +603,17 @@ namespace BllipParser.DotNet.Vanilla
 
         float pHst(int wordInt, int t)
         {
-            Debug.Assert(wordInt >= 0);
+            AssertInternal(wordInt >= 0);
             FeatureTree strt = FeatureTree.roots(HCALC);
-            Debug.Assert(strt != null);
+            AssertInternal(strt != null);
             FeatureTree histPt = strt.follow(t, 0);
             if (histPt == null)
                 return 0;
 
-            Feat ft = histPt.feats.find(wordInt);
-            if (ft == null)
+            if (!histPt.try_feats_find_index(wordInt, out int ftIndex))
                 return 0;
             else
-                return ft.g();
+                return histPt.feats_index_ref_readonly(ftIndex).g();
         }
 
 
@@ -624,7 +622,7 @@ namespace BllipParser.DotNet.Vanilla
             //cerr << "Unknown word: " << shU << " for tag: " << t << endl; 
             double ans = pHugt(t);
             //cerr << "pHugt = " << ans << endl;
-            Debug.Assert(ans >= 0);
+            AssertInternal(ans >= 0);
             if (ans == 0)
                 return 0;
 
@@ -640,7 +638,7 @@ namespace BllipParser.DotNet.Vanilla
 
             ans *= phcp;
             ans *= .0001;
-            Debug.Assert(ans >= 0);
+            AssertInternal(ans >= 0);
             if (Term.fromInt(t).openClass())
             {
                 ECString sh = new ECString(langAwareToLower(shU.lexeme()));
@@ -656,7 +654,7 @@ namespace BllipParser.DotNet.Vanilla
             }
 
             ans *= 600;
-            Debug.Assert(ans >= 0);
+            AssertInternal(ans >= 0);
             //cerr << "psutt( " << shU << " | " << t << " ) = " << ans << endl;
             return ans;
         }
@@ -674,8 +672,8 @@ namespace BllipParser.DotNet.Vanilla
 
         protected int bucket(float val, int whichInt, int whichFt)
         {
-            Debug.Assert(whichInt < Feature.numCalcs);
-            Debug.Assert(whichFt < MAXNUMFS);
+            AssertInternal(whichInt < Feature.numCalcs);
+            AssertInternal(whichFt < MAXNUMFS);
             float logFac = Feature.logFacs[whichInt, whichFt];
             float lval = logFac * (float)Math.Log(val);
             int lvi = (int)lval;
@@ -744,10 +742,14 @@ namespace BllipParser.DotNet.Vanilla
                 ans = -1;
             else if (wwegt.t > t)
                 ans = 1;
-            else if (((string)wwegt.e).CompareTo(e) < 0)  //else if(wwegt.e < e) ans = -1;
-                ans = -1;
-            else if (((string)wwegt.e).CompareTo(e) > 0)  //else if(wwegt.e > e) ans = 1;
-                ans = 1;
+            else
+            {
+                //else if(wwegt.e < e) ans = -1;
+                //else if(wwegt.e > e) ans = 1;
+                int cmp = string.Compare((string)wwegt.e, (string)e, StringComparison.Ordinal);
+                if (cmp < 0) ans = -1;
+                else if (cmp > 0) ans = 1;
+            }
 
             return ans;
         }

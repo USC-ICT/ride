@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+
 using static BllipParser.DotNet.Vanilla.Bst_global;
 using static BllipParser.DotNet.Vanilla.headFinder;
 using static BllipParser.DotNet.Vanilla.utils;
@@ -61,7 +62,7 @@ namespace BllipParser.DotNet.Vanilla
             if (trmInt >= 400)
             {
                 Console.WriteLine("Bad trm int: " + trmInt);
-                Debug.Assert(trmInt < 400);
+                AssertInternal(trmInt < 400);
             }
 
             Term trm = null;
@@ -84,7 +85,7 @@ namespace BllipParser.DotNet.Vanilla
             }
             else
             {
-                Debug.Assert(at != null);
+                AssertInternal(at != null);
                 var bi = at.bsts().First;  //Bsts::iterator bi = at->bsts().begin();
                 int vpos = 0;
                 for ( ; bi != null; bi = bi.Next)
@@ -94,11 +95,11 @@ namespace BllipParser.DotNet.Vanilla
                     if (vval >= sb.num())
                     {
                         Console.WriteLine(vpos + " " + vval + " " + sb.num() + " " + at);
-                        Debug.Assert(vval < sb.num());
+                        AssertInternal(vval < sb.num());
                     }
 
                     InputTree sit = inputTreeFromBsts(sb.nth(vval), ref pos, sr);
-                    Debug.Assert(sit != null);
+                    AssertInternal(sit != null);
                     subtrs.push_back(sit);
                     vpos++;
                 }

@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
@@ -23,13 +23,7 @@ public static class VisemeFormatConverter
             xmlWriter.WriteAttributeString("id", "sp1"); // TODO: check this
 
             xmlWriter.WriteStartElement("text");
-            foreach (TtsReader.MarkData markData in ttsData.m_Marks)
-            {
-                xmlWriter.WriteStartElement("sync");
-                xmlWriter.WriteAttributeString("id", markData.name);
-                xmlWriter.WriteAttributeString("time", markData.time.ToString());
-                xmlWriter.WriteEndElement();
-            }
+            WriteWordAndSyncPoint(xmlWriter, ttsData);
 
             // end text
             xmlWriter.WriteEndElement();
@@ -110,6 +104,41 @@ public static class VisemeFormatConverter
         }
 
         return xmlText;
+    }
+
+    static void WriteWordAndSyncPoint(XmlWriter xmlWriter, TtsReader.TtsData ttsData)
+    {
+        int markIndex = 0;
+
+        foreach (TtsReader.WordTiming wordTiming in ttsData.m_WordTimings)
+        {
+            bool hasWordText = !string.IsNullOrWhiteSpace(wordTiming.word);
+            if (!hasWordText)
+                continue;
+
+            if (markIndex < ttsData.m_Marks.Count)
+                WriteSync(xmlWriter, ttsData.m_Marks[markIndex++]);
+
+            xmlWriter.WriteStartElement("word");
+            xmlWriter.WriteAttributeString("start", wordTiming.start.ToString());
+            xmlWriter.WriteAttributeString("end", wordTiming.end.ToString());
+            xmlWriter.WriteString(wordTiming.word);
+            xmlWriter.WriteEndElement();
+
+            if (markIndex < ttsData.m_Marks.Count)
+                WriteSync(xmlWriter, ttsData.m_Marks[markIndex++]);
+        }
+
+        while (markIndex < ttsData.m_Marks.Count)
+            WriteSync(xmlWriter, ttsData.m_Marks[markIndex++]);
+    }
+
+    static void WriteSync(XmlWriter xmlWriter, TtsReader.MarkData markData)
+    {
+        xmlWriter.WriteStartElement("sync");
+        xmlWriter.WriteAttributeString("id", markData.name);
+        xmlWriter.WriteAttributeString("time", markData.time.ToString());
+        xmlWriter.WriteEndElement();
     }
     #endregion
 }

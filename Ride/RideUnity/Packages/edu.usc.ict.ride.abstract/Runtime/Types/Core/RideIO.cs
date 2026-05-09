@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
@@ -34,6 +34,17 @@ namespace Ride
 
         #region JSON Serialization Helpers
 
+        /// <summary>
+        /// Default JSON settings used for Ride object graphs that may contain interface-typed values,
+        /// derived runtime types, and shared object references.
+        /// </summary>
+        /// <remarks>
+        /// This configuration is suited for internal Ride persistence scenarios where preserving
+        /// object identity and limited type metadata is more important than producing minimal JSON.
+        /// Relevant docs:
+        /// https://www.newtonsoft.com/json/help/html/PreserveObjectReferences.htm
+        /// https://www.newtonsoft.com/json/help/html/SerializeTypeNameHandling.htm
+        /// </remarks>
         static readonly JsonSerializerSettings m_jsonSerializerSettings = new JsonSerializerSettings
         {
             ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
@@ -44,6 +55,16 @@ namespace Ride
             TypeNameAssemblyFormatHandling = TypeNameAssemblyFormatHandling.Simple
         };
 
+        /// <summary>
+        /// JSON settings for serializing Ride data without Newtonsoft object-reference metadata.
+        /// </summary>
+        /// <remarks>
+        /// Callers use this when they still need automatic type-name support for polymorphic values,
+        /// but the payload must remain cleaner and easier for external services to consume.
+        /// Relevant docs:
+        /// https://www.newtonsoft.com/json/help/html/PreserveObjectReferences.htm
+        /// https://www.newtonsoft.com/json/help/html/SerializeTypeNameHandling.htm
+        /// </remarks>
         static readonly JsonSerializerSettings m_jsonSerializerSettingsNoObjRef = new JsonSerializerSettings
         {
             ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
@@ -54,6 +75,15 @@ namespace Ride
             TypeNameAssemblyFormatHandling = TypeNameAssemblyFormatHandling.Simple
         };
 
+        /// <summary>
+        /// JSON settings for plain payloads that should omit both object-reference metadata and type-name metadata.
+        /// </summary>
+        /// <remarks>
+        /// This is primarily intended for simple DTO-style request and response bodies exchanged with
+        /// external web services that expect conventional JSON rather than Ride-specific serialization hints.
+        /// Relevant docs:
+        /// https://www.newtonsoft.com/json/help/html/SerializeTypeNameHandling.htm
+        /// </remarks>
         static readonly JsonSerializerSettings m_jsonSerializerSettingsNoNameHandling = new JsonSerializerSettings
         {
             ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
@@ -63,20 +93,90 @@ namespace Ride
             TypeNameAssemblyFormatHandling = TypeNameAssemblyFormatHandling.Simple,
         };
 
+        /// <summary>Gets the default Ride JSON serialization settings.</summary>
+        /// <remarks>See <see cref="m_jsonSerializerSettings"/> for the detailed behavior and external documentation links.</remarks>
+        /// <returns>The shared serializer settings that preserve type metadata and object references.</returns>
         public static JsonSerializerSettings GetJsonConfig() => m_jsonSerializerSettings;
+
+        /// <summary>Gets JSON serialization settings that omit object-reference metadata.</summary>
+        /// <remarks>See <see cref="m_jsonSerializerSettingsNoObjRef"/> for the detailed behavior and external documentation links.</remarks>
+        /// <returns>The shared serializer settings without object-reference preservation.</returns>
         public static JsonSerializerSettings GetJsonConfigNoObjRef() => m_jsonSerializerSettingsNoObjRef;
+
+        /// <summary>Gets JSON serialization settings that omit both object-reference metadata and type-name metadata.</summary>
+        /// <remarks>See <see cref="m_jsonSerializerSettingsNoNameHandling"/> for the detailed behavior and external documentation links.</remarks>
+        /// <returns>The shared serializer settings intended for plain external-facing JSON payloads.</returns>
         public static JsonSerializerSettings GetJsonConfigNoNameHandling() => m_jsonSerializerSettingsNoNameHandling;
 
+        /// <summary>Serializes a value using the default Ride JSON settings and writes the result to disk.</summary>
+        /// <typeparam name="T">The type of value to serialize.</typeparam>
+        /// <param name="data">The value to serialize.</param>
+        /// <param name="path">The destination file path.</param>
         public static void JsonSerializeToFile<T>(T data, string path) => JsonSerializeToFile(JsonSerialize(data), path, GetJsonConfig());
+
+        /// <summary>Serializes a value using the supplied JSON settings and writes the result to disk.</summary>
+        /// <typeparam name="T">The type of value to serialize.</typeparam>
+        /// <param name="data">The value to serialize.</param>
+        /// <param name="path">The destination file path.</param>
+        /// <param name="settings">The Newtonsoft settings to use during serialization.</param>
         public static void JsonSerializeToFile<T>(T data, string path, JsonSerializerSettings settings) => File.WriteAllText(path, JsonSerialize(data, settings));
 
+        /// <summary>Serializes a value to JSON using the default Ride settings.</summary>
+        /// <typeparam name="T">The type of value to serialize.</typeparam>
+        /// <param name="data">The value to serialize.</param>
+        /// <returns>The serialized JSON string.</returns>
         public static string JsonSerialize<T>(T data) => JsonSerialize(data, GetJsonConfig());
+
+        /// <summary>
+        /// Serializes a value to JSON without emitting object-reference metadata.
+        /// </summary>
+        /// <typeparam name="T">The type of value to serialize.</typeparam>
+        /// <param name="data">The value to serialize.</param>
+        /// <returns>The serialized JSON string.</returns>
+        /// <remarks>
+        /// Callers commonly use this for service requests where Newtonsoft reference tokens such as
+        /// <c>$id</c> and <c>$ref</c> would be noisy or unsupported, but type-name handling may still be useful.
+        /// Relevant docs:
+        /// https://www.newtonsoft.com/json/help/html/PreserveObjectReferences.htm
+        /// </remarks>
         public static string JsonSerializeNoObjRef<T>(T data) => JsonSerialize(data, GetJsonConfigNoObjRef());
 
+        /// <summary>
+        /// Serializes a value to JSON using the supplied Newtonsoft settings.
+        /// </summary>
+        /// <typeparam name="T">The type of value to serialize.</typeparam>
+        /// <param name="data">The value to serialize.</param>
+        /// <param name="settings">The serializer settings to use.</param>
+        /// <returns>The serialized JSON string.</returns>
         public static string JsonSerialize<T>(T data, JsonSerializerSettings settings) => JsonConvert.SerializeObject(data, settings);
 
+        /// <summary>
+        /// Deserializes JSON into the requested type using Newtonsoft's default behavior.
+        /// </summary>
+        /// <typeparam name="T">The destination type.</typeparam>
+        /// <param name="json">The JSON string to deserialize.</param>
+        /// <returns>The deserialized value.</returns>
+        /// <remarks>
+        /// This is the most common helper for parsing request and response DTOs returned by web services,
+        /// as well as JSON previously serialized by Ride without special error-tolerance requirements.
+        /// Relevant docs:
+        /// https://www.newtonsoft.com/json/help/html/DeserializeObject.htm
+        /// </remarks>
         public static T JsonDeserialize<T>(string json) => JsonConvert.DeserializeObject<T>(json);
 
+        /// <summary>
+        /// Deserializes JSON while ignoring explicit null values and unknown members in the payload.
+        /// </summary>
+        /// <typeparam name="T">The destination type.</typeparam>
+        /// <param name="json">The JSON string to deserialize.</param>
+        /// <returns>The deserialized value.</returns>
+        /// <remarks>
+        /// Use this when ingesting partially compatible or forward-evolving payloads where callers prefer
+        /// best-effort parsing over strict schema enforcement.
+        /// Relevant docs:
+        /// https://www.newtonsoft.com/json/help/html/NullValueHandlingIgnore.htm
+        /// https://www.newtonsoft.com/json/help/html/DeserializeMissingMemberHandling.htm
+        /// </remarks>
         public static T JsonDeserializeIgnoreNullAndMissing<T>(string json)
         {
             var jsonSettings = new JsonSerializerSettings
@@ -106,9 +206,42 @@ namespace Ride
             succeeded = UnityEngine.Caching.ClearCache();
 #endif
             if (!succeeded)
-                UnityEngine.Debug.LogWarningFormat("ClearAssetBundleCache() - Caching.ClearCache() failed");
+                UnityEngine.Debug.LogWarning("ClearAssetBundleCache() - Caching.ClearCache() failed");
 
             return succeeded;
+        }
+
+        #endregion
+
+        #region File System Utilities
+
+        /// <summary>
+        /// Computes the number of files and total bytes under a directory.
+        /// </summary>
+        /// <param name="path">The directory path to scan recursively.</param>
+        /// <returns>The file count and total byte size.</returns>
+        public static (int, Int64) ComputeDirectorySize(string path)
+        {
+            try
+            {
+                int fileCount = 0;
+                Int64 totalBytes = 0;
+
+                var directoryInfo = new DirectoryInfo(path);
+                var files = directoryInfo.EnumerateFiles("*", SearchOption.AllDirectories);
+                foreach (var file in files)
+                {
+                    fileCount++;
+                    totalBytes += file.Length;
+                }
+
+                return (fileCount, totalBytes);
+            }
+            catch (Exception ex)
+            {
+                UnityEngine.Debug.LogWarning($"RideIO.ComputeDirectorySize() - error reading directory '{path}': {ex}");
+                return (0, 0);
+            }
         }
 
         #endregion
@@ -454,6 +587,11 @@ namespace Ride
         /// <returns>True if a connection to the internet exists, otherwise false</returns>
         public static bool IsInternetConnectionAvailable()
         {
+#if UNITY_WEBGL
+            // In WebGL, if the app loaded, internet was already available.
+            // Avoid blocking network calls which freeze the browser.
+            return true;
+#else
             try
             {
                 using (var client = new WebClient())
@@ -464,6 +602,7 @@ namespace Ride
             {
                 return false;
             }
+#endif
         }
 
         #endregion

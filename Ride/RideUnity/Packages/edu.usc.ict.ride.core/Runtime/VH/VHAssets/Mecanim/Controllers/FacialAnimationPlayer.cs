@@ -1,6 +1,8 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Text;
 using UnityEngine;
 
 namespace VHAssets
@@ -20,6 +22,13 @@ public abstract class FacialAnimationPlayer : MonoBehaviour
         tTeeth,
         W,
         wide,
+        _112_happy,
+        _124_disgust,
+        _126_fear,
+        _127_surprise,
+        _129_angry,
+        _130_sad,
+        _131_contempt,
         face_neutral,  // special case, not a speech viseme.  when all other visemes are 0, this is 1
     }
 
@@ -57,6 +66,7 @@ public abstract class FacialAnimationPlayer : MonoBehaviour
     /// <summary>Represents a single scheduled viseme animation segment.</summary>
     private class VisemeAnimation
     {
+        public int Id;
         public FaceShape Shape;
         public float StartArticulation;
         public float TargetArticulation;
@@ -64,7 +74,14 @@ public abstract class FacialAnimationPlayer : MonoBehaviour
         public float Duration;
         public BMLParser.CurveData CurveData;
 
+        // debug tracking fields
+        public float BestObservedArticulation;
+        public float ClosestObservedDelta;
+        public bool ReachedTargetWithinTolerance;
+        public bool WasOverlappedBeforeCompletion;
+
         public VisemeAnimation(
+            int id,
             FaceShape shape,
             float startArticulation,
             float targetArticulation,
@@ -72,12 +89,65 @@ public abstract class FacialAnimationPlayer : MonoBehaviour
             float duration,
             BMLParser.CurveData curveData)
         {
+            Id = id;
             Shape = shape;
             StartArticulation = startArticulation;
             TargetArticulation = targetArticulation;
             StartTime = startTime;
             Duration = Mathf.Max(duration, 0f);
             CurveData = curveData;
+            BestObservedArticulation = Mathf.Clamp01(startArticulation);
+            ClosestObservedDelta = Mathf.Abs(Mathf.Clamp01(startArticulation) - Mathf.Clamp01(targetArticulation));
+            ReachedTargetWithinTolerance = false;
+            WasOverlappedBeforeCompletion = false;
+        }
+
+        public float EndTime => StartTime + Duration;
+    }
+
+    private struct ScheduleDebugEntry
+    {
+        public float Time;
+        public string Name;
+        public float Articulation;
+
+        public ScheduleDebugEntry(float time, string name, float articulation)
+        {
+            Time = time;
+            Name = name;
+            Articulation = articulation;
+        }
+    }
+
+    private struct VisemeProblemRecord
+    {
+        public string VisemeName;
+        public string Reason;
+        public float TargetArticulation;
+        public float BestObservedArticulation;
+        public float ClosestObservedDelta;
+        public float Duration;
+
+        public VisemeProblemRecord(string visemeName, string reason, float targetArticulation, float bestObservedArticulation, float closestObservedDelta, float duration)
+        {
+            VisemeName = visemeName;
+            Reason = reason;
+            TargetArticulation = targetArticulation;
+            BestObservedArticulation = bestObservedArticulation;
+            ClosestObservedDelta = closestObservedDelta;
+            Duration = duration;
+        }
+    }
+
+    private struct VisemeAggregateRecord
+    {
+        public int Count;
+        public float WorstDelta;
+
+        public VisemeAggregateRecord(int count, float worstDelta)
+        {
+            Count = count;
+            WorstDelta = worstDelta;
         }
     }
 
@@ -86,6 +156,7 @@ public abstract class FacialAnimationPlayer : MonoBehaviour
     #region Fields
     [SerializeField] private EasingEquation m_EasingEquation = EasingEquation.Linear;
     [SerializeField] private bool m_UseCurveSmoothing = true;
+    [SerializeField] private float m_EndOfUtteranceCloseBuffer = 0.5f;
 
     [SerializeField] private bool m_EnableCoarticulation = false;
 
@@ -95,6 +166,7 @@ public abstract class FacialAnimationPlayer : MonoBehaviour
     // for some reason, visemes driven by mecanim are much less exagerated than those driven by smartbody
     // this variable helps to solve that problem, but this needs further investigation
     [SerializeField] protected float m_FacialVisemeMultiplier = 1f;
+    [SerializeField] protected float m_FacialExpressionMultiplier = 1f;
     [SerializeField] protected VisemeModifierData[] m_VisemeModifiers = 
     {
         new(FaceShape.FV, 1),
@@ -106,15 +178,37 @@ public abstract class FacialAnimationPlayer : MonoBehaviour
         new(FaceShape.tTeeth, 1),
         new(FaceShape.W, 1),
         new(FaceShape.wide, 1),
+        new(FaceShape._112_happy, 1),
+        new(FaceShape._124_disgust, 1),
+        new(FaceShape._126_fear, 1),
+        new(FaceShape._127_surprise, 1),
+        new(FaceShape._129_angry, 1),
+        new(FaceShape._130_sad, 1),
+        new(FaceShape._131_contempt, 1),
     };
+
+    [Header("Debug")]
+    [SerializeField] private bool m_RuntimeDebugOutput = false;
+    [Tooltip("How close the observed viseme weight must get to the scheduled target to count as a hit in debug output. Smaller values are stricter; larger values treat near-misses as successful.")]
+    [SerializeField, Range(0f, 1f)] private float m_TargetHitTolerance = 0.1f;
+    [Tooltip("Debug threshold for flagging densely packed viseme events. If consecutive scheduled events are closer than this many seconds, the schedule is counted as crowded. Useful for spotting flappy or over-dense lipsync data.")]
+    [SerializeField, Min(0f)] private float m_CrowdedScheduleThresholdSeconds = 0.05f;
+
 
     private OnSetViseme m_OnSetVisemeCallback;
     private OnFinishedPlaying m_OnFinishedPlayingCallback;
 
     private List<VisemeAnimation> m_ActiveVisemeAnimations = new(32);
+    private int m_NextVisemeAnimationId = 1;
+    private string m_DebugScheduleSource = string.Empty;
+    private int m_DebugScheduledSpeechSegments;
+    private int m_DebugPositiveTargetSegments;
+    private int m_DebugOverlapCount;
+    private int m_DebugCompletedPositiveTargetSegments;
+    private readonly List<VisemeProblemRecord> m_DebugProblemSegments = new(32);
 
-    // Raw per-viseme weights for this frame (before coarticulation).
-    private Dictionary<FaceShape, float> m_VisemeWeights = new();
+    // Raw per-face-shape weights for this frame (before coarticulation).
+    private Dictionary<FaceShape, float> m_FaceShapeWeights = new();
     #endregion
 
     #region Properties
@@ -127,6 +221,7 @@ public abstract class FacialAnimationPlayer : MonoBehaviour
     public float CoarticulationStrength { get => m_CoarticulationStrength; set => m_CoarticulationStrength = value; }
     public EasingEquation CurvePointEasingEquation { get => m_EasingEquation; set => m_EasingEquation = value; }
     public float VisemeWeightMultiplier { get => m_FacialVisemeMultiplier; set => m_FacialVisemeMultiplier = value; }
+    public float ExpressionWeightMultiplier { get => m_FacialExpressionMultiplier; set => m_FacialExpressionMultiplier = value; }
     public IEnumerable<VisemeModifierData> VisemeModifiers => m_VisemeModifiers;
     #endregion
 
@@ -153,11 +248,12 @@ public abstract class FacialAnimationPlayer : MonoBehaviour
             float elapsed = now - anim.StartTime;
             float duration = Mathf.Max(anim.Duration, Mathf.Epsilon);
             float clampedTime = Mathf.Min(elapsed, duration);
+            float observedArticulation = GetObservedScheduleSpaceViseme(anim.Shape);
+            TrackObservedArticulation(anim, observedArticulation);
 
             float articulation = HandleEasing(anim.StartArticulation, anim.TargetArticulation, clampedTime, duration, anim.CurveData);
 
-            SetViseme(ToVisemeName(anim.Shape), articulation);
-            m_OnSetVisemeCallback?.Invoke(ToVisemeName(anim.Shape), articulation);
+            // Update the raw per-shape cache only; we apply coarticulation + neutral in the post-pass below.
             UpdateVisemeWeightCache(anim.Shape, articulation);
             anyUpdated = true;
 
@@ -165,37 +261,73 @@ public abstract class FacialAnimationPlayer : MonoBehaviour
             {
                 // Ensure we end exactly at the target articulation, then remove the animation segment.
                 UpdateVisemeWeightCache(anim.Shape, anim.TargetArticulation);
+                LogVisemeAnimationCompletion(anim, observedArticulation, "completed");
                 m_ActiveVisemeAnimations.RemoveAt(i);
             }
         }
 
         if (anyUpdated)
         {
-            // Post-pass: apply coarticulation and update visemes + neutral.
+            // Post-pass: apply coarticulation and update speech + neutral.
             float totalSpeech = 0f;
 
             foreach (FaceShape shape in FaceShapeValues)
             {
-                if (shape == FaceShape.face_neutral)
+                if (!IsSpeechShape(shape))
                     continue;
 
-                m_VisemeWeights.TryGetValue(shape, out float rawWeight);
+                m_FaceShapeWeights.TryGetValue(shape, out float rawWeight);
 
-                // First apply neighbor-based coarticulation.
+                // Neighbor-based coarticulation (speech-only).
                 float finalWeight = ApplyNeighborCoarticulation(shape, rawWeight);
                 finalWeight = Mathf.Clamp01(finalWeight);
 
-                // Update viseme with final weight.
-                SetViseme(ToVisemeName(shape), finalWeight);
-                m_OnSetVisemeCallback?.Invoke(ToVisemeName(shape), finalWeight);
+                string shapeName = ToVisemeName(shape);
+                SetViseme(shapeName, finalWeight);
+                m_OnSetVisemeCallback?.Invoke(shapeName, finalWeight);
 
                 totalSpeech += finalWeight;
             }
 
-            float neutralAmount = 1f - totalSpeech;
-            SetViseme(ToVisemeName(FaceShape.face_neutral), neutralAmount);
-            m_OnSetVisemeCallback?.Invoke(ToVisemeName(FaceShape.face_neutral), neutralAmount);
+            float neutralAmount = Mathf.Clamp01(1f - totalSpeech);
+            string neutralName = ToVisemeName(FaceShape.face_neutral);
+            SetViseme(neutralName, neutralAmount);
+            m_OnSetVisemeCallback?.Invoke(neutralName, neutralAmount);
+
+            // Post-pass: apply expressions (do not affect neutral).
+            foreach (FaceShape shape in FaceShapeValues)
+            {
+                if (shape == FaceShape.face_neutral || IsSpeechShape(shape))
+                    continue;
+
+                m_FaceShapeWeights.TryGetValue(shape, out float rawWeight);
+
+                float finalWeight = Mathf.Clamp01(rawWeight);
+
+                string shapeName = ToVisemeName(shape);
+                SetViseme(shapeName, finalWeight);
+                m_OnSetVisemeCallback?.Invoke(shapeName, finalWeight);
+            }
         }
+    }
+
+    public virtual void InitializeLoadedAsset() { }
+
+    public virtual void ResetLoadedAsset()
+    {
+        // Stop any scheduled viseme coroutines / finish waits.
+        StopAllCoroutines();
+
+        // Stop driving active segments.
+        m_ActiveVisemeAnimations.Clear();
+
+        // Clear cached weights (so reload starts clean).
+        m_FaceShapeWeights.Clear();
+        ResetRuntimeDebugSession();
+
+        // Intentionally do NOT call SetViseme(...) here, because on unload
+        // the derived implementations may no longer have valid targets.
+        // (BlendShape version will zero weights in its own ResetLoadedAsset.)
     }
 
     abstract protected void SetViseme(string viseme, float weight);
@@ -209,6 +341,9 @@ public abstract class FacialAnimationPlayer : MonoBehaviour
         if (timings == null || timings.Count == 0)
             return;
 
+        BeginRuntimeDebugSession("WordTimings");
+        LogScheduleSummary(BuildWordTimingScheduleSummary(timings));
+
         float latestEndTime = ScheduleWordTimings(timings);
 
         // Wait until the last scheduled word/viseme segment should have finished.
@@ -220,9 +355,14 @@ public abstract class FacialAnimationPlayer : MonoBehaviour
         if (uttTiming == null || uttTiming.m_CurveData == null || uttTiming.m_CurveData.Count == 0)
             return;
 
+        BeginRuntimeDebugSession("CurveData");
+        LogScheduleSummary(BuildCurveScheduleSummary(uttTiming.m_CurveData));
+
+        var curveDataToPlay = CreateNormalizedUtteranceCurves(uttTiming.m_CurveData, m_EndOfUtteranceCloseBuffer);
+
         float latestEndTime = Time.time;
 
-        foreach (var curveData in uttTiming.m_CurveData)
+        foreach (var curveData in curveDataToPlay)
         {
             var smoothedCurve = curveData;
             if (UseCurveSmoothing)
@@ -328,13 +468,20 @@ public abstract class FacialAnimationPlayer : MonoBehaviour
         duration = Mathf.Abs(duration);
         if (duration <= 0f)
         {
-            SetViseme(ToVisemeName(faceShape), articulation);
-            m_OnSetVisemeCallback?.Invoke(ToVisemeName(faceShape), articulation);
+            string shapeName = ToVisemeName(faceShape);
+            SetViseme(shapeName, articulation);
+            m_OnSetVisemeCallback?.Invoke(shapeName, articulation);
             UpdateVisemeWeightCache(faceShape, articulation);
 
-            float neutralAmount = ComputeNeutralAmountFromVisemes();
-            SetViseme(ToVisemeName(FaceShape.face_neutral), neutralAmount);
-            m_OnSetVisemeCallback?.Invoke(ToVisemeName(FaceShape.face_neutral), neutralAmount);
+            // Speech-only: expressions do not affect neutral.
+            if (IsSpeechShape(faceShape))
+            {
+                float neutralAmount = ComputeNeutralAmountFromVisemes();
+                string neutralName = ToVisemeName(FaceShape.face_neutral);
+                SetViseme(neutralName, neutralAmount);
+                m_OnSetVisemeCallback?.Invoke(neutralName, neutralAmount);
+            }
+
             return;
         }
 
@@ -363,21 +510,73 @@ public abstract class FacialAnimationPlayer : MonoBehaviour
         RampViseme(FaceShape.tTeeth, 0, 0, RampDownTime, RampDownTime);
         RampViseme(FaceShape.W, 0, 0, RampDownTime, RampDownTime);
         RampViseme(FaceShape.wide, 0, 0, RampDownTime, RampDownTime);
+
+        ResetRuntimeDebugSession();
     }
 
     public void ResetViseme()
     {
+        StopActiveSpeechAnimations();
+
+        // Speech-only: do not clear expressions.
         // Clear all tracked speech viseme weights to 0.
+        foreach (FaceShape shape in FaceShapeValues)
+        {
+            if (!IsSpeechShape(shape))
+                continue;
+
+            m_FaceShapeWeights[shape] = 0f;
+            string shapeName = ToVisemeName(shape);
+            SetViseme(shapeName, 0f);
+            m_OnSetVisemeCallback?.Invoke(shapeName, 0f);
+        }
+
+        string neutralName = ToVisemeName(FaceShape.face_neutral);
+        SetViseme(neutralName, 1f);
+        m_OnSetVisemeCallback?.Invoke(neutralName, 1f);
+    }
+
+    public void ResetExpressions()
+    {
+        // Optional but recommended: stop only expression animations.
+        StopActiveExpressionAnimations();
+
         foreach (FaceShape shape in FaceShapeValues)
         {
             if (shape == FaceShape.face_neutral)
                 continue;
 
-            m_VisemeWeights[shape] = 0f;
+            if (IsSpeechShape(shape))
+                continue;
+
+            m_FaceShapeWeights[shape] = 0f;
+
+            string shapeName = ToVisemeName(shape);
+            SetViseme(shapeName, 0f);
+            m_OnSetVisemeCallback?.Invoke(shapeName, 0f);
+        }
+    }
+
+    public void ResetAllFaceShapes()
+    {
+        m_ActiveVisemeAnimations.Clear();
+
+        foreach (FaceShape shape in FaceShapeValues)
+        {
+            if (shape == FaceShape.face_neutral)
+                continue;
+
+            m_FaceShapeWeights[shape] = 0f;
+
+            string shapeName = ToVisemeName(shape);
+            SetViseme(shapeName, 0f);
+            m_OnSetVisemeCallback?.Invoke(shapeName, 0f);
         }
 
-        SetViseme(ToVisemeName(FaceShape.face_neutral), 1f);
-        m_OnSetVisemeCallback?.Invoke(ToVisemeName(FaceShape.face_neutral), 1f);
+        // Baseline: full neutral.
+        string neutralName = ToVisemeName(FaceShape.face_neutral);
+        SetViseme(neutralName, 1f);
+        m_OnSetVisemeCallback?.Invoke(neutralName, 1f);
     }
 
     public void SetVisemeModifierWeightMultiplier(string viseme, float multiplier)
@@ -465,7 +664,16 @@ public abstract class FacialAnimationPlayer : MonoBehaviour
         float duration,
         BMLParser.CurveData curveData)
     {
-        var anim = new VisemeAnimation(faceShape, startArticulation, targetArticulation, startTime, duration, curveData);
+        if (IsSpeechShape(faceShape))
+        {
+            m_DebugScheduledSpeechSegments++;
+            if (Mathf.Clamp01(targetArticulation) > m_TargetHitTolerance)
+                m_DebugPositiveTargetSegments++;
+        }
+
+        LogOverlappingVisemeAnimations(faceShape, startTime, duration);
+
+        var anim = new VisemeAnimation(m_NextVisemeAnimationId++, faceShape, startArticulation, targetArticulation, startTime, duration, curveData);
         m_ActiveVisemeAnimations.Add(anim);
     }
 
@@ -577,6 +785,86 @@ public abstract class FacialAnimationPlayer : MonoBehaviour
         return latestEndTime;
     }
 
+    /// <summary>
+    /// Creates a local curve list for playback and ensures each speech viseme curve
+    /// has a terminal closing key if needed.
+    /// </summary>
+    /// <param name="curves">The source FaceFX viseme curves to prepare for playback.</param>
+    /// <param name="closeBufferTime">
+    /// The amount of time, in seconds, to place after a curve's last key before
+    /// appending a closing key at articulation 0.
+    /// </param>
+    /// <returns>
+    /// A list of curves safe to use for playback scheduling. Speech curves that do
+    /// not already end at 0 are copied with an appended closing key; other curves
+    /// are returned unchanged.
+    /// </returns>
+    private static List<BMLParser.CurveData> CreateNormalizedUtteranceCurves(List<BMLParser.CurveData> curves, float closeBufferTime)
+    {
+        if (curves == null || curves.Count == 0)
+            return new List<BMLParser.CurveData>();
+
+        var copiedCurves = new List<BMLParser.CurveData>(curves.Count);
+        foreach (var curveData in curves)
+            copiedCurves.Add(AppendCurveCloseIfNeeded(curveData, closeBufferTime));
+
+        return copiedCurves;
+    }
+
+    /// <summary>
+    /// Appends a terminal closing key to a speech viseme curve when its last key
+    /// does not already return the viseme to 0.
+    /// </summary>
+    /// <param name="curveData">The curve to inspect and normalize.</param>
+    /// <param name="closeBufferTime">
+    /// The amount of time, in seconds, to place after the curve's final key before
+    /// adding the closing key.
+    /// </param>
+    /// <returns>
+    /// The original curve if no change is needed, or a copied curve with an added
+    /// terminal key at articulation 0.
+    /// </returns>
+    private static BMLParser.CurveData AppendCurveCloseIfNeeded(BMLParser.CurveData curveData, float closeBufferTime)
+    {
+        if (curveData == null || curveData.numKeys <= 0)
+            return curveData;
+
+        if (!TryParseViseme(curveData.name, out FaceShape shape) || !IsSpeechShape(shape))
+            return curveData;
+
+        if (HasCurveCloseAtEnd(curveData))
+            return curveData;
+
+        var normalizedCurve = new BMLParser.CurveData(curveData.name, curveData.owner, curveData.numKeys + 1);
+        for (int i = 0; i < curveData.numKeys; i++)
+        {
+            normalizedCurve.AddKey(curveData.curveKeys[i], i);
+
+            var slopeData = curveData.GetSlopeData(i);
+            if (slopeData != null)
+                normalizedCurve.Set(i, slopeData.ml, slopeData.mr, slopeData.dl, slopeData.dr);
+        }
+
+        float lastKeyTime = curveData.GetTime(curveData.numKeys - 1);
+        float closeKeyTime = lastKeyTime + Mathf.Max(0f, closeBufferTime, Mathf.Epsilon);
+        normalizedCurve.AddKey(closeKeyTime, 0f, curveData.numKeys);
+
+        normalizedCurve.SortKeysByTime();
+        return normalizedCurve;
+    }
+
+    private static bool HasCurveCloseAtEnd(BMLParser.CurveData curveData)
+    {
+        if (curveData == null || curveData.numKeys <= 0)
+            return true;
+
+        if (!TryParseViseme(curveData.name, out FaceShape shape) || !IsSpeechShape(shape))
+            return true;
+
+        float lastArticulation = curveData.GetArticulation(curveData.numKeys - 1);
+        return Mathf.Approximately(lastArticulation, 0f);
+    }
+
     // Waits until the given absolute time has passed, then fires the finished callback.
     // Used by both Play(...) overloads after scheduling all viseme segments.
     private IEnumerator WaitForScheduleToFinish(float scheduledEndTime)
@@ -584,6 +872,8 @@ public abstract class FacialAnimationPlayer : MonoBehaviour
         while (Time.time < scheduledEndTime)
             yield return null;
 
+        LogRuntimeDebugSummary();
+        ResetRuntimeDebugSession();
         m_OnFinishedPlayingCallback?.Invoke();
     }
 
@@ -595,13 +885,371 @@ public abstract class FacialAnimationPlayer : MonoBehaviour
         if (shape == FaceShape.face_neutral)
             return;
 
-        weight = Mathf.Clamp01(weight);
-
-        if (m_VisemeWeights.ContainsKey(shape))
-            m_VisemeWeights[shape] = weight;
-        else
-            m_VisemeWeights.Add(shape, weight);
+        m_FaceShapeWeights[shape] = Mathf.Clamp01(weight);
     }
+
+    private void TrackObservedArticulation(VisemeAnimation anim, float observedArticulation)
+    {
+        float clampedObserved = Mathf.Clamp01(observedArticulation);
+        anim.BestObservedArticulation = Mathf.Max(anim.BestObservedArticulation, clampedObserved);
+
+        float delta = Mathf.Abs(clampedObserved - Mathf.Clamp01(anim.TargetArticulation));
+        if (delta < anim.ClosestObservedDelta)
+            anim.ClosestObservedDelta = delta;
+
+        if (delta <= m_TargetHitTolerance)
+            anim.ReachedTargetWithinTolerance = true;
+    }
+
+    private void LogOverlappingVisemeAnimations(FaceShape faceShape, float startTime, float duration)
+    {
+        if (!m_RuntimeDebugOutput)
+            return;
+
+        float endTime = startTime + Mathf.Max(duration, 0f);
+        float observedArticulation = GetObservedScheduleSpaceViseme(faceShape);
+
+        for (int i = 0; i < m_ActiveVisemeAnimations.Count; i++)
+        {
+            var existing = m_ActiveVisemeAnimations[i];
+            if (existing.Shape != faceShape)
+                continue;
+
+            if (!IntervalsOverlap(existing.StartTime, existing.EndTime, startTime, endTime))
+                continue;
+
+            TrackObservedArticulation(existing, observedArticulation);
+            existing.WasOverlappedBeforeCompletion = true;
+            m_DebugOverlapCount++;
+        }
+    }
+
+    private void LogVisemeAnimationCompletion(VisemeAnimation anim, float observedArticulation, string reason)
+    {
+        if (!m_RuntimeDebugOutput)
+            return;
+
+        TrackObservedArticulation(anim, observedArticulation);
+
+        float positiveTarget = Mathf.Clamp01(anim.TargetArticulation);
+        if (positiveTarget <= m_TargetHitTolerance)
+            return;
+
+        m_DebugCompletedPositiveTargetSegments++;
+
+        bool missedTarget = !anim.ReachedTargetWithinTolerance;
+        bool interruptedBeforeTarget = anim.WasOverlappedBeforeCompletion && !anim.ReachedTargetWithinTolerance;
+        if (!missedTarget && !interruptedBeforeTarget)
+            return;
+
+        m_DebugProblemSegments.Add(new VisemeProblemRecord(
+            ToVisemeName(anim.Shape),
+            interruptedBeforeTarget ? "overlapped" : reason,
+            positiveTarget,
+            anim.BestObservedArticulation,
+            anim.ClosestObservedDelta,
+            anim.Duration));
+    }
+
+    private void LogScheduleSummary(string summary)
+    {
+        if (!m_RuntimeDebugOutput || string.IsNullOrEmpty(summary))
+            return;
+
+        Debug.Log(summary);
+    }
+
+    private string BuildWordTimingScheduleSummary(List<TtsReader.WordTiming> timings)
+    {
+        if (timings == null || timings.Count == 0)
+            return "FacialAnimationPlayer Schedule: no word timings.";
+
+        int wordCount = 0;
+        int visemeCount = 0;
+        int crowdedTransitions = 0;
+        int simultaneousEntries = 0;
+        int zeroEntries = 0;
+        var uniqueVisemes = new HashSet<string>(StringComparer.Ordinal);
+        var entries = new List<ScheduleDebugEntry>();
+
+        for (int i = 0; i < timings.Count; i++)
+        {
+            var wordTiming = timings[i];
+            if (wordTiming == null)
+                continue;
+
+            wordCount++;
+            if (wordTiming.m_VisemesUsed == null)
+                continue;
+
+            for (int j = 0; j < wordTiming.m_VisemesUsed.Count; j++)
+            {
+                var visemeData = wordTiming.m_VisemesUsed[j];
+                if (visemeData == null)
+                    continue;
+
+                visemeCount++;
+                if (Mathf.Abs(visemeData.articulation) <= 0.0001f)
+                    zeroEntries++;
+                uniqueVisemes.Add(visemeData.type ?? string.Empty);
+                entries.Add(new ScheduleDebugEntry(visemeData.start, visemeData.type ?? string.Empty, visemeData.articulation));
+            }
+        }
+
+        entries.Sort((a, b) => a.Time.CompareTo(b.Time));
+
+        float minGap = float.PositiveInfinity;
+        for (int i = 1; i < entries.Count; i++)
+        {
+            float gap = entries[i].Time - entries[i - 1].Time;
+            if (gap < minGap)
+                minGap = gap;
+
+            if (gap <= m_CrowdedScheduleThresholdSeconds)
+                crowdedTransitions++;
+
+            if (Mathf.Abs(gap) <= 0.0001f)
+                simultaneousEntries++;
+        }
+
+        StringBuilder sb = new();
+        sb.Append("FacialAnimationPlayer Schedule - source=WordTimings ");
+        sb.Append($"character={name} words={wordCount} visemeEntries={visemeCount} uniqueVisemes={uniqueVisemes.Count} ");
+        sb.Append($"zeroEntries={zeroEntries} nonZeroEntries={Mathf.Max(0, visemeCount - zeroEntries)} ");
+        sb.Append($"crowdedTransitions={crowdedTransitions} threshold={m_CrowdedScheduleThresholdSeconds.ToString("0.000", CultureInfo.InvariantCulture)}s ");
+        sb.Append($"minGap={(float.IsPositiveInfinity(minGap) ? "n/a" : minGap.ToString("0.000", CultureInfo.InvariantCulture) + "s")} ");
+        sb.Append($"sameTimeEntries={simultaneousEntries}");
+
+        return sb.ToString();
+    }
+
+    private string BuildCurveScheduleSummary(List<BMLParser.CurveData> curves)
+    {
+        if (curves == null || curves.Count == 0)
+            return "FacialAnimationPlayer Schedule: no curves.";
+
+        int curveCount = 0;
+        int speechCurveCount = 0;
+        int keyCount = 0;
+        int crowdedTransitions = 0;
+        var keys = new List<ScheduleDebugEntry>();
+
+        for (int i = 0; i < curves.Count; i++)
+        {
+            var curve = curves[i];
+            if (curve == null)
+                continue;
+
+            curveCount++;
+            if (TryParseViseme(curve.name, out FaceShape shape) && IsSpeechShape(shape))
+                speechCurveCount++;
+
+            keyCount += curve.numKeys;
+            for (int j = 0; j < curve.numKeys; j++)
+                keys.Add(new ScheduleDebugEntry(curve.GetTime(j), curve.name, curve.GetArticulation(j)));
+        }
+
+        keys.Sort((a, b) => a.Time.CompareTo(b.Time));
+
+        float minGap = float.PositiveInfinity;
+        for (int i = 1; i < keys.Count; i++)
+        {
+            float gap = keys[i].Time - keys[i - 1].Time;
+            if (gap < minGap)
+                minGap = gap;
+
+            if (gap <= m_CrowdedScheduleThresholdSeconds)
+                crowdedTransitions++;
+        }
+
+        StringBuilder sb = new();
+        sb.Append("FacialAnimationPlayer Schedule - source=CurveData ");
+        sb.Append($"character={name} curves={curveCount} speechCurves={speechCurveCount} keys={keyCount} ");
+        sb.Append($"crowdedTransitions={crowdedTransitions} threshold={m_CrowdedScheduleThresholdSeconds.ToString("0.000", CultureInfo.InvariantCulture)}s ");
+        sb.Append($"minGap={(float.IsPositiveInfinity(minGap) ? "n/a" : minGap.ToString("0.000", CultureInfo.InvariantCulture) + "s")}");
+
+        return sb.ToString();
+    }
+
+    private void BeginRuntimeDebugSession(string scheduleSource)
+    {
+        if (!m_RuntimeDebugOutput)
+            return;
+
+        m_DebugScheduleSource = scheduleSource ?? string.Empty;
+        m_DebugScheduledSpeechSegments = 0;
+        m_DebugPositiveTargetSegments = 0;
+        m_DebugOverlapCount = 0;
+        m_DebugCompletedPositiveTargetSegments = 0;
+        m_DebugProblemSegments.Clear();
+    }
+
+    private void ResetRuntimeDebugSession()
+    {
+        m_DebugScheduleSource = string.Empty;
+        m_DebugScheduledSpeechSegments = 0;
+        m_DebugPositiveTargetSegments = 0;
+        m_DebugOverlapCount = 0;
+        m_DebugCompletedPositiveTargetSegments = 0;
+        m_DebugProblemSegments.Clear();
+    }
+
+    private void LogRuntimeDebugSummary()
+    {
+        if (!m_RuntimeDebugOutput)
+            return;
+
+        StringBuilder sb = new();
+        sb.Append($"FacialAnimationPlayer Result - source={m_DebugScheduleSource} character={name} ");
+        sb.Append($"speechSegments={m_DebugScheduledSpeechSegments} positiveTargets={m_DebugPositiveTargetSegments} ");
+        sb.Append($"completedPositiveTargets={m_DebugCompletedPositiveTargetSegments} overlaps={m_DebugOverlapCount} ");
+        sb.Append($"missedTargets={m_DebugProblemSegments.Count} tolerance={m_TargetHitTolerance.ToString("0.00", CultureInfo.InvariantCulture)}");
+
+        sb.AppendLine();
+        sb.Append("Config");
+        sb.AppendLine();
+        sb.Append($"  easing={m_EasingEquation} curveSmoothing={m_UseCurveSmoothing}");
+        if (m_UseCurveSmoothing)
+            sb.Append($" ({NumSegmentsPerSecond}/sec)");
+        sb.Append($" endCloseBuffer={m_EndOfUtteranceCloseBuffer.ToString("0.00", CultureInfo.InvariantCulture)}");
+        sb.AppendLine();
+        sb.Append($"  visemeMultiplier={m_FacialVisemeMultiplier.ToString("0.00", CultureInfo.InvariantCulture)} ");
+        sb.Append($"  expressionMultiplier={m_FacialExpressionMultiplier.ToString("0.00", CultureInfo.InvariantCulture)} ");
+        sb.Append($"coarticulation={(m_EnableCoarticulation ? "on" : "off")} strength={m_CoarticulationStrength.ToString("0.00", CultureInfo.InvariantCulture)} ");
+        sb.Append($"crowdedThreshold={m_CrowdedScheduleThresholdSeconds.ToString("0.000", CultureInfo.InvariantCulture)}s");
+
+        string visemeModifierSummary = BuildVisemeModifierDebugSummary();
+        if (!string.IsNullOrEmpty(visemeModifierSummary))
+        {
+            sb.AppendLine();
+            sb.Append($"  visemeModifiers={visemeModifierSummary}");
+        }
+
+        if (m_DebugProblemSegments.Count > 0)
+        {
+            var aggregateByViseme = new Dictionary<string, VisemeAggregateRecord>(StringComparer.Ordinal);
+            for (int i = 0; i < m_DebugProblemSegments.Count; i++)
+            {
+                var record = m_DebugProblemSegments[i];
+                if (aggregateByViseme.TryGetValue(record.VisemeName, out var aggregate))
+                {
+                    aggregate.Count++;
+                    aggregate.WorstDelta = Mathf.Max(aggregate.WorstDelta, record.ClosestObservedDelta);
+                    aggregateByViseme[record.VisemeName] = aggregate;
+                }
+                else
+                {
+                    aggregateByViseme.Add(record.VisemeName, new VisemeAggregateRecord(1, record.ClosestObservedDelta));
+                }
+            }
+
+            var aggregateList = new List<KeyValuePair<string, VisemeAggregateRecord>>(aggregateByViseme);
+            aggregateList.Sort((a, b) =>
+            {
+                int countCompare = b.Value.Count.CompareTo(a.Value.Count);
+                if (countCompare != 0)
+                    return countCompare;
+
+                return b.Value.WorstDelta.CompareTo(a.Value.WorstDelta);
+            });
+
+            sb.AppendLine();
+            sb.Append("MissesByViseme");
+            for (int i = 0; i < aggregateList.Count; i++)
+            {
+                var aggregate = aggregateList[i];
+                sb.AppendLine();
+                sb.Append($"  {aggregate.Key} count={aggregate.Value.Count} worstDelta={aggregate.Value.WorstDelta.ToString("0.00", CultureInfo.InvariantCulture)}");
+            }
+
+            m_DebugProblemSegments.Sort((a, b) => b.ClosestObservedDelta.CompareTo(a.ClosestObservedDelta));
+            int maxProblems = Mathf.Min(m_DebugProblemSegments.Count, 24);
+            sb.AppendLine();
+            sb.Append("MissedTargets");
+            for (int i = 0; i < maxProblems; i++)
+            {
+                var record = m_DebugProblemSegments[i];
+                sb.AppendLine();
+                sb.Append($"  {record.VisemeName} reason={record.Reason} target={record.TargetArticulation.ToString("0.00", CultureInfo.InvariantCulture)} ");
+                sb.Append($"best={record.BestObservedArticulation.ToString("0.00", CultureInfo.InvariantCulture)} ");
+                sb.Append($"delta={record.ClosestObservedDelta.ToString("0.00", CultureInfo.InvariantCulture)} ");
+                sb.Append($"duration={record.Duration.ToString("0.000", CultureInfo.InvariantCulture)}s");
+            }
+
+            if (m_DebugProblemSegments.Count > maxProblems)
+            {
+                sb.AppendLine();
+                sb.Append($"  ... ({m_DebugProblemSegments.Count - maxProblems} more)");
+            }
+        }
+
+        sb.AppendLine();
+        sb.Append("HowToRead");
+        sb.AppendLine();
+        sb.Append("  speechSegments = all scheduled speech segments the player processed; positiveTargets = segments that aimed at a meaningful non-zero viseme weight.");
+        sb.AppendLine();
+        sb.Append("  completedPositiveTargets = positive-target segments that ran to their scheduled end; overlaps = same-viseme segments whose time windows overlapped.");
+        sb.AppendLine();
+        sb.Append("  missedTargets = completed positive-target segments that never got within tolerance of their requested target. In MissedTargets: target = requested weight, best = best observed runtime weight, delta = closest miss amount, duration = scheduled segment length.");
+        sb.AppendLine();
+        sb.Append("  Helpful reading: repeated misses on the same viseme suggest a shape-specific realization issue; many very short durations (often 0.033s in CurveData mode because smoothing uses 30 segments/second) suggest a crowded schedule that may be too dense to realize visually.");
+
+        Debug.Log(sb.ToString());
+    }
+
+    private string BuildVisemeModifierDebugSummary()
+    {
+        if (m_VisemeModifiers == null || m_VisemeModifiers.Length == 0)
+            return string.Empty;
+
+        var modified = new List<string>();
+        for (int i = 0; i < m_VisemeModifiers.Length; i++)
+        {
+            var modifier = m_VisemeModifiers[i];
+            if (modifier == null || string.IsNullOrEmpty(modifier.m_Name))
+                continue;
+
+            if (Mathf.Abs(modifier.m_WeightMultiplier - 1f) <= 0.0001f)
+                continue;
+
+            modified.Add($"{modifier.m_Name}={modifier.m_WeightMultiplier.ToString("0.00", CultureInfo.InvariantCulture)}");
+        }
+
+        if (modified.Count == 0)
+            return "<all default>";
+
+        const int maxToShow = 8;
+        if (modified.Count <= maxToShow)
+            return string.Join(", ", modified);
+
+        return string.Join(", ", modified.GetRange(0, maxToShow)) + $" ... ({modified.Count - maxToShow} more)";
+    }
+
+    private float GetObservedScheduleSpaceViseme(FaceShape shape)
+    {
+        string visemeName = ToVisemeName(shape);
+        float observed = Mathf.Clamp01(GetViseme(visemeName));
+        float divisor = Mathf.Max(GetGlobalWeightMultiplier(shape) * GetVisemeModifierWeightMultiplier(visemeName), Mathf.Epsilon);
+        return Mathf.Clamp01(observed / divisor);
+    }
+
+    protected float GetResolvedWeightMultiplier(string viseme)
+    {
+        if (TryParseViseme(viseme, out FaceShape shape))
+            return GetGlobalWeightMultiplier(shape) * GetVisemeModifierWeightMultiplier(viseme);
+
+        return m_FacialVisemeMultiplier * GetVisemeModifierWeightMultiplier(viseme);
+    }
+
+    protected float GetGlobalWeightMultiplier(FaceShape shape)
+    {
+        if (shape == FaceShape.face_neutral)
+            return 1f;
+
+        return IsSpeechShape(shape) ? m_FacialVisemeMultiplier : m_FacialExpressionMultiplier;
+    }
+
+    private static bool IntervalsOverlap(float startA, float endA, float startB, float endB) => Mathf.Max(startA, startB) < Mathf.Min(endA, endB);
 
     /// <summary>
     /// Computes face_neutral as 1 - sum(all speech viseme weights), clamped to [0,1].
@@ -609,15 +1257,18 @@ public abstract class FacialAnimationPlayer : MonoBehaviour
     /// </summary>
     private float ComputeNeutralAmountFromVisemes()
     {
+        // Speech-only: expressions do not affect neutral.
         float total = 0f;
 
         foreach (FaceShape shape in FaceShapeValues)
         {
-            if (shape == FaceShape.face_neutral)
+            if (!IsSpeechShape(shape))
                 continue;
 
-            if (m_VisemeWeights.TryGetValue(shape, out float value))
-                total += Mathf.Clamp01(value);
+            m_FaceShapeWeights.TryGetValue(shape, out float rawWeight);
+
+            float finalWeight = ApplyNeighborCoarticulation(shape, rawWeight);
+            total += Mathf.Clamp01(finalWeight);
         }
 
         return Mathf.Clamp01(1f - total);
@@ -757,11 +1408,9 @@ public abstract class FacialAnimationPlayer : MonoBehaviour
 
         foreach (var neighbor in neighbors)
         {
-            if (m_VisemeWeights.TryGetValue(neighbor, out float neighborWeight))
-            {
-                neighborSum += neighborWeight;
-                neighborCount++;
-            }
+            m_FaceShapeWeights.TryGetValue(neighbor, out float neighborWeight);
+            neighborSum += neighborWeight;
+            neighborCount++;
         }
 
         if (neighborCount == 0)
@@ -883,6 +1532,48 @@ public abstract class FacialAnimationPlayer : MonoBehaviour
         -change / 2f * (Mathf.Cos(Mathf.PI * time / duration) - 1f) + start;
 
     #endregion
+
+    private void StopActiveSpeechAnimations()
+    {
+        // Remove any scheduled or active speech (viseme) animations so resets are not overwritten next frame.
+        for (int i = m_ActiveVisemeAnimations.Count - 1; i >= 0; i--)
+        {
+            FaceShape shape = m_ActiveVisemeAnimations[i].Shape;
+            if (IsSpeechShape(shape))
+                m_ActiveVisemeAnimations.RemoveAt(i);
+        }
+    }
+
+    private void StopActiveExpressionAnimations()
+    {
+        // Remove any scheduled or active expression animations so resets are not overwritten next frame.
+        for (int i = m_ActiveVisemeAnimations.Count - 1; i >= 0; i--)
+        {
+            FaceShape shape = m_ActiveVisemeAnimations[i].Shape;
+            if (shape != FaceShape.face_neutral && !IsSpeechShape(shape))
+                m_ActiveVisemeAnimations.RemoveAt(i);
+        }
+    }
+
+    private static bool IsSpeechShape(FaceShape shape)
+    {
+        switch (shape)
+        {
+            case FaceShape.FV:
+            case FaceShape.open:
+            case FaceShape.PBM:
+            case FaceShape.ShCh:
+            case FaceShape.tBack:
+            case FaceShape.tRoof:
+            case FaceShape.tTeeth:
+            case FaceShape.W:
+            case FaceShape.wide:
+                return true;
+
+            default:
+                return false;
+        }
+    }
 
     protected static string ToVisemeName(FaceShape shape) => shape.ToString(); // if names match exactly, this is enough
     protected static bool TryParseViseme(string name, out FaceShape shape) => Enum.TryParse(name, ignoreCase: false, out shape);

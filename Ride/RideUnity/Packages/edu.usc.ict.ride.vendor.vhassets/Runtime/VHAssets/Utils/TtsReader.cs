@@ -1,7 +1,8 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 using System.Xml;
 using UnityEngine;
 
@@ -18,13 +19,15 @@ public class TtsReader : MonoBehaviour
 
     public class WordTiming
     {
+        public string word = "";
         public float start;
         public float end;
         public List<VisemeData> m_VisemesUsed = new List<VisemeData>();
         public List<MarkData> m_Marks = new List<MarkData>();
 
-        public WordTiming(float _start, float _end)
+        public WordTiming(string _word, float _start, float _end)
         {
+            word = _word;
             start = _start;
             end = _end;
         }
@@ -106,10 +109,12 @@ public class TtsReader : MonoBehaviour
         List<VisemeData> sameTimeVisemes = new List<VisemeData>();
         VisemeData lastViseme = null;
         List<string> visemesUsed = new List<string>();
+        WordTiming currentWordTiming = null;
+        StringBuilder currentWordText = new StringBuilder();
         audioFilePath = "";
 
 
-        WordTiming firstTiming = new WordTiming(0, 0.01f);
+        WordTiming firstTiming = new WordTiming("", 0, 0.01f);
         timings.Add(firstTiming);
         //foreach (string viseme in visemesUsed)
         {
@@ -138,21 +143,24 @@ public class TtsReader : MonoBehaviour
                 }
                 else if (reader.Name == "word")
                 {
-                    WordTiming wordTiming = CreateWordTimingData(reader["start"], reader["end"]);
+                    currentWordTiming = CreateWordTimingData("", reader["start"], reader["end"]);
+                    currentWordText.Clear();
 
                     if (timings.Count > 1)
                     {
                         foreach (VisemeData prevTimeViseme in sameTimeVisemes)
                         {
-                            float startTime = Mathf.Max(Mathf.Lerp(prevTimeViseme.start, wordTiming.end, m_RampPct), wordTiming.end - m_WordTimingFudge);
+                            float startTime = Mathf.Max(Mathf.Lerp(prevTimeViseme.start, currentWordTiming.end, m_RampPct), currentWordTiming.end - m_WordTimingFudge);
                             VisemeData backToZeroViseme = new VisemeData(startTime, 0, prevTimeViseme.type);
-                            //VisemeData backToZeroViseme = new VisemeData(Mathf.Max(Mathf.Max(wordTiming.end- 0.1f, prevTimeViseme.start), wordTiming.end * m_RampPct), 0, prevTimeViseme.type);
+                            //VisemeData backToZeroViseme = new VisemeData(Mathf.Max(Mathf.Max(currentWordTiming.end- 0.1f, prevTimeViseme.start), currentWordTiming.end * m_RampPct), 0, prevTimeViseme.type);
                             timings[timings.Count - 1].m_VisemesUsed.Add(backToZeroViseme);
                         }
                         sameTimeVisemes.Clear();
                     }
 
-                    timings.Add(wordTiming);
+                    // Store the WordTiming immediately so nested viseme parsing can continue to append to it.
+                    // The closing </word> handler later fills in the same object's .word text.
+                    timings.Add(currentWordTiming);
                 }
                 else if (reader.Name == "mark")
                 {
@@ -203,6 +211,21 @@ public class TtsReader : MonoBehaviour
 
                         lastViseme = visemeData;
                     }
+                }
+                break;
+                case XmlNodeType.Text:
+                case XmlNodeType.CDATA:
+                if (currentWordTiming != null)
+                    currentWordText.Append(reader.Value);
+                break;
+                case XmlNodeType.EndElement:
+                if (reader.Name == "word" && currentWordTiming != null)
+                {
+                    // currentWordTiming is the same WordTiming instance already stored in timings above,
+                    // so assigning .word here updates the persisted entry before we clear the local handle.
+                    currentWordTiming.word = currentWordText.ToString().Trim();
+                    currentWordTiming = null;
+                    currentWordText.Clear();
                 }
                 break;
             }
@@ -257,7 +280,7 @@ public class TtsReader : MonoBehaviour
         }
     }
 
-    WordTiming CreateWordTimingData(string start, string end)
+    WordTiming CreateWordTimingData(string word, string start, string end)
     {
         if (!float.TryParse(start, out float startTime))
         {
@@ -271,7 +294,7 @@ public class TtsReader : MonoBehaviour
             return null;
         }
 
-        return new WordTiming(startTime, endTime);
+        return new WordTiming(word?.Trim() ?? "", startTime, endTime);
     }
 
     VisemeData CreateVisemeData(string start, string articulation, string type)

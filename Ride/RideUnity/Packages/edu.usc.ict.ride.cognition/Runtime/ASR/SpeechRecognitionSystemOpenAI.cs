@@ -24,18 +24,12 @@ namespace Ride.SpeechRecognition
     public class SpeechRecognitionSystemOpenAI : SpeechRecognitionSystemUnity
     {
         public override bool IsSupported => true;
-        public override float AutoSilenceTimeoutSeconds { get; set; } = 3;
-        public override float InitialSilenceTimeoutSeconds { get; set; } = 10;
         public override bool SupportsContinuousRecognition => true;
-
-
 
 #if PLATFORM_ANDROID || PLATFORM_IOS
         // Required to manifest microphone permission, cf.
         // https://docs.unity3d.com/Manual/android-manifest.html
-#endif
-
-        //bool m_micPermissionGranted = false;
+#endif        
 
 #if !UNITY_WEBGL
         string m_apiKey;
@@ -55,11 +49,10 @@ namespace Ride.SpeechRecognition
 #pragma warning restore 0414
 
         [Header("Response Settings")]
-        [SerializeField] private bool transcriptOnly = false; // Toggle: true = text only, false = text + audio
+        [SerializeField] private bool transcriptOnly = true; // Toggle: true = text only, false = text + audio
         [SerializeField] private string voice = "alloy"; // alloy, echo, shimmer (used when transcriptOnly is false)
 
         [Header("Conversation Flow")]
-        [SerializeField] private bool autoStartOnConnect = true; // Auto-start recording when connected
         [SerializeField] private float postPlaybackDelay = 0.3f; // Delay before re-enabling recording after playback
         [SerializeField] private float streamingStartBufferSeconds = 1.0f; // Start playing after buffering this much audio
         [SerializeField] private float streamingEndBufferSeconds = 3.0f; // Wait this long after queue empty before stopping
@@ -68,17 +61,18 @@ namespace Ride.SpeechRecognition
         [Header("Voice Activity Detection")]
         [SerializeField] private float vadThreshold = 0.7f; // VAD sensitivity (0.0-1.0, higher = less sensitive)
         [SerializeField] private int vadPrefixPaddingMs = 300; // Audio captured before speech detected (ms)
-        [SerializeField] private int vadSilenceDurationMs = 500; // Silence duration before considering speech stopped (ms)
+        [SerializeField] private int vadSilenceDurationMs = 700; // Silence duration before considering speech stopped (ms)
 
+        private const float MinCommitAudioSeconds = 0.1f;
         private WebSocket websocket;
         private AudioClip recordingClip;
-        //private bool isRecording = false;
+        private bool isRecording = false;
         private bool isConnected = false;
         private bool isPlayingResponse = false;
         private bool isSystemActive = false;
         private bool audioStreamComplete = false;
-        private Queue<byte[]> audioQueue = new Queue<byte[]>();
         private int lastSamplePosition = 0;
+        private int inputAudioBufferSamples = 0;
         private AudioSource audioSource;
         private Queue<float> streamingAudioQueue = new Queue<float>();
         private bool isStreamingAudio = false;
@@ -87,6 +81,10 @@ namespace Ride.SpeechRecognition
         private int currentClipSamples = 0;
         private string currentTranscriptionBuffer = "";
         private object audioQueueLock = new object();
+        private Coroutine checkRecognizedSpeechCoroutine;
+        private Coroutine sendWebsocketMessagesCoroutine;
+        private Coroutine monitorStreamingPlaybackCoroutine;
+        private Coroutine restartRecordingCoroutine;
 
         // Events
         public event Action<string> OnTranscriptionReceived;
@@ -132,23 +130,44 @@ namespace Ride.SpeechRecognition
             Debug.Log($"Available microphones: {string.Join(", ", Microphone.devices)}");
 #endif
 
-            InitializeAgentResponseAudio();  // Not needed for ASR, but included as integrated real-time ASR + NLP + TTS example
+            InitializeAgentResponseAudio();  // Not needed for ASR, but included as unified real-time ASR + NLP + TTS example
             StartCoroutine(StartSystem());
+        }
+
+        void OnDisable()
+        {
+            Cleanup();
+        }
+
+        public override void SystemShutdown()
+        {
+            Cleanup();
+
+            base.SystemShutdown();
         }
 
         /// <inheritdoc/>
         public override void OnRecognizingStarted()
         {
-            StartCoroutine(CheckRecognizedSpeechRoutine());
+            if (checkRecognizedSpeechCoroutine == null)
+                checkRecognizedSpeechCoroutine = StartCoroutine(CheckRecognizedSpeechRoutine());
+
             StartRecording();
+
             base.OnRecognizingStarted();
         }
 
         /// <inheritdoc/>
         public override void OnRecognizingStopped()
         {
-            StopCoroutine(CheckRecognizedSpeechRoutine());
             StopRecording();
+
+            if (checkRecognizedSpeechCoroutine != null)
+            {
+                StopCoroutine(checkRecognizedSpeechCoroutine);
+                checkRecognizedSpeechCoroutine = null;
+            }
+
             base.OnRecognizingStopped();
         }
 
@@ -165,8 +184,7 @@ namespace Ride.SpeechRecognition
         /// Coroutine that polls partial and final recognition results each frame.
         /// </summary>
         protected IEnumerator CheckRecognizedSpeechRoutine()
-        {
-            // Dispatch WebSocket messages on Unity main thread
+        {            
             while (IsRecognizing)
             {
                 if (!string.IsNullOrEmpty(m_recognizedSpeechPartial))
@@ -183,14 +201,15 @@ namespace Ride.SpeechRecognition
 
                 yield return null;
             }
+
+            checkRecognizedSpeechCoroutine = null;
         }
 
         /// <summary>
         /// Gathers microphone audio and prepares for sending.
         /// </summary>
         protected IEnumerator SendWebsocketMessages()
-        {
-            // Dispatch WebSocket messages on Unity main thread
+        {            
             while (isSystemActive)
             {
                 if (!IsRecognizing || recordingClip == null)
@@ -219,6 +238,7 @@ namespace Ride.SpeechRecognition
             }
 
             Debug.Log("SendWebsocketMessages coroutine stopped");
+            sendWebsocketMessagesCoroutine = null;
         }
 
         /// <summary>
@@ -246,12 +266,11 @@ namespace Ride.SpeechRecognition
         public override void SetMicrophone(string deviceName)
         {
             base.SetMicrophone(deviceName);
+            microphoneDevice = SelectedMicrophone;
         }
 
-
-
         /// <summary>
-        /// Start the speech recognition system (connect and begin recording)
+        /// Start the speech recognition system
         /// </summary>
         public IEnumerator StartSystem()
         {
@@ -335,7 +354,6 @@ namespace Ride.SpeechRecognition
             Debug.Log("Speech Recognition System Stopped");
         }
 
-
         private void InitializeAgentResponseAudio()
         {
             // Get or create AudioSource for playing responses
@@ -348,8 +366,8 @@ namespace Ride.SpeechRecognition
             // Configure AudioSource for optimal playback
             audioSource.playOnAwake = false;
             audioSource.loop = false;
-            audioSource.spatialBlend = 0f; // 2D sound
-            audioSource.priority = 0; // Highest priority
+            audioSource.spatialBlend = 0f;  // 2D sound
+            audioSource.priority = 0;       // Highest priority
             audioSource.volume = 1.0f;
             audioSource.pitch = 1.0f;
             audioSource.dopplerLevel = 0f;
@@ -433,7 +451,8 @@ namespace Ride.SpeechRecognition
                 OnError?.Invoke("WebSocket connection failed.");
             }
 
-            StartCoroutine(SendWebsocketMessages());
+            if (sendWebsocketMessagesCoroutine == null)
+                sendWebsocketMessagesCoroutine = StartCoroutine(SendWebsocketMessages());
 #endif
         }
 
@@ -459,11 +478,8 @@ namespace Ride.SpeechRecognition
 
             OnConnectionEstablished?.Invoke();
 
-            // Auto-start recording
-            if (isSystemActive && autoStartOnConnect)
-            {
+            if (IsRecognizing && !isRecording)
                 StartRecording();
-            }
         }
 
         private void SendSessionUpdate()
@@ -635,6 +651,9 @@ namespace Ride.SpeechRecognition
 
         private void StartRecording()
         {
+            if (isRecording)
+                return;
+
             if (!isConnected)
             {
                 Debug.LogError("Not connected to Realtime API");
@@ -657,30 +676,59 @@ namespace Ride.SpeechRecognition
             recordingClip = Microphone.Start(microphoneDevice, true, 10, sampleRate);
 #endif
 
-            IsRecognizing = true;
+            isRecording = true;
             lastSamplePosition = 0;
+            inputAudioBufferSamples = 0;
 
             Debug.Log("Recording started");
         }
 
         private void StopRecording()
         {
-            if (!IsRecognizing) return;
+            if (!isRecording) return;
+
+            FlushPendingAudioChunk();
 
 #if !UNITY_WEBGL
             Microphone.End(microphoneDevice);
 #endif
 
-            IsRecognizing = false;
+            recordingClip = null;
+            isRecording = false;
 
-            // Commit the audio buffer
-            SendInputAudioBufferCommit();
+            inputAudioBufferSamples = 0;
 
             Debug.Log("Recording stopped");
         }
 
+        private void FlushPendingAudioChunk()
+        {
+#if !UNITY_WEBGL
+            if (recordingClip == null)
+                return;
+
+            int currentPosition = Microphone.GetPosition(microphoneDevice);
+            if (currentPosition < 0)
+                return;
+
+            int samplesToSend = currentPosition - lastSamplePosition;
+            if (samplesToSend < 0)
+                samplesToSend += recordingClip.samples;
+
+            int minCommitSamples = Mathf.CeilToInt(MinCommitAudioSeconds * sampleRate);
+            if (samplesToSend >= minCommitSamples)
+            {
+                SendAudioChunk(samplesToSend);
+                lastSamplePosition = currentPosition;
+            }
+#endif
+        }
+
         private void SendAudioChunk(int sampleCount)
         {
+            if (recordingClip == null || sampleCount <= 0)
+                return;
+
             float[] samples = new float[sampleCount * recordingClip.channels];
             recordingClip.GetData(samples, lastSamplePosition);
 
@@ -698,17 +746,48 @@ namespace Ride.SpeechRecognition
             };
 
             SendEvent(audioEvent);
+            inputAudioBufferSamples += sampleCount;
         }
 
-        private void SendInputAudioBufferCommit()
-        {
-            var commitEvent = new
-            {
-                type = "input_audio_buffer.commit"
-            };
+        //private void CommitOrClearInputAudioBuffer()
+        //{
+        //    int minCommitSamples = Mathf.CeilToInt(MinCommitAudioSeconds * sampleRate);
 
-            SendEvent(commitEvent);
-        }
+        //    if (inputAudioBufferSamples >= minCommitSamples)
+        //    {
+        //        SendInputAudioBufferCommit();
+        //    }
+        //    else
+        //    {
+        //        if (inputAudioBufferSamples > 0)
+        //            SendInputAudioBufferClear();
+
+        //        float bufferMs = inputAudioBufferSamples * 1000f / sampleRate;
+        //        Debug.Log($"Skipping OpenAI audio commit because the input buffer is too small ({bufferMs:F2}ms).");
+        //    }
+
+        //    inputAudioBufferSamples = 0;
+        //}
+
+        //private void SendInputAudioBufferCommit()
+        //{
+        //    var commitEvent = new
+        //    {
+        //        type = "input_audio_buffer.commit"
+        //    };
+
+        //    SendEvent(commitEvent);
+        //}
+
+        //private void SendInputAudioBufferClear()
+        //{
+        //    var clearEvent = new
+        //    {
+        //        type = "input_audio_buffer.clear"
+        //    };
+
+        //    SendEvent(clearEvent);
+        //}
 
         private byte[] ConvertToPCM16(float[] samples)
         {
@@ -790,7 +869,10 @@ namespace Ride.SpeechRecognition
                 Debug.Log("Streaming audio playback started");
 
                 // Monitor streaming playback
-                StartCoroutine(MonitorStreamingPlayback());
+                if (monitorStreamingPlaybackCoroutine != null)
+                    StopCoroutine(monitorStreamingPlaybackCoroutine);
+
+                monitorStreamingPlaybackCoroutine = StartCoroutine(MonitorStreamingPlayback());
             }
         }
 
@@ -877,6 +959,8 @@ namespace Ride.SpeechRecognition
                     emptyFrames = 0;
                 }
             }
+
+            monitorStreamingPlaybackCoroutine = null;
         }
 
         private void StopStreamingPlayback()
@@ -895,6 +979,7 @@ namespace Ride.SpeechRecognition
             }
 
             streamingPlaybackPosition = 0;
+            monitorStreamingPlaybackCoroutine = null;
 
             OnAudioFinishedPlaying();
         }
@@ -923,7 +1008,10 @@ namespace Ride.SpeechRecognition
             if (isSystemActive)
             {
                 Debug.Log("Starting restart recording coroutine");
-                StartCoroutine(RestartRecordingAfterDelay());
+                if (restartRecordingCoroutine != null)
+                    StopCoroutine(restartRecordingCoroutine);
+
+                restartRecordingCoroutine = StartCoroutine(RestartRecordingAfterDelay());
             }
             else
             {
@@ -947,7 +1035,7 @@ namespace Ride.SpeechRecognition
                 yield return new WaitForSeconds(0.2f);
             }
 
-            if (!IsRecognizing && !isPlayingResponse && isSystemActive)
+            if (!isRecording && !isPlayingResponse && isSystemActive && IsRecognizing)
             {
                 Debug.Log("Restarting recording after agent response");
                 StartRecording();
@@ -956,18 +1044,80 @@ namespace Ride.SpeechRecognition
             {
                 Debug.Log($"Skipping restart: IsRecognizing={IsRecognizing}, isPlayingResponse={isPlayingResponse}, isSystemActive={isSystemActive}");
             }
+
+            restartRecordingCoroutine = null;
         }
 
         void OnApplicationQuit()
         {
-            // Start coroutine to stop system gracefully
-            StartCoroutine(StopSystem());
+            Cleanup();
         }
 
         void OnDestroy()
         {
-            // Start coroutine to stop system gracefully
-            //StartCoroutine(StopSystem());
+            Cleanup();
+        }
+
+        void Cleanup()
+        {
+            if (checkRecognizedSpeechCoroutine != null)
+            {
+                StopCoroutine(checkRecognizedSpeechCoroutine);
+                checkRecognizedSpeechCoroutine = null;
+            }
+
+            if (sendWebsocketMessagesCoroutine != null)
+            {
+                StopCoroutine(sendWebsocketMessagesCoroutine);
+                sendWebsocketMessagesCoroutine = null;
+            }
+
+            if (monitorStreamingPlaybackCoroutine != null)
+            {
+                StopCoroutine(monitorStreamingPlaybackCoroutine);
+                monitorStreamingPlaybackCoroutine = null;
+            }
+
+            if (restartRecordingCoroutine != null)
+            {
+                StopCoroutine(restartRecordingCoroutine);
+                restartRecordingCoroutine = null;
+            }
+
+            StopRecording();
+
+            if (audioSource != null && audioSource.isPlaying)
+                audioSource.Stop();
+
+            lock (audioQueueLock)
+            {
+                streamingAudioQueue.Clear();
+            }
+
+            audioStreamComplete = false;
+            isPlayingResponse = false;
+            isStreamingAudio = false;
+            isAudioCallbackReady = false;
+            isSystemActive = false;
+            IsRecognizing = false;
+            m_recognizedSpeech = null;
+            m_recognizedSpeechPartial = null;
+            currentTranscriptionBuffer = "";
+
+#if !UNITY_WEBGL
+            if (websocket != null)
+            {
+                websocket.OnOpen -= OnWebSocketOpen;
+                websocket.OnMessage -= OnWebSocketMessage;
+                websocket.OnError -= OnWebSocketError;
+                websocket.OnClose -= OnWebSocketClose;
+
+                try { _ = websocket.Close(); } catch (Exception) { }
+                websocket = null;
+            }
+#endif
+
+            isConnected = false;
         }
     }
 
@@ -976,4 +1126,4 @@ namespace Ride.SpeechRecognition
     {
         public string text;
     }
-} // namespace Ride.SpeechRecognition
+} 

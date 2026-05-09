@@ -33,11 +33,11 @@ namespace BllipParser.DotNet.Vanilla
 
         public void push(Val atp)
         {
-            Debug.Assert(atp != null);
+            AssertInternal(atp != null);
             if (print)
                 Console.WriteLine("heap insertion of atp at " + unusedPos_);
 
-            Debug.Assert((int)array.size() >= unusedPos_);
+            AssertInternal((int)array.size() >= unusedPos_);
             if ((int)array.size() == unusedPos_)
                 array.push_back(atp);
             else
@@ -72,7 +72,7 @@ namespace BllipParser.DotNet.Vanilla
             if (print)
                 Console.WriteLine("del_ " + pos);
 
-            Debug.Assert(unusedPos_ != 0);
+            AssertInternal(unusedPos_ != 0);
             if (pos == (unusedPos_ - 1))
             {
                 unusedPos_--;
@@ -128,7 +128,7 @@ namespace BllipParser.DotNet.Vanilla
             if (lcthere == 0 && rcthere == 0)
                 return;
 
-            Debug.Assert(lcthere != 0);
+            AssertInternal(lcthere != 0);
 
             if (rcthere == 0 || (lct.fom() > rct.fom()))
                 largec = lc;
@@ -159,7 +159,7 @@ namespace BllipParser.DotNet.Vanilla
                 return false;
 
             Val atp = array[pos];
-            Debug.Assert(atp != null);
+            AssertInternal(atp != null);
             double merit = atp.fom();
             int parPos = parent(pos);
             Val par = array[parPos];

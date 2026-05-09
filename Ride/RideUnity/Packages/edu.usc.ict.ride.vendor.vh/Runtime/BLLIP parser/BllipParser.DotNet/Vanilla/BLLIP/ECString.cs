@@ -5,9 +5,9 @@ using size_t = System.UInt64;
 
 namespace BllipParser.DotNet.Vanilla
 {
-    public class ECString : IEquatable<ECString>, IComparable<ECString>
+    public sealed class ECString : IEquatable<ECString>, IComparable<ECString>
     {
-        string m_string;
+        readonly string m_string;
 
 
         public ECString(string s = "") => m_string = s;
@@ -81,7 +81,12 @@ namespace BllipParser.DotNet.Vanilla
         // std::string functions
         public char this[int index] => m_string[index];
         public size_t length() => (size_t)m_string.Length;
-        public size_t rfind(ECString str) => (size_t)m_string.LastIndexOf(str);
+        public size_t rfind(ECString str)
+        {
+            if (str is null) return size_t.MaxValue;
+            int idx = m_string.LastIndexOf(str.m_string, StringComparison.Ordinal);
+            return idx < 0 ? size_t.MaxValue : (size_t)idx;
+        }
         public size_t size() => (size_t)m_string.Length;
 
         public ECString substr(size_t pos, size_t len)

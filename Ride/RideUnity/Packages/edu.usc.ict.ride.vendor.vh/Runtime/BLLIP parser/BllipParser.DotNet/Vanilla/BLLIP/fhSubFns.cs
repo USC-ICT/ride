@@ -75,7 +75,7 @@ namespace BllipParser.DotNet.Vanilla
                 }
 
                 st = par.fharray[i - 1];
-                Debug.Assert(st != null);
+                AssertInternal(st != null);
                 return st.term;
             }
 
@@ -94,7 +94,7 @@ namespace BllipParser.DotNet.Vanilla
         static int fh_head(FullHist tree)
         {
             int ans = tree.hd.toInt();
-            Debug.Assert(ans >= -1);
+            AssertInternal(ans >= -1);
             return ans;
         }
 
@@ -115,7 +115,7 @@ namespace BllipParser.DotNet.Vanilla
                 return nullWordInt;
 
             int ans = pt.hd.toInt();
-            Debug.Assert(ans >= -1);
+            AssertInternal(ans >= -1);
             return ans;
         }
 
@@ -176,14 +176,14 @@ namespace BllipParser.DotNet.Vanilla
             if (m > hpos && l > 0)
                 return fh_ngram_stopTermInt;
 
-            Debug.Assert(fh.cb != null);
+            AssertInternal(fh.cb != null);
             LeftRightGotIter lrgi = globalGi[fh.cb.thrdid];
-            Debug.Assert(lrgi != null);
+            AssertInternal(lrgi != null);
             if (m >= lrgi.size())
                 return fh_ngram_stopTermInt;
 
             Item got = lrgi.index(m);
-            Debug.Assert(got != null);
+            AssertInternal(got != null);
             int ans = got.term().toInt();
             return ans;
         }
@@ -199,7 +199,7 @@ namespace BllipParser.DotNet.Vanilla
         static int fh_noopenQr(FullHist fh)
         {
             int pos = fh.pos;
-            Debug.Assert(fh.cb != null);
+            AssertInternal(fh.cb != null);
             LeftRightGotIter lrgi = globalGi[fh.cb.thrdid];
             Item got;
             int i;
@@ -227,7 +227,7 @@ namespace BllipParser.DotNet.Vanilla
         {
             int pos = fh.pos;
             int hpos = fh.hpos;
-            Debug.Assert(fh.cb != null);
+            AssertInternal(fh.cb != null);
             LeftRightGotIter lrgi = globalGi[fh.cb.thrdid];
             Item got;
             int i;

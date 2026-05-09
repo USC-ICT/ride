@@ -30,7 +30,7 @@
 	</xsl:call-template>	
 </xsl:template>
 
-<!-- Inclusivity: one big head shake -->
+<!-- Inclusivity: head nod and head shake (was one big head shake) -->
 <xsl:template name="inclusivity">
 	<xsl:param name="participant" />
 	<xsl:param name="speech_id" />
@@ -39,6 +39,16 @@
 	<xsl:param name="priority" />
 	<xsl:param name="posture" /> 
 	<xsl:comment>Inclusivity</xsl:comment>	
+	
+	<xsl:text>&#10;	</xsl:text>
+	<xsl:call-template name="nod">
+		<xsl:with-param name="participant" select="$participant" />
+		<xsl:with-param name="speech_id" select="$speech_id" />
+		<xsl:with-param name="ready_time" select="$ready_time" />
+		<xsl:with-param name="relax_time" select="$relax_time" />
+		<xsl:with-param name="priority" select="$priority" />
+		<xsl:with-param name="posture" select="$posture" />
+	</xsl:call-template>
 	
 	<xsl:text>&#10;	</xsl:text>
 	<xsl:call-template name="shake">
@@ -1000,6 +1010,29 @@
 		<xsl:with-param name="posture" select="$posture" />
 	</xsl:call-template>
 </xsl:template>
+
+<!-- Domain Topics Animation -->	
+<xsl:template name="domain_topics_animation">
+	<xsl:param name="participant" />
+	<xsl:param name="speech_id" />
+	<xsl:param name="start_time" />		
+	<xsl:param name="stroke" />
+	<xsl:param name="priority" />
+	<xsl:param name="posture" /> 
+	<xsl:comment>Me Animation</xsl:comment>	
+	
+	<xsl:text>&#10;	</xsl:text>	
+	<xsl:call-template name="ani_domain_topics" >
+		<xsl:with-param name="participant" select="$participant" />
+		<xsl:with-param name="speech_id" select="$speech_id" />
+		<xsl:with-param name="start_time" select="$start_time" />			
+		<xsl:with-param name="stroke" select="$stroke" />
+		<xsl:with-param name="priority" select="$priority" />
+		<xsl:with-param name="posture" select="$posture" />
+	</xsl:call-template>
+
+</xsl:template>
+
 
 <!-- fmlbml_gaze: gaze aversion -->
 <xsl:template name="fmlbml_gaze">

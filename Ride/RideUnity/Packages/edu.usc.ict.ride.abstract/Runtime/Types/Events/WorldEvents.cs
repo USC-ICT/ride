@@ -1,54 +1,71 @@
-﻿using Ride.Entities;
+using System;
+using Ride.Entities;
+using Ride.Terrain;
 
 namespace Ride.WorldState
 {
+    /// <summary>
+    /// Marker interface for strongly typed payloads dispatched through Ride's world-state event bus.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>WorldEvents.cs</c> acts as the central catalog of event payload types used by Ride systems to publish
+    /// state changes, gameplay notifications, requests, and lifecycle signals without tightly coupling the sender
+    /// and receiver to one another. Most of the types in this file are intentionally small and focused: the event
+    /// key identifies <em>what happened</em>, while the concrete <see cref="IWorldEvent"/> payload type defines
+    /// <em>what data travels with that event</em>.
+    /// </para>
+    /// <para>
+    /// This pattern keeps event dispatch strongly typed at both the send and receive sites. Instead of passing
+    /// loosely structured dictionaries or generic objects everywhere, Ride uses many tiny classes so each event
+    /// can describe its own data contract explicitly. That makes subscriptions easier to understand, reduces
+    /// ambiguity about what fields are available, and allows event payloads to evolve independently as new
+    /// world-state features are added.
+    /// </para>
+    /// <para>
+    /// The file contains many categories of events, often represented by small base event types with more specific
+    /// derived events layered on top. Current examples include scenario lifecycle events, team and engagement
+    /// events, entity creation and entity-data events, agent state and movement events, damage/combat/weapon
+    /// events, behavior-assignment events, selection and grouping events, terrain and destruction events,
+    /// network-view events, UI interaction events, and request-style events used to ask other systems for data.
+    /// </para>
+    /// <para>
+    /// In practice, consumers typically listen to a world-state event key together with the expected
+    /// <see cref="IWorldEvent"/> payload type. Many payloads are therefore intentionally simple wrappers around
+    /// one or two identifiers or values, because the combination of event marker plus payload type already forms
+    /// the full contract.
+    /// </para>
+    /// </remarks>
     public interface IWorldEvent { }
 
     public class WorldEventBase : IWorldEvent
     {
-        public override string ToString()
-        {
-            return RideIO.JsonSerialize(this);
-        }
+        public override string ToString() => RideIO.JsonSerialize(this);
     }
 
 
     public class ScenarioStartedEvent : WorldEventBase 
     {
         public readonly RideID scenarioID;
-        public ScenarioStartedEvent(RideID scenarioID)
-        {
-            this.scenarioID = scenarioID;
-        }
+        public ScenarioStartedEvent(RideID scenarioID) => this.scenarioID = scenarioID;
     }
 
     public class TeamEvent : WorldEventBase
     {
         public readonly Team team;
-
-        public TeamEvent(Team team)
-        {
-            this.team = team;
-        }
+        public TeamEvent(Team team) => this.team = team;
     }
 
     public class TeamTargetsAcquiredEvent : TeamEvent
     {
         public readonly RideID[] engagements;
-        public TeamTargetsAcquiredEvent(Team team, RideID[] engagements) : base(team)
-        {
-            this.engagements = engagements;
-        }
+        public TeamTargetsAcquiredEvent(Team team, RideID[] engagements) : base(team) => this.engagements = engagements;
     }
 
     public class EntityEvent : WorldEventBase
     {
         public readonly RideID entityID;
-
-        public EntityEvent(RideID id)
-        {
-            entityID = id;
-        }
+        public EntityEvent(RideID id) => entityID = id;
     }
 
     public class EntityCreatedEvent : EntityEvent
@@ -73,49 +90,29 @@ namespace Ride.WorldState
 
         public readonly EntityDataPoint[] dataPoints;
 
-        public EntityDataEvent(RideID id, EntityDataPoint[] dataPts) : base(id)
-        {
-            dataPoints = dataPts;
-        }
+        public EntityDataEvent(RideID id, EntityDataPoint[] dataPts) : base(id) => dataPoints = dataPts;
     }
 
     public class ItemEvent : EntityEvent
     {
         public RideID itemId => entityID;
-        public ItemEvent(RideID itemId) : base(itemId)
-        {
-        }
+        public ItemEvent(RideID itemId) : base(itemId) { }
     }
 
     public class ExplosiveEvent : ItemEvent
     {
         public readonly Explosive explosiveData;
-
-        public ExplosiveEvent(RideID explosiveId) : base(explosiveId)
-        {
-            explosiveData = Globals.api.equipmentSystem.weaponSystem.GetExplosiveData(explosiveId);
-        }
+        public ExplosiveEvent(RideID explosiveId) : base(explosiveId) => explosiveData = Systems.Equipment.weaponSystem.GetExplosiveData(explosiveId);
     }
 
     public class AgentEvent : WorldEventBase
     {
         public readonly RideID agent;
-        public override string ToString()
-        {
-            return base.ToString();
-        }
-        public AgentEvent(RideID agent) { this.agent = agent; }
+        public AgentEvent(RideID agent) => this.agent = agent;
     }
 
-    public class AgentAddedEvent : AgentEvent
-    {
-        public AgentAddedEvent(RideID agent) : base(agent) { }
-    }
-
-    public class AgentRemovedEvent : AgentEvent
-    {
-        public AgentRemovedEvent(RideID agent) : base(agent) { }
-    }
+    public class AgentAddedEvent : AgentEvent { public AgentAddedEvent(RideID agent) : base(agent) { } }
+    public class AgentRemovedEvent : AgentEvent { public AgentRemovedEvent(RideID agent) : base(agent) { } }
 
     public class BeginMovingEvent : WorldEventBase
     {
@@ -141,38 +138,30 @@ namespace Ride.WorldState
         }
     }
 
-    public class AgentDiedEvent : AgentEvent
-    {
-        public AgentDiedEvent(RideID agent) : base(agent) { }
-    }
-
-    public class AgentRevivedEvent : AgentEvent
-    {
-        public AgentRevivedEvent(RideID agent) : base(agent) { }
-    }
-
+    public class AgentDiedEvent : AgentEvent { public AgentDiedEvent(RideID agent) : base(agent) { } }
+    public class AgentRevivedEvent : AgentEvent { public AgentRevivedEvent(RideID agent) : base(agent) { } }
     public class MoverStoppedEvent : WorldEventBase
     {
         public readonly RideID mover;
-        public MoverStoppedEvent(RideID mover)  { this.mover = mover; }
+        public MoverStoppedEvent(RideID mover) => this.mover = mover;
     }
 
     public class AgentHealthModifiedEvent : AgentEvent
     {
         public readonly float modification;
-        public AgentHealthModifiedEvent(RideID agent, float modification) : base(agent) { this.modification = modification; }
+        public AgentHealthModifiedEvent(RideID agent, float modification) : base(agent) => this.modification = modification;
     }
 
     public class AgentEngagedEvent : AgentEvent
     {
         public readonly RideID engagee;
-        public AgentEngagedEvent(RideID engager, RideID engagee) :base(engager) {  this.engagee = engagee; }
+        public AgentEngagedEvent(RideID engager, RideID engagee) : base(engager) => this.engagee = engagee;
     }
 
     public class AgentDisengagedEvent : AgentEvent
     {
         public readonly RideID engagee;
-        public AgentDisengagedEvent(RideID engager, RideID engagee) : base(engager) { this.engagee = engagee; }
+        public AgentDisengagedEvent(RideID engager, RideID engagee) : base(engager) => this.engagee = engagee;
     }
 
     public class AgentKilledByAgentEvent : AgentEvent
@@ -205,6 +194,7 @@ namespace Ride.WorldState
         public readonly RideID weapon;
         public readonly float damage;
         public readonly bool isHit;
+
         public AgentAttackedByAgentEvent(RideID attacker, RideID attackee, RideID weapon, float damage, bool isHit) : base(attacker)
         {
             this.attackee = attackee;
@@ -217,11 +207,7 @@ namespace Ride.WorldState
     public class AgentItemEvent: AgentEvent
     {
         public readonly RideID itemId;
-
-        public AgentItemEvent(RideID agent, RideID item) : base(agent)
-        {
-            itemId = item;
-        }
+        public AgentItemEvent(RideID agent, RideID item) : base(agent) => itemId = item;
     }
 
     public class AgentThrowEvent : AgentEvent
@@ -241,51 +227,31 @@ namespace Ride.WorldState
     public class AgentPostureChange : AgentEvent
     {
         public readonly AgentPosture agentPosture;
-
-        public AgentPostureChange(RideID agent, AgentPosture posture) : base(agent)
-        {
-            agentPosture = posture;
-        }
+        public AgentPostureChange(RideID agent, AgentPosture posture) : base(agent) => agentPosture = posture;
     }
 
     public class AgentIdleEmoteChange : AgentEvent
     {
         public readonly int agentIdleChange;
-
-        public AgentIdleEmoteChange(RideID agent, int agentIdleChange) : base(agent)
-        {
-            this.agentIdleChange = agentIdleChange;
-        }
+        public AgentIdleEmoteChange(RideID agent, int agentIdleChange) : base(agent) => this.agentIdleChange = agentIdleChange;
     }
 
     public class AgentClassChange : AgentEvent 
     {
         public readonly bool isMilitary;
-
-        public AgentClassChange(RideID agent, bool isMilitary) : base(agent)
-        {
-            this.isMilitary = isMilitary;
-        }
+        public AgentClassChange(RideID agent, bool isMilitary) : base(agent) => this.isMilitary = isMilitary;
     }
 
     public class WeaponEvent : AgentEvent
     {
         public readonly RideID weapon;
-
-        public WeaponEvent(RideID attacker, RideID weapon) : base(attacker)
-        {
-            this.weapon = weapon;
-        }
+        public WeaponEvent(RideID attacker, RideID weapon) : base(attacker) => this.weapon = weapon;
     }
 
     public class RoundLandingEvent : WeaponEvent
     {
         public readonly RideVector3 roundPos;
-
-        public RoundLandingEvent(RideID attacker, RideID weapon, RideVector3 pos) : base(attacker, weapon)
-        {
-            roundPos = pos;
-        }
+        public RoundLandingEvent(RideID attacker, RideID weapon, RideVector3 pos) : base(attacker, weapon) => roundPos = pos;
     }
     
     public class BallisticHitEvent : RoundLandingEvent
@@ -303,9 +269,9 @@ namespace Ride.WorldState
     public class WeaponFiringModeChangeEvent : AgentEvent
     {
         public readonly RideID weapon;
-        public readonly Entities.WeaponFiringMode firingMode;
+        public readonly WeaponFiringMode firingMode;
 
-        public WeaponFiringModeChangeEvent(RideID weaponOwner, RideID weapon, Entities.WeaponFiringMode firingMode) : base(weaponOwner)
+        public WeaponFiringModeChangeEvent(RideID weaponOwner, RideID weapon, WeaponFiringMode firingMode) : base(weaponOwner)
         {
             this.weapon = weapon;
             this.firingMode = firingMode;
@@ -317,19 +283,13 @@ namespace Ride.WorldState
 
     public class EntityBehaviourEvent : WorldEventBase
     {
-        /// <summary>
-        /// The entity involved in the behavioural change
-        /// </summary>
+        /// <summary>The entity involved in the behavioural change</summary>
         public readonly RideID entity;
 
-        /// <summary>
-        /// The behaviour involved in the change
-        /// </summary>
+        /// <summary>The behaviour involved in the change</summary>
         public readonly RideID behaviour;
 
-        /// <summary>
-        /// Human readable name of the behaviour
-        /// </summary>
+        /// <summary>Human readable name of the behaviour</summary>
         public readonly string name;
 
         public EntityBehaviourEvent(RideID entity, RideID behaviour, string name) 
@@ -342,31 +302,22 @@ namespace Ride.WorldState
 
     public class EntityBehaviourChangedEvent : EntityBehaviourEvent
     {
-        /// <summary>
-        /// The previous behaviour used by the entity. Equal to RideID.Null unless BehaviourChangeType is equal to Set 
-        /// </summary>
+        /// <summary>The previous behaviour used by the entity. Equal to RideID.Null unless BehaviourChangeType is equal to Set </summary>
         public readonly RideID prevBehaviour = RideID.Null;
 
-        /// <summary>
-        /// The type of entity involved in the change
-        /// </summary>
+        /// <summary>The type of entity involved in the change</summary>
         public readonly EntityBehaviourUserType userType;
 
-        /// <summary>
-        /// The type of change that happend
-        /// </summary>
+        /// <summary>The type of change that happend</summary>
         public readonly EntityBehaviourChangeType changeType;
 
-        public EntityBehaviourChangedEvent(RideID entity, RideID behaviour,
-            string name, EntityBehaviourUserType userType, EntityBehaviourChangeType changeType) 
-            : base(entity, behaviour, name)
-        {
-            this.userType = userType;
-            this.changeType = changeType;
-        }
+        public EntityBehaviourChangedEvent(RideID entity, RideID behaviour, string name, 
+            EntityBehaviourUserType userType, EntityBehaviourChangeType changeType) 
+            : this(entity, behaviour, name, RideID.Null, userType, changeType)
+        { }
 
-        public EntityBehaviourChangedEvent(RideID entity, RideID behaviour, string name, RideID prevBehaviour,
-            EntityBehaviourUserType userType, EntityBehaviourChangeType changeType)
+        public EntityBehaviourChangedEvent(RideID entity, RideID behaviour, string name, 
+            RideID prevBehaviour, EntityBehaviourUserType userType, EntityBehaviourChangeType changeType)
             : base(entity, behaviour, name)
         {
             this.prevBehaviour = prevBehaviour;
@@ -377,20 +328,17 @@ namespace Ride.WorldState
 
     public class EntityBehaviourStartedEvent : EntityBehaviourEvent
     {
-        public EntityBehaviourStartedEvent(RideID entity, RideID behaviour, string name) 
-            : base(entity, behaviour, name) { }
+        public EntityBehaviourStartedEvent(RideID entity, RideID behaviour, string name) : base(entity, behaviour, name) { }
     }
 
     public class EntityBehaviourStoppedEvent : EntityBehaviourEvent
     {
-        public EntityBehaviourStoppedEvent(RideID entity, RideID behaviour, string name)
-            : base(entity, behaviour, name) { }
+        public EntityBehaviourStoppedEvent(RideID entity, RideID behaviour, string name) : base(entity, behaviour, name) { }
     }
 
     public class EntityBehaviourFinishedEvent : EntityBehaviourEvent
     {
-        public EntityBehaviourFinishedEvent(RideID entity, RideID behaviour, string name)
-            : base(entity, behaviour, name) { }
+        public EntityBehaviourFinishedEvent(RideID entity, RideID behaviour, string name) : base(entity, behaviour, name) { }
     }
 
     public class AgentStateChangedEvent : AgentEvent
@@ -403,68 +351,56 @@ namespace Ride.WorldState
     public class AgentReachedGoalEvent : AgentEvent
     {
         public readonly RideID goal;
-        public readonly float reward;               
-        public AgentReachedGoalEvent(RideID agent, RideID goal, float reward) : base(agent) { this.goal = goal;  this.reward = reward; }
+        public readonly float reward;
+        public AgentReachedGoalEvent(RideID agent, RideID goal, float reward) : base(agent) { this.goal = goal; this.reward = reward; }
     }
 
-    public class AgentTrainingEpisodeBeginEvent : AgentEvent
-    {
-        public AgentTrainingEpisodeBeginEvent(RideID agent) : base(agent) { }
-    }
+    public class AgentTrainingEpisodeBeginEvent : AgentEvent { public AgentTrainingEpisodeBeginEvent(RideID agent) : base(agent) { } }
 
-    public class AgentTrainingEpisodeEndEvent : AgentEvent
-    {
-        public AgentTrainingEpisodeEndEvent(RideID agent) : base(agent) { }
-    }
+    public class AgentTrainingEpisodeEndEvent : AgentEvent { public AgentTrainingEpisodeEndEvent(RideID agent) : base(agent) { } }
 
     public class AgentTrainingEpisodeResultEvent : AgentEvent
     {
         public readonly bool successful;
-        public AgentTrainingEpisodeResultEvent(RideID agent, bool successful) : base(agent) { this.successful = successful; }
+        public AgentTrainingEpisodeResultEvent(RideID agent, bool successful) : base(agent) => this.successful = successful;
     }
 
-    public class EnemyDestroyedEvent : AgentEvent
-    {
-        public EnemyDestroyedEvent(RideID agent) : base(agent) { }
-    }
-
-    public class FlagCapturedEvent : AgentEvent
-    {
-        public FlagCapturedEvent(RideID agent) : base(agent) { }
-    }
+    public class EnemyDestroyedEvent : AgentEvent { public EnemyDestroyedEvent(RideID agent) : base(agent) { } }
+    public class FlagCapturedEvent : AgentEvent { public FlagCapturedEvent(RideID agent) : base(agent) { } }
 
     public class AgentTrajectoryEvent: AgentEvent
     {
         public RideVector3[] positions;
-        public AgentTrajectoryEvent(RideID agent, RideVector3[] positions) : base(agent) { this.positions = positions; }
+        public AgentTrajectoryEvent(RideID agent, RideVector3[] positions) : base(agent) => this.positions = positions;
     }
 
     public class InputLayerModifiedEvent: WorldEventBase
     {
-        /// <summary>
-        /// Which layer was modified?
-        /// </summary>
+        /// <summary>Which layer was modified?</summary>
         public IO.RideInputLayer layer;
-        /// <summary>
-        /// Was the layer activated or deactivated?
-        /// </summary>
+
+        /// <summary>Was the layer activated or deactivated?</summary>
         public bool isOn;
+
         public InputLayerModifiedEvent(IO.RideInputLayer layer, bool isOn) { this.layer = layer; this.isOn = isOn; }
     }
 
-    public class BillboardSelectedEvent : WorldEventBase {
+    public class BillboardSelectedEvent : WorldEventBase
+    {
         public RideID ordnanceId;
-        public BillboardSelectedEvent(RideID ordnanceId) { this.ordnanceId = ordnanceId; }
+        public BillboardSelectedEvent(RideID ordnanceId) => this.ordnanceId = ordnanceId;
     }
-    public class BillboardUnselectedEvent : WorldEventBase {
+
+    public class BillboardUnselectedEvent : WorldEventBase
+    {
         public RideID ordnanceId;
-        public BillboardUnselectedEvent(RideID ordnanceId) { this.ordnanceId = ordnanceId; }
+        public BillboardUnselectedEvent(RideID ordnanceId) => this.ordnanceId = ordnanceId;
     }
 
     public class IEDTriggeredEvent : WorldEventBase
     {
         public readonly RideVector3 position;
-        public IEDTriggeredEvent(RideVector3 position) { this.position = position; }
+        public IEDTriggeredEvent(RideVector3 position) => this.position = position;
     }
 
     public class WaypointReachedEvent : WorldEventBase
@@ -477,7 +413,7 @@ namespace Ride.WorldState
     public class PathFinishedEvent : WorldEventBase
     {
         public readonly RideID mover;
-        public PathFinishedEvent(RideID mover) { this.mover = mover; }
+        public PathFinishedEvent(RideID mover) => this.mover = mover;
     }
 
     public class DestinationReachedEvent : WorldEventBase
@@ -485,16 +421,14 @@ namespace Ride.WorldState
         public readonly RideVector3 destination;
         public readonly RideID mover;
 
-        /// <summary>
-        /// if true, the mover RideID is a group
-        /// </summary>
+        /// <summary>if true, the mover RideID is a group</summary>
         public readonly bool isGroup;
 
         public DestinationReachedEvent(RideID mover, RideVector3 destination, bool isGroup) 
             { this.mover = mover; this.destination = destination; this.isGroup = isGroup; }
     }
 
-    [System.Serializable]
+    [Serializable]
     public struct TerrainDestructEventData
     {
         public RideVector3 point;
@@ -510,6 +444,7 @@ namespace Ride.WorldState
         {
             this.data = new TerrainDestructEventData() { point = point, radius = radius, power = power };
         }
+
         public TerrainDestructedEvent(TerrainDestructEventData data)
         {
             this.data = data;
@@ -518,41 +453,28 @@ namespace Ride.WorldState
 
     public class TerrainLoadedEvent : WorldEventBase
     {
-        public readonly Ride.Terrain.LoadTerrainParams loadParams;
-        public TerrainLoadedEvent(Ride.Terrain.LoadTerrainParams loadParams) { this.loadParams = loadParams; }
+        public readonly LoadTerrainParams loadParams;
+        public TerrainLoadedEvent(LoadTerrainParams loadParams) => this.loadParams = loadParams;
     }
 
-    public class TerrainClearedEvent : WorldEventBase
-    {
-        public TerrainClearedEvent() { }
-    }
+    public class TerrainClearedEvent : WorldEventBase { public TerrainClearedEvent() { } }
 
     public class GameObjectEvent : WorldEventBase
     {
         public readonly RideID gameObject;
-        public GameObjectEvent(RideID gameObject) { this.gameObject = gameObject; }
+        public GameObjectEvent(RideID gameObject) => this.gameObject = gameObject;
     }
 
-    public class GameObjectCreatedEvent : GameObjectEvent
-    {
-        public GameObjectCreatedEvent(RideID gameObject) : base(gameObject) { }
-    }
-
-    public class GameObjectDestroyedEvent : GameObjectEvent
-    {
-        public GameObjectDestroyedEvent(RideID gameObject) : base(gameObject) { }
-    }
+    public class GameObjectCreatedEvent : GameObjectEvent { public GameObjectCreatedEvent(RideID gameObject) : base(gameObject) { } }
+    public class GameObjectDestroyedEvent : GameObjectEvent { public GameObjectDestroyedEvent(RideID gameObject) : base(gameObject) { } }
 
     public class MaterialEvent : WorldEventBase
     {
         public readonly RideID material;
-        public MaterialEvent(RideID material) { this.material = material; }
+        public MaterialEvent(RideID material) => this.material = material;
     }
 
-    public class MaterialAddedEvent : MaterialEvent
-    {
-        public MaterialAddedEvent(RideID material) : base(material) { }
-    }
+    public class MaterialAddedEvent : MaterialEvent { public MaterialAddedEvent(RideID material) : base(material) { } }
 
     public class NetworkViewEvent : WorldEventBase
     {
@@ -591,10 +513,7 @@ namespace Ride.WorldState
     public class RegionChangeEvent : AgentEvent 
     {
         public RideID region;
-        public RegionChangeEvent(RideID agent, RideID r) : base(agent)
-        {
-            region = r;
-        }
+        public RegionChangeEvent(RideID agent, RideID r) : base(agent) => region = r;
     }
     
     
@@ -625,6 +544,7 @@ namespace Ride.WorldState
             this.leaderId = leaderId;
             this.teamName = teamName;
         }
+
         public static void parseStatus(string status, out string stateName, out string eventName)
         {
             stateName = "None";
@@ -638,34 +558,29 @@ namespace Ride.WorldState
         }
     }
 
-    public class AgentCoverReachedEvent : AgentEvent {
+    public class AgentCoverReachedEvent : AgentEvent
+    {
         public float coverRating;
-
-        public AgentCoverReachedEvent(RideID agent, float coverRating) : base(agent) {
-            this.coverRating = coverRating;
-        }
+        public AgentCoverReachedEvent(RideID agent, float coverRating) : base(agent) => this.coverRating = coverRating;
     }
 
-    public class AgentCoverLeftEvent : AgentEvent {
+    public class AgentCoverLeftEvent : AgentEvent
+    {
         public float coverRating;
-
-        public AgentCoverLeftEvent(RideID agent, float coverRating) : base(agent) {
-            this.coverRating = coverRating;
-        }
+        public AgentCoverLeftEvent(RideID agent, float coverRating) : base(agent) => this.coverRating = coverRating;
     }
 
     public class SimulationResetEvent : WorldEventBase 
     {
         public string debugMsg;
-        public SimulationResetEvent(string debugMsg = "")
-        {
-            this.debugMsg = debugMsg;
-        }
+        public SimulationResetEvent(string debugMsg = "") => this.debugMsg = debugMsg;
     }
     
     public class FormationChangeEvent : WorldEventBase 
     {
-        public string prevFormation, curFormation, debugMsg;
+        public string prevFormation;
+        public string curFormation;
+        public string debugMsg;
         public FormationChangeEvent(string prevFormation, string curFormation, string debugMsg = "")
         {
             this.prevFormation = prevFormation;
@@ -674,9 +589,7 @@ namespace Ride.WorldState
         }
     }
 
-    /// <summary>
-    /// World Event dispatched by the Scenario System when a Scenario Event is executed
-    /// </summary>
+    /// <summary>World Event dispatched by the Scenario System when a Scenario Event is executed</summary>
     public class ScenarioEventEvent : WorldEventBase
     {
         public RideID scenario;
@@ -686,9 +599,8 @@ namespace Ride.WorldState
             this.scenario = scenario;
             this.id = id;
         }
-
     }
-    
+
     public class SelectionEvent : WorldEventBase
     {
         public RideID[] deselected;
@@ -705,7 +617,7 @@ namespace Ride.WorldState
                     deselected[i] = deselectedIds[i];
             }
 
-            if(selectedIds != null)
+            if (selectedIds != null)
             {
                 for (int i = 0; i < selectedIds.Length; i++)
                     selected[i] = selectedIds[i];
@@ -713,25 +625,19 @@ namespace Ride.WorldState
         }
     }
 
-    public class ObservabilityUpdatedEvent : WorldEventBase
-    {
-
-    }
+    public class ObservabilityUpdatedEvent : WorldEventBase { }
 
     public class BTNodeVisited : WorldEventBase
     {
         public string guid;
-        public BTNodeVisited(string guid)
-        {
-            this.guid = guid;
-        }
+        public BTNodeVisited(string guid) => this.guid = guid;
     }
 
     public class ExitingStateMachine : WorldEventBase
     {
         public RideID agent;
-        public string parentStateName;  //--Name of the parent state that finish state was substate of.
-        public string destinationName;  //--Name of the state that current substate is trying to exit to. 
+        public string parentStateName;  // Name of the parent state that finish state was substate of.
+        public string destinationName;  // Name of the state that current substate is trying to exit to. 
 
         public ExitingStateMachine(RideID agent, string parentStateName, string destinationName)
         {
@@ -768,26 +674,19 @@ namespace Ride.WorldState
     public class NAT_NodeResolved : WorldEventBase
     {
         public string resolvedNodeGUID;
-
-        public NAT_NodeResolved(string resolvedNodeGUID)
-        {
-            this.resolvedNodeGUID = resolvedNodeGUID;
-        }
+        public NAT_NodeResolved(string resolvedNodeGUID) => this.resolvedNodeGUID = resolvedNodeGUID;
     }
 
     public class NAT_EnterFunction : WorldEventBase
     {
         public string functionNodeGuid;
-        public NAT_EnterFunction(string functionNodeGuid)
-        {
-            this.functionNodeGuid = functionNodeGuid;
-        }
+        public NAT_EnterFunction(string functionNodeGuid) => this.functionNodeGuid = functionNodeGuid;
     }
     
     public class NAT_EnterNode : WorldEventBase
     {
         public string nodeGuid;
-        public NAT_EnterNode(string nodeGuid) { this.nodeGuid = nodeGuid; }
+        public NAT_EnterNode(string nodeGuid) => this.nodeGuid = nodeGuid;
     }
 
     public class NAT_EnterFinish : WorldEventBase
@@ -804,6 +703,6 @@ namespace Ride.WorldState
     public class NAT_ReceivingNLPResponse : WorldEventBase
     {
         public string response;
-        public NAT_ReceivingNLPResponse(string response) { this.response = response; }
+        public NAT_ReceivingNLPResponse(string response) => this.response = response;
     }
 }

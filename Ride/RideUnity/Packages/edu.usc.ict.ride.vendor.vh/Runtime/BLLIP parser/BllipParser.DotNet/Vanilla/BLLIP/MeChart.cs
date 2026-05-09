@@ -16,6 +16,7 @@ using static BllipParser.DotNet.Vanilla.Feat_global;
 using static BllipParser.DotNet.Vanilla.Feature_global;
 using static BllipParser.DotNet.Vanilla.fhSubFns;
 using static BllipParser.DotNet.Vanilla.MeChart_global;
+using static BllipParser.DotNet.Vanilla.utils;
 
 
 namespace BllipParser.DotNet.Vanilla
@@ -35,6 +36,12 @@ namespace BllipParser.DotNet.Vanilla
         public MeChart(SentRep sentence, ExtPos extpos, int id)
             : base(sentence, extpos, id)
         { }
+
+
+        public void ResetForSentence(SentRep sentence, ExtPos extPosOrNull)
+        {
+            ResetBchart(sentence, extPosOrNull);
+        }
 
 
         bool sufficiently_likely(in Item itm)
@@ -151,7 +158,7 @@ namespace BllipParser.DotNet.Vanilla
             }
 
             Item s = topS();
-            Debug.Assert(s != null);
+            AssertInternal(s != null);
             fillInHeads();
             int s1Int = s.term().toInt();
             FullHist s1Fh = new FullHist(s1Int, this);
@@ -255,7 +262,7 @@ namespace BllipParser.DotNet.Vanilla
                         if (hprob < 0)
                         {
                             Console.WriteLine(posInt + " " + pHugt(posInt) + " " + hprob2);
-                            Debug.Assert(hprob >= 0);
+                            AssertInternal(hprob >= 0);
                         }
                     }
 
@@ -275,7 +282,7 @@ namespace BllipParser.DotNet.Vanilla
                     if (hhprob < 0)
                     {
                         Console.WriteLine(hposprob + " " + hprob);
-                        Debug.Assert(hhprob >= 0);
+                        AssertInternal(hhprob >= 0);
                     }
 
                     h.hd = subhw;
@@ -385,20 +392,26 @@ namespace BllipParser.DotNet.Vanilla
                     Console.WriteLine("consid " + e);
                 }
 
+                Item [] lrGotIterScratch = Get_lrGotIter_ScratchBuffer(thrdid);
+
                 gcurVal = gcval;
-                float prob = meRuleProb(e, h);
+                float prob = meRuleProb(e, h, lrGotIterScratch);
                 gcurVal = null;
  
                 double nextP = prob * edgePg;
                 double nextPs = nextP;
                 //LeftRightGotIter gi(e); 
-                MiddleOutGotIter gi = new MiddleOutGotIter(e);
+                //MiddleOutGotIter gi = new MiddleOutGotIter(e);
                 Val val = new Val(e, nextPs);
                 val.trm1() = (short)itm.term().toInt();
                 val.wrd1() = wd.toInt();
                 int pos = 0;
                 depth++;
-                h = h.extendByEdge(e);
+
+                Item [] midGotIterScratch = Get_midGotIter_ScratchBuffer(thrdid, depth);
+                MiddleOutGotIter gi = new MiddleOutGotIter(e, midGotIterScratch);
+
+                h = h.extendByEdge(e, lrGotIterScratch);
                 bool zeroProb = false;
 
                 while (gi.next(out Item sitm, out pos))
@@ -496,12 +509,14 @@ namespace BllipParser.DotNet.Vanilla
                 // now look at every bucket of length j 
                 for (int i = 0; i < wrd_count_ - j; i++)
                 {
-                    var itmitr = regs[j, i].First;  //list<Item*>::iterator itmitr =regs[j][i].begin();
+                    var cell = regs[j, i];  //var itmitr = regs[j, i].First;  //list<Item*>::iterator itmitr =regs[j][i].begin();
+
                     list<Item> doover = new list<Item>();
-                    Item itm;
-                    for ( ; itmitr != null; itmitr = itmitr.Next)  //for ( ; itmitr != regs[j][i].end() ; itmitr++)
+                    //for ( ; itmitr != null; itmitr = itmitr.Next)  //for ( ; itmitr != regs[j][i].end() ; itmitr++)
+                    int cellCount = (int)cell.size();
+                    for (int k = 0; k < cellCount; k++)
                     {
-                        itm = itmitr.Value;  //itm = *itmitr;
+                        Item itm = cell.at(k);  //itm = itmitr.Value;  //itm = *itmitr;
                         if (!sufficiently_likely(itm))
                             continue;
 
@@ -558,13 +573,15 @@ namespace BllipParser.DotNet.Vanilla
         bool headsFromEdges(Item itm)
         {
             bool ans = false;
-            var eli = itm.ineed().First;  //list<Edge*>::iterator eli = itm->ineed().begin();
-            Edge e;
+            var ineed = itm.ineed();  //var eli = itm.ineed().First;  //list<Edge*>::iterator eli = itm->ineed().begin();
+
             // for each edge we look for all of its possible head preterms, and all
             // of the possible heads, and file this edge for that case 
-            for ( ; eli != null; eli = eli.Next)  //for( ; eli != itm->ineed().end() ; eli++)
+            //for ( ; eli != null; eli = eli.Next)  //for( ; eli != itm->ineed().end() ; eli++)
+            int count = (int)ineed.size();
+            for (int idx = 0; idx < count; idx++)
             {
-                e = eli.Value;  //e = *eli;
+                Edge e = ineed.at(idx);  //e = eli.Value;  //e = *eli;
                 if (!sufficiently_likely(e))
                     continue;
 
@@ -732,11 +749,12 @@ namespace BllipParser.DotNet.Vanilla
                     if (histPt == null)
                     {
                         Console.WriteLine(cVal + " " + whichInt + " " + nfeatV + " " + searchStartInd + " " + feat.auxCnt);
-                        Debug.Assert(histPt != null);
+                        AssertInternal(histPt != null);
                     }
 
-                    Feat f = histPt.feats.find(cVal);
-                    if (f == null)
+                    //Feat f = histPt.feats.find(cVal);
+                    //if (f == null)
+                    if (!histPt.try_feats_find_index(cVal, out int fIndex))
                     {
                         if(printDebug() > 60)
                         {
@@ -749,6 +767,7 @@ namespace BllipParser.DotNet.Vanilla
 
                         return 0.0f;
                     }
+                    ref readonly Feat f = ref histPt.feats_index_ref_readonly(fIndex);
 
                     smoothedPs[1] = f.g();
                     if (printDebug() > 68)
@@ -771,7 +790,7 @@ namespace BllipParser.DotNet.Vanilla
                 if (Feature.isLM || Feature.useExtraConditioning)
                 {
                     /* this section for new bucketing */
-                    float sz = (float)histPt.feats.size();
+                    float sz = (float)histPt.feats_size();
                     float estm = (float)histPt.count / sz;
                     b = bucket(estm, whichInt, i);
                 }
@@ -782,12 +801,11 @@ namespace BllipParser.DotNet.Vanilla
                     b = bucket(estm);
                 }
 
-                Feat ft = histPt.feats.find(cVal);
                 float unsmoothedVal;
-                if (ft == null)
+                if (!histPt.try_feats_find_index(cVal, out int ftIndex))
                     unsmoothedVal = 0;
                 else
-                    unsmoothedVal = ft.g();
+                    unsmoothedVal = histPt.feats_index_ref_readonly(ftIndex).g();
 
                 float lam = 1;
                 if (knp == 0)
@@ -833,7 +851,7 @@ namespace BllipParser.DotNet.Vanilla
         }
 
 
-        float meRuleProb(Edge edge, FullHist h)
+        float meRuleProb(Edge edge, FullHist h, Item [] lrScratchBuffer)
         {
             if(printDebug() > 30)
             {
@@ -844,7 +862,7 @@ namespace BllipParser.DotNet.Vanilla
             int i;
             int hpos = edge.headPos(); 
             h.hpos = hpos;
-            LeftRightGotIter gi = new LeftRightGotIter(edge);
+            LeftRightGotIter gi = new LeftRightGotIter(edge, lrScratchBuffer);
             globalGi[thrdid] = gi;
             Item got;
             float ans = 1;

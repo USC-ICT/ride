@@ -54,6 +54,49 @@ namespace VHAssets
             public PendingSyncEvent(CutsceneEvent _ce, string _syncPointName, string _timing) { ce = _ce; syncPointName = _syncPointName; timing = _timing; }
         }
 
+        class AnimationSyncResolution
+        {
+            public string syncPointName;
+            public string requestedSyncPointName;
+            public string animName;
+            public bool found;
+            public string source;
+            public float originalStartTime;
+            public float adjustedStartTime;
+            public float offset;
+            public string detail;
+        }
+
+        class TimingExpressionDebugInfo
+        {
+            public string expression;
+            public bool isNumeric;
+            public bool matchedSpeechId;
+            public bool markerFound;
+            public string timingId;
+            public string timingText;
+            public float baseTime;
+            public float offset;
+            public float resolvedTime;
+        }
+
+        class EventDebugInfo
+        {
+            public string eventType;
+            public string sourceName;
+            public string xmlId;
+            public string rawStart;
+            public string rawReady;
+            public string rawStrokeStart;
+            public string rawStroke;
+            public string rawRelax;
+            public string rawEnd;
+            public float createdStartTime;
+            public float createdLength;
+            public AnimationSyncResolution animationSyncResolution;
+            public readonly List<string> resolutionLines = new();
+        }
+
         [Serializable]
         public class BMLTiming
         {
@@ -75,6 +118,21 @@ namespace VHAssets
             public float endTime;
 
             public LipData(string _viseme, float _articulation, float _startTime, float _readyTime, float _relaxTime, float _endTime) { viseme = _viseme; articulation = _articulation; startTime = _startTime; readyTime = _readyTime; relaxTime = _relaxTime; endTime = _endTime; }
+        }
+
+        [Serializable]
+        public class WordTimingData
+        {
+            public string text = "";
+            public float startTime;
+            public float endTime;
+
+            public WordTimingData(string _text, float _startTime, float _endTime)
+            {
+                text = _text ?? "";
+                startTime = _startTime;
+                endTime = _endTime;
+            }
         }
 
         [Serializable]
@@ -195,6 +253,7 @@ namespace VHAssets
         }
 
         public delegate void OnParsedBMLTiming(/*string id, float time, string text*/BMLTiming bmlTiming);
+        public delegate void OnParsedWordTiming(WordTimingData wordTiming);
         public delegate void OnParsedVisemeTiming(LipData lipData);
         public delegate void OnParsedCurveData(CurveData curveData);
         public delegate void OnParsedBMLEvent(XmlTextReader reader, string eventType, CutsceneEvent ce);
@@ -205,6 +264,7 @@ namespace VHAssets
 
         #region Variables
         OnParsedBMLTiming m_ParsedBMLTimingCB;
+        OnParsedWordTiming m_ParsedWordTimingCB;
         OnParsedVisemeTiming m_ParsedVisemeTimingCB;
         OnParsedCurveData m_ParsedCurveDataCB;
         OnParsedBMLEvent m_ParsedBMLEventCB;
@@ -213,6 +273,8 @@ namespace VHAssets
         OnParsedCustomEvent m_ParsedCustomEventCB;
         List<PendingSyncEvent> m_PendingSyncEvents = new();
         List<CutsceneEvent> m_CreatedEvents = new();
+        Dictionary<CutsceneEvent, AnimationSyncResolution> m_EventAnimationSyncResolutions = new();
+        Dictionary<CutsceneEvent, EventDebugInfo> m_EventDebugInfo = new();
 
         static List<BMLTiming> m_BMLTimings = new();
 
@@ -221,7 +283,7 @@ namespace VHAssets
         string m_Character = "";
         string m_SpeechId = "";
         bool m_ReadBMLFile;
-        bool m_TrimBMLTimingWhenParsing = true;
+        bool m_TrimBMLTimingWhenParsing = false;
         string m_CachedXml = "";
         string m_EventCategoryName = GenericEventNames.SmartBody;
         string m_LoadPathSubFolder = "";
@@ -252,18 +314,20 @@ namespace VHAssets
 
         #region Constructors
 
-        public BMLParser(OnParsedBMLTiming parsedBMLTimingCB, OnParsedVisemeTiming parsedVisemeTimingCB, OnParsedBMLEvent parsedBMLEventCB, OnFinishedReading finishedReadingCB, OnParsedCustomEvent parsedCustomEventCB)
+        public BMLParser(OnParsedBMLTiming parsedBMLTimingCB, OnParsedWordTiming parsedWordTimingCB, OnParsedVisemeTiming parsedVisemeTimingCB, OnParsedBMLEvent parsedBMLEventCB, OnFinishedReading finishedReadingCB, OnParsedCustomEvent parsedCustomEventCB)
         {
             m_ParsedBMLTimingCB = parsedBMLTimingCB;
+            m_ParsedWordTimingCB = parsedWordTimingCB;
             m_ParsedVisemeTimingCB = parsedVisemeTimingCB;
             m_ParsedBMLEventCB = parsedBMLEventCB;
             m_FinishedReadingCB = finishedReadingCB;
             m_ParsedCustomEventCB = parsedCustomEventCB;
         }
 
-        public BMLParser(OnParsedBMLTiming parsedBMLTimingCB, OnParsedVisemeTiming parsedVisemeTimingCB, OnParsedCurveData parsedCurveDataCB)
+        public BMLParser(OnParsedBMLTiming parsedBMLTimingCB, OnParsedWordTiming parsedWordTimingCB, OnParsedVisemeTiming parsedVisemeTimingCB, OnParsedCurveData parsedCurveDataCB)
         {
             m_ParsedBMLTimingCB = parsedBMLTimingCB;
+            m_ParsedWordTimingCB = parsedWordTimingCB;
             m_ParsedVisemeTimingCB = parsedVisemeTimingCB;
             m_ParsedCurveDataCB = parsedCurveDataCB;
         }
@@ -284,6 +348,17 @@ namespace VHAssets
         /// </remarks>
         public bool LoadXMLString(string character, string xmlStr)
         {
+            // Normalize XML by removing tab/control whitespace that can break downstream parsing and Path APIs.
+            // NVBG-generated XML may contain these characters.
+            xmlStr = xmlStr
+                .Replace('\t', ' ')
+                .Replace('\r', ' ')
+                .Replace('\n', ' ')
+                .Replace('\u00A0', ' ');
+
+            // DEBUG: Dump the input XML for inspection
+            //TryDumpXml(character, xmlStr, "input");
+
             m_Character = character;
             m_ReadBMLFile = !IgnoreSpeechEvent;
             m_CachedXml = xmlStr;
@@ -302,7 +377,20 @@ namespace VHAssets
             catch (Exception e)
             {
                 succeeded = false;
-                Debug.LogError($"LoadXMLString() - Failed to parse XML. Error: {e.Message} {e.InnerException}. stack: {e.StackTrace}");
+
+                Exception root = e;
+                while (root.InnerException != null) root = root.InnerException;
+
+                string where = "";
+                if (reader != null)
+                    where = $" (XML line {reader.LineNumber}, pos {reader.LinePosition}, node '{reader.Name}')";
+
+                Debug.LogError(
+                    $"LoadXMLString() - Failed to parse XML{where}. " +
+                    $"Exception: {e.GetType().Name}: {e.Message}. " +
+                    $"Root: {root.GetType().Name}: {root.Message}. " +
+                    $"stack: {e.StackTrace}"
+                );
             }
             finally
             {
@@ -328,68 +416,335 @@ namespace VHAssets
         /// <remarks>
         /// If no matching clip or sync point is found, logs a warning and returns the original start time.
         /// </remarks>
-        public static float OffsetStartTimeBySyncPoint(float startTime, string syncPoint, string characterName, string animName)
+        public float OffsetStartTimeBySyncPoint(float startTime, string syncPoint, string characterName, string animName)
         {
+            var resolution = ResolveAnimationSyncPoint(startTime, syncPoint, characterName, animName);
+            return resolution.adjustedStartTime;
+        }
+
+        /// <summary>
+        /// Resolves an animation sync point against the target clip and returns the adjusted start time data.
+        /// </summary>
+        /// <param name="startTime">The desired sync-aligned time before any clip offset is applied.</param>
+        /// <param name="syncPoint">The animation event name to align against (for example, "strokeStartTime").</param>
+        /// <param name="characterName">The scene character whose Animator provides the animation clips.</param>
+        /// <param name="animName">The animation clip name to inspect for sync-point metadata.</param>
+        /// <returns>
+        /// An <see cref="AnimationSyncResolution"/> containing whether the sync point was found,
+        /// the computed clip offset, and the adjusted event start time.
+        /// </returns>
+        /// <remarks>
+        /// This is the authoritative sync-point resolution path used by animation scheduling.
+        /// Debug logging consumes the returned resolution, but the computation itself is not debug-only.
+        /// </remarks>
+        AnimationSyncResolution ResolveAnimationSyncPoint(float startTime, string syncPoint, string characterName, string animName)
+        {
+            const bool UseFallbackAnimationSyncPoints = true;
+
+            var resolution = new AnimationSyncResolution
+            {
+                syncPointName = syncPoint,
+                requestedSyncPointName = syncPoint,
+                animName = animName,
+                source = "none",
+                originalStartTime = startTime,
+                adjustedStartTime = startTime,
+                detail = "No adjustment attempted."
+            };
+
             if (string.IsNullOrEmpty(syncPoint))
-                return startTime;
+            {
+                resolution.detail = "syncPoint is null or empty.";
+                return resolution;
+            }
+
+            string canonicalSyncPoint = CanonicalizeAnimationSyncPointName(syncPoint);
+            if (!string.IsNullOrEmpty(canonicalSyncPoint))
+                resolution.syncPointName = canonicalSyncPoint;
 
             if (string.IsNullOrEmpty(animName))
             {
-                Debug.LogWarning($"OffsetStartTimeBySyncPoint() - animName is null for syncPoint: {syncPoint}");
-                return startTime;
+                Debug.LogWarning($"ResolveAnimationSyncPoint() - animName is null for syncPoint: {syncPoint}");
+                resolution.detail = $"Animation name is missing for syncPoint '{syncPoint}'.";
+                return resolution;
             }
 
             // Attempt to locate the target animation clip
             var characterObj = GameObject.Find(characterName);
             if (characterObj == null)
             {
-                Debug.LogWarning($"OffsetStartTimeBySyncPoint() - Could not find GameObject for character: {characterName}");
-                return startTime;
+                Debug.LogWarning($"ResolveAnimationSyncPoint() - Could not find GameObject for character: {characterName}");
+                resolution.detail = $"Character GameObject '{characterName}' was not found.";
+                return resolution;
             }
 
             var animator = characterObj.GetComponent<Animator>();
             if (animator == null)
             {
-                Debug.LogWarning($"OffsetStartTimeBySyncPoint() - No Animator component on character: {characterName}");
-                return startTime;
+                Debug.LogWarning($"ResolveAnimationSyncPoint() - No Animator component on character: {characterName}");
+                resolution.detail = $"Character '{characterName}' has no Animator component.";
+                return resolution;
             }
 
             var controller = animator.runtimeAnimatorController;
             if (controller == null)
             {
-                Debug.LogWarning($"OffsetStartTimeBySyncPoint() - Animator has no controller for character: {characterName}");
-                return startTime;
+                Debug.LogWarning($"ResolveAnimationSyncPoint() - Animator has no controller for character: {characterName}");
+                resolution.detail = $"Character '{characterName}' has no RuntimeAnimatorController.";
+                return resolution;
             }
 
             var animClips = controller.animationClips;
             if (animClips == null || animClips.Length == 0)
             {
-                Debug.LogWarning($"OffsetStartTimeBySyncPoint() - No animation clips found for character: {characterName}");
-                return startTime;
+                Debug.LogWarning($"ResolveAnimationSyncPoint() - No animation clips found for character: {characterName}");
+                resolution.detail = $"Character '{characterName}' has no animation clips.";
+                return resolution;
             }
+
+            bool foundMatchingClip = false;
 
             foreach (var clip in animClips)
             {
                 if (clip == null || !string.Equals(clip.name, animName, StringComparison.OrdinalIgnoreCase))
                     continue;
 
+                foundMatchingClip = true;
+
+                AnimationEvent matchedSyncEvent = null;
+                var canonicalClipSyncTimes = new Dictionary<string, float>();
+
                 foreach (var evt in clip.events)
                 {
-                    if (evt == null || !string.Equals(evt.functionName, syncPoint, StringComparison.OrdinalIgnoreCase))
+                    if (evt == null)
                         continue;
 
-                    float offset = evt.time;
-                    float result = startTime - offset;
+                    string canonicalEventName = CanonicalizeAnimationSyncPointName(evt.functionName);
+                    if (!string.IsNullOrEmpty(canonicalEventName) && !canonicalClipSyncTimes.ContainsKey(canonicalEventName))
+                    {
+                        canonicalClipSyncTimes.Add(canonicalEventName, evt.time);
+                    }
 
-                    Debug.Log($"OffsetStartTimeBySyncPoint() - Found syncPoint '{syncPoint}' in anim '{clip.name}' at time {offset:F3}, originalStart={startTime:F3}, result={result:F3}");
+                    if (string.IsNullOrEmpty(canonicalSyncPoint) || !string.Equals(canonicalEventName, canonicalSyncPoint, StringComparison.OrdinalIgnoreCase))
+                        continue;
 
-                    return result;
+                    matchedSyncEvent = evt;
+                    break;
                 }
+
+                bool foundAnyKnownSyncEvent = canonicalClipSyncTimes.Count > 0;
+                bool foundAnyKnownSyncEventBeyondZero = false;
+                foreach (float clipSyncTime in canonicalClipSyncTimes.Values)
+                {
+                    if (clipSyncTime > 0.0005f)
+                    {
+                        foundAnyKnownSyncEventBeyondZero = true;
+                        break;
+                    }
+                }
+
+                if (matchedSyncEvent != null)
+                {
+                    // Use the matched event if it has a meaningful non-zero time, or if the clip has at least one
+                    // other known sync point beyond zero. That second case lets legitimate zero-valued sync points
+                    // such as start/startTime still count as valid authored metadata. If every known sync point on
+                    // the clip is zero, treat the clip metadata as invalid and continue into the fallback path.
+                    bool shouldUseMatchedEvent =
+                        matchedSyncEvent.time > 0.0005f ||
+                        foundAnyKnownSyncEventBeyondZero;
+
+                    if (shouldUseMatchedEvent)
+                    {
+                        float offset = matchedSyncEvent.time;
+                        float result = startTime - offset;
+                        resolution.found = true;
+                        resolution.source = "clip";
+                        resolution.offset = offset;
+                        resolution.adjustedStartTime = result;
+                        resolution.detail =
+                            $"Matched clip '{clip.name}' event '{matchedSyncEvent.functionName}' " +
+                            $"(canonical '{resolution.syncPointName}') at {offset:F3}s.";
+
+                        Debug.Log(
+                            $"ResolveAnimationSyncPoint() - Found syncPoint '{matchedSyncEvent.functionName}' " +
+                            $"(canonical '{resolution.syncPointName}') in anim '{clip.name}' at time {offset:F3}, " +
+                            $"originalStart={startTime:F3}, result={result:F3}");
+
+                        return resolution;
+                    }
+                }
+
+                // If authored metadata is missing or all known sync points appear invalid, synthesize a best-guess
+                // clip offset from the canonical sync phase and clip length. This keeps runtime alignment and debug
+                // output usable for broken assets without pretending the clip had real authored sync metadata.
+                if (UseFallbackAnimationSyncPoints && TryGetFallbackAnimationSyncRatio(resolution.syncPointName, out float fallbackRatio))
+                {
+                    float fallbackOffset = clip.length * fallbackRatio;
+                    float fallbackResult = startTime - fallbackOffset;
+                    string fallbackReason =
+                        matchedSyncEvent == null
+                            ? "clip event was missing"
+                            : foundAnyKnownSyncEvent && !foundAnyKnownSyncEventBeyondZero
+                                ? "all known clip sync events were at 0"
+                                : $"clip event was at {matchedSyncEvent.time:F3}s";
+
+                    resolution.found = true;
+                    resolution.source = "fallback";
+                    resolution.offset = fallbackOffset;
+                    resolution.adjustedStartTime = fallbackResult;
+                    resolution.detail =
+                        $"Fallback sync '{resolution.syncPointName}' guessed at {fallbackRatio:F3} of clip '{clip.name}' length {clip.length:F3}s " +
+                        $"({fallbackOffset:F3}s) because {fallbackReason}.";
+
+                    Debug.Log(
+                        $"ResolveAnimationSyncPoint() - Using fallback syncPoint '{resolution.syncPointName}' " +
+                        $"(requested '{syncPoint}') for anim '{clip.name}'. " +
+                        $"ratio={fallbackRatio:F3}, clipLength={clip.length:F3}, offset={fallbackOffset:F3}, " +
+                        $"originalStart={startTime:F3}, result={fallbackResult:F3}, reason={fallbackReason}");
+
+                    return resolution;
+                }
+
+                break;
             }
 
-            Debug.LogWarning($"OffsetStartTimeBySyncPoint() - Could not find syncPoint '{syncPoint}' in anim '{animName}' for character '{characterName}'");
+            if (!foundMatchingClip)
+            {
+                Debug.LogWarning(
+                    $"ResolveAnimationSyncPoint() - No clip named '{animName}' was found in character '{characterName}' animator controller '{controller.name}'. " +
+                    $"This can happen when the animator state name matches BML but the bound motion clip uses a different clip name.");
+            }
 
-            return startTime;
+            Debug.LogWarning($"ResolveAnimationSyncPoint() - Could not find syncPoint '{syncPoint}' in anim '{animName}' for character '{characterName}'");
+            resolution.detail = $"Could not find animation event '{syncPoint}' in clip '{animName}'.";
+
+            return resolution;
+        }
+
+        /// <summary>
+        /// Maps a raw animation sync-point/event name to the parser's canonical phase name.
+        /// </summary>
+        /// <param name="syncPointName">The raw sync-point name found in BML or on an AnimationEvent.</param>
+        /// <returns>
+        /// A canonical sync-point name such as <c>startTime</c>, <c>strokeStartTime</c>, or <c>relaxTime</c>,
+        /// or an empty string if the name is not recognized.
+        /// </returns>
+        /// <remarks>
+        /// Matching is intentionally forgiving: the input is lowercased and common separators such as underscores,
+        /// hyphens, and spaces are stripped before comparison. This lets legacy variants like
+        /// <c>stroke_start</c>, <c>stroke-start</c>, and <c>strokeStart</c> all resolve to
+        /// <c>strokeStartTime</c>.
+        /// </remarks>
+        static string CanonicalizeAnimationSyncPointName(string syncPointName)
+        {
+            if (string.IsNullOrEmpty(syncPointName))
+                return "";
+
+            string normalized = syncPointName
+                .Replace("_", "")
+                .Replace("-", "")
+                .Replace(" ", "")
+                .ToLowerInvariant();
+
+            switch (normalized)
+            {
+                case "start":
+                case "starttime":
+                    return "startTime";
+
+                case "ready":
+                case "readytime":
+                    return "readyTime";
+
+                case "strokestart":
+                case "strokestarttime":
+                    return "strokeStartTime";
+
+                case "emphasis":
+                case "emphasistime":
+                    return "emphasisTime";
+
+                case "stroke":
+                case "stroktime":
+                    return "strokeTime";
+
+                case "relax":
+                case "relaxtime":
+                    return "relaxTime";
+
+                case "end":
+                case "endtime":
+                    return "endTime";
+            }
+
+            return "";
+        }
+
+        static bool IsKnownAnimationSyncPointName(string syncPointName)
+        {
+            return !string.IsNullOrEmpty(CanonicalizeAnimationSyncPointName(syncPointName));
+        }
+
+        /// <summary>
+        /// Returns a heuristic clip-position ratio for a canonical sync-point name when authored metadata is missing.
+        /// </summary>
+        /// <param name="syncPointName">The canonical sync-point name returned by <see cref="CanonicalizeAnimationSyncPointName"/>.</param>
+        /// <param name="ratio">The fallback ratio, expressed as a normalized position across the clip length.</param>
+        /// <returns>True if a fallback ratio is defined for the requested canonical sync point; otherwise false.</returns>
+        /// <remarks>
+        /// These values are runtime-only best guesses used to keep scheduling debuggable when clip metadata is
+        /// missing or zeroed out. For example, <c>startTime</c> falls back to <c>0.0</c> and
+        /// <c>endTime</c> falls back to <c>1.0</c>, meaning the beginning and end of the clip respectively.
+        /// </remarks>
+        static bool TryGetFallbackAnimationSyncRatio(string syncPointName, out float ratio)
+        {
+            // Runtime-only best guesses based on the legacy authored sync-point progression
+            // used by our body animations. These are not substitutes for authored metadata;
+            // they only keep scheduling debuggable when sync events are missing or all zero.
+            if (string.Equals(syncPointName, "startTime", StringComparison.OrdinalIgnoreCase))
+            {
+                ratio = 0.0f;
+                return true;
+            }
+
+            if (string.Equals(syncPointName, "readyTime", StringComparison.OrdinalIgnoreCase))
+            {
+                ratio = 0.13f;
+                return true;
+            }
+
+            if (string.Equals(syncPointName, "strokeStartTime", StringComparison.OrdinalIgnoreCase))
+            {
+                ratio = 0.20f;
+                return true;
+            }
+
+            if (string.Equals(syncPointName, "emphasisTime", StringComparison.OrdinalIgnoreCase))
+            {
+                ratio = 0.40f;
+                return true;
+            }
+
+            if (string.Equals(syncPointName, "strokeTime", StringComparison.OrdinalIgnoreCase))
+            {
+                ratio = 0.67f;
+                return true;
+            }
+
+            if (string.Equals(syncPointName, "relaxTime", StringComparison.OrdinalIgnoreCase))
+            {
+                ratio = 0.87f;
+                return true;
+            }
+
+            if (string.Equals(syncPointName, "endTime", StringComparison.OrdinalIgnoreCase))
+            {
+                ratio = 1.0f;
+                return true;
+            }
+
+            ratio = 0;
+            return false;
         }
 
         #endregion
@@ -523,6 +878,15 @@ namespace VHAssets
         public bool LoadXMLBMLStrings(string character, AudioSpeechFile speech)
         {
             m_Utterance = speech;
+
+            // AudioSpeechFile already parsed the TTS/FaceFX timing payload into absolute marker times.
+            // Reuse that resolved timing data here instead of re-reading speech.BmlText, which can duplicate markers.
+            if (speech != null && speech.UtteranceTiming != null && speech.UtteranceTiming.m_Timings != null && speech.UtteranceTiming.m_Timings.Count > 0)
+            {
+                SetBMLTimings(speech.UtteranceTiming.m_Timings);
+                return LoadXMLString(character, speech.ConvertedXml);
+            }
+
             return LoadXMLBMLStrings(character, speech.ConvertedXml, speech.BmlText);
         }
 
@@ -674,6 +1038,8 @@ namespace VHAssets
             // handled the pending events first
             m_PendingSyncEvents.ForEach(c => ResolvePendingSyncEvent(c));
 
+            Debug.Log(BuildParserTimelineSummary());
+
             //foreach (var cutsceneevent in m_CreatedEvents)
             //    Debug.Log($"FinishedReadingXML() after ResolvePendingSyncEvent() - {cutsceneevent.Name} - {cutsceneevent.EventType} - {cutsceneevent.FunctionName} - {cutsceneevent.StartTime} - {cutsceneevent.Length}");
 
@@ -688,6 +1054,8 @@ namespace VHAssets
             m_BMLTimings.Clear();
             m_PendingSyncEvents.Clear();
             m_CreatedEvents.Clear();
+            m_EventAnimationSyncResolutions.Clear();
+            m_EventDebugInfo.Clear();
             m_Character = string.Empty;
             m_ReadBMLFile = false;
             //m_CachedXml = string.Empty;
@@ -739,13 +1107,19 @@ namespace VHAssets
                 //    Debug.Log($"ResolvePendingSyncEvent() found parent by id - {cache.ce.Name} - {cache.ce.UniqueId}");
             }
 
-            float eventTime = ParseEventStartTime(cache.timing);
+            float previousStartTime = cache.ce.StartTime;
+            float previousLength = cache.ce.Length;
+
+            float eventTime = ParseEventStartTime(cache.timing, out TimingExpressionDebugInfo debugInfo);
+            float adjustedStartTime = GetAnimationAdjustedStartTime(cache.ce, eventSyncPointName, eventTime);
             if (eventSyncPointName == start || eventSyncPointName == stroke)
-                cache.ce.StartTime = eventTime;
+                cache.ce.StartTime = adjustedStartTime;
             else if (eventSyncPointName == relax)
-                cache.ce.StartTime = eventTime;
+                cache.ce.StartTime = adjustedStartTime;
             else
                 cache.ce.Length = eventTime - cache.ce.StartTime;
+
+            RecordPendingSyncResolution(cache.ce, cache.syncPointName, cache.timing, eventTime, previousStartTime, previousLength, debugInfo);
 
 
             // EDF - old manual parsing code using the parentTimer it searched for.
@@ -785,6 +1159,39 @@ namespace VHAssets
                 }
             }
             #endif
+        }
+
+        /// <summary>
+        /// Applies any resolved animation clip sync offset to a fully resolved BML sync time.
+        /// </summary>
+        /// <param name="ce">The event currently being scheduled.</param>
+        /// <param name="eventSyncPointName">The BML sync phase currently being resolved (for example, stroke or start).</param>
+        /// <param name="resolvedSyncTime">The absolute time produced after resolving the BML timing expression and any +/- math.</param>
+        /// <returns>
+        /// The final event start time after applying the clip sync offset for supported animation sync phases,
+        /// or <paramref name="resolvedSyncTime"/> unchanged when no animation adjustment is applicable.
+        /// </returns>
+        /// <remarks>
+        /// This runs after <see cref="ParseEventStartTime"/> so BML expressions like <c>sp1:T20+2.1</c> are already
+        /// fully resolved before the clip-relative sync offset is applied.
+        /// </remarks>
+        float GetAnimationAdjustedStartTime(CutsceneEvent ce, string eventSyncPointName, float resolvedSyncTime)
+        {
+            if (ce == null || !m_EventAnimationSyncResolutions.TryGetValue(ce, out AnimationSyncResolution animationSyncResolution))
+                return resolvedSyncTime;
+
+            if (animationSyncResolution == null || !animationSyncResolution.found)
+                return resolvedSyncTime;
+
+            string canonicalEventSyncPoint = CanonicalizeAnimationSyncPointName(eventSyncPointName);
+
+            // The current scheduling upgrade is intentionally gated to the start/stroke-triggered animation cases
+            // we are validating now. The canonical sync-point plumbing above is broader on purpose so the same
+            // helper can be expanded later for ready/emphasis/relax/end without restructuring this path again.
+            if (canonicalEventSyncPoint != "startTime" && canonicalEventSyncPoint != "strokeTime")
+                return resolvedSyncTime;
+
+            return resolvedSyncTime - animationSyncResolution.offset;
         }
 
         #endregion
@@ -853,6 +1260,7 @@ namespace VHAssets
             ce.SetParameters(reader);
             SetCharacterParam(ce, m_Character);
             RegisterSyncPointDependencies(reader, ce);
+            RefreshEventDebugInfo(ce);
 
             //Debug.Log($"CreateEvent() - {ce.Name} - {ce.StartTime} - {ce.Length}");
 
@@ -871,6 +1279,8 @@ namespace VHAssets
         CutsceneEvent CreateNewEvent(XmlTextReader reader, string eventType)
         {
             float startTime = GetEventStartTime(reader);
+            float originalStartTime = startTime;
+            AnimationSyncResolution animationSyncResolution = null;
 
             // Avoid duplicate gestures
             if (ShouldSkipGesture(eventType, reader, startTime))
@@ -886,7 +1296,8 @@ namespace VHAssets
                 string syncPoint = "strokeStartTime"; // convention used in AnimationEvent
                 string animName = reader["name"];
 
-                startTime = OffsetStartTimeBySyncPoint(startTime, syncPoint, m_Character, animName);
+                animationSyncResolution = ResolveAnimationSyncPoint(startTime, syncPoint, m_Character, animName);
+                startTime = animationSyncResolution.adjustedStartTime;
             }
 
             var ce = new CutsceneEvent
@@ -899,6 +1310,12 @@ namespace VHAssets
             ChangedCutsceneEventType(m_EventCategoryName, ce);
 
             m_CreatedEvents.Add(ce);
+
+            if (animationSyncResolution != null)
+                m_EventAnimationSyncResolutions[ce] = animationSyncResolution;
+
+            CaptureEventDebugInfo(reader, ce, eventType, originalStartTime, animationSyncResolution);
+
             return ce;
         }
 
@@ -1114,6 +1531,7 @@ namespace VHAssets
         {
             m_PendingSyncEvents.Clear();
             m_CreatedEvents.Clear();
+            m_EventDebugInfo.Clear();
         }
 
         #endregion
@@ -1196,7 +1614,8 @@ namespace VHAssets
             //foreach (var timing in bmlTimings)
             //    Debug.Log($"SetBMLTimings() - {timing.time} - {timing.id} - {timing.text}");
 
-            m_BMLTimings = bmlTimings;
+            // Take a snapshot of the caller-provided timings so parser state is isolated from later list mutations.
+            m_BMLTimings = bmlTimings != null ? new List<BMLTiming>(bmlTimings) : new List<BMLTiming>();
         }
 
         #endregion
@@ -1227,6 +1646,17 @@ namespace VHAssets
                                 var bmlTiming = new BMLTiming(id, time, TrimBMLTimingWhenParsing ? reader.Value.Trim() : "");
                                 m_BMLTimings.Add(bmlTiming);
                                 m_ParsedBMLTimingCB(bmlTiming);
+                            }
+                        }
+                        else if (reader.Name == "word")
+                        {
+                            if (float.TryParse(reader["start"], out float startTime) &&
+                                float.TryParse(reader["end"], out float endTime))
+                            {
+                                string wordText = reader.ReadString();
+                                string cleanedWordText = CleanTimelineText(wordText);
+                                var wordTiming = new WordTimingData(cleanedWordText, startTime, endTime);
+                                m_ParsedWordTimingCB?.Invoke(wordTiming);
                             }
                         }
                         else if (reader.Name == "lips")
@@ -1295,8 +1725,14 @@ namespace VHAssets
         /// Handles sync expressions of the format: 'SpeechID:SyncMarker±Offset'.
         /// Matches against m_BMLTimings collected from parsed BML data.
         /// </remarks>
-        float ParseEventStartTime(string startTime)
+        float ParseEventStartTime(string startTime, out TimingExpressionDebugInfo debugInfo)
         {
+            debugInfo = new TimingExpressionDebugInfo
+            {
+                expression = startTime,
+                resolvedTime = 0
+            };
+
             if (!float.TryParse(startTime, out float eventStart))
             {
                 if (!string.IsNullOrEmpty(startTime))
@@ -1307,6 +1743,8 @@ namespace VHAssets
                     {
                         if (split[i].IndexOf(m_SpeechId) != -1)
                         {
+                            debugInfo.matchedSpeechId = true;
+
                             string timing = split[i + 1];
                             float offset = 0;
                             if (timing.Contains("+"))
@@ -1323,16 +1761,564 @@ namespace VHAssets
                             }
 
                             BMLTiming bmlTiming = m_BMLTimings.Find(t => t.id == timing);
+
+                            debugInfo.timingId = timing;
+                            debugInfo.offset = offset;
+
                             if (bmlTiming != null)
+                            {
+                                debugInfo.markerFound = true;
+                                debugInfo.baseTime = bmlTiming.time;
+                                debugInfo.timingText = bmlTiming.text;
+
                                 eventStart = bmlTiming.time + offset;
+                            }
 
                             break;
                         }
                     }
                 }
             }
+            else
+            {
+                debugInfo.isNumeric = true;
+            }
+
+            debugInfo.resolvedTime = eventStart;
 
             return eventStart;
+        }
+
+        void CaptureEventDebugInfo(XmlTextReader reader, CutsceneEvent ce, string eventType, float originalStartTime, AnimationSyncResolution animationSyncResolution)
+        {
+            if (ce == null)
+                return;
+
+            m_EventDebugInfo[ce] = new EventDebugInfo
+            {
+                eventType = eventType,
+                xmlId = reader["id"] ?? "",
+                sourceName = reader["name"] ?? reader["lexeme"] ?? reader["type"] ?? "",
+                rawStart = reader["start"] ?? "",
+                rawReady = reader["ready"] ?? "",
+                rawStrokeStart = reader["strokeStart"] ?? "",
+                rawStroke = reader["stroke"] ?? "",
+                rawRelax = reader["relax"] ?? "",
+                rawEnd = reader["end"] ?? "",
+                createdStartTime = originalStartTime,
+                createdLength = ce.Length,
+                animationSyncResolution = animationSyncResolution
+            };
+        }
+
+        void RefreshEventDebugInfo(CutsceneEvent ce)
+        {
+            if (ce == null || !m_EventDebugInfo.TryGetValue(ce, out EventDebugInfo info))
+                return;
+
+            if (string.IsNullOrEmpty(info.sourceName))
+                info.sourceName = ce.Name;
+        }
+
+        void RecordPendingSyncResolution(CutsceneEvent ce, string syncPointName, string timing, float eventTime, float previousStartTime, float previousLength, TimingExpressionDebugInfo debugInfo)
+        {
+            if (ce == null || !m_EventDebugInfo.TryGetValue(ce, out EventDebugInfo info))
+                return;
+
+            string resolution = BuildTimingResolutionLine(syncPointName, timing, eventTime, previousStartTime, previousLength, ce.StartTime, ce.Length, debugInfo);
+            if (!string.IsNullOrEmpty(resolution))
+                info.resolutionLines.Add(resolution);
+        }
+
+        class WordTimelineEntry
+        {
+            public WordTimingData word;
+            public BMLTiming startTiming;
+            public BMLTiming endTiming;
+        }
+
+        string BuildParserTimelineSummary()
+        {
+            if (m_BMLTimings == null || m_BMLTimings.Count == 0)
+                return "BMLParser Timeline: no BML timing markers loaded.";
+
+            var timelineBehaviors = new List<CutsceneEvent>();
+            int ignoredEventCount = 0;
+            foreach (var ce in m_CreatedEvents)
+            {
+                m_EventDebugInfo.TryGetValue(ce, out EventDebugInfo info);
+                if (ShouldIgnoreTimelineEvent(ce, info))
+                {
+                    ignoredEventCount++;
+                    continue;
+                }
+
+                timelineBehaviors.Add(ce);
+            }
+
+            var sb = new StringBuilder(4096);
+            sb.AppendLine($"BMLParser Timeline - speechId={SafeValue(m_SpeechId)} markers={m_BMLTimings.Count} behaviors={timelineBehaviors.Count} ignoredEvents={ignoredEventCount} character={SafeValue(m_Character)}");
+            sb.AppendLine(GetWordTimingAvailabilitySummary());
+            string utteranceText = GetTimelineUtteranceText();
+            if (!string.IsNullOrEmpty(utteranceText))
+                sb.AppendLine($"utterance: {utteranceText}");
+            else
+                sb.AppendLine("utterance: <not available>");
+
+            var wordEntries = BuildWordTimelineEntries();
+            if (wordEntries.Count > 0)
+            {
+                for (int i = 0; i < wordEntries.Count; i++)
+                {
+                    WordTimelineEntry entry = wordEntries[i];
+                    sb.AppendLine(BuildTimelineWordLine(entry));
+
+                    for (int j = 0; j < timelineBehaviors.Count; j++)
+                    {
+                        CutsceneEvent ce = timelineBehaviors[j];
+                        m_EventDebugInfo.TryGetValue(ce, out EventDebugInfo info);
+                        if (BelongsToWordTimelineEntry(ce, info, entry))
+                            sb.AppendLine(BuildTimelineBehaviorLine(ce, info));
+                    }
+                }
+            }
+            else
+            {
+                int spanCount = Mathf.Max(0, m_BMLTimings.Count - 1);
+                for (int i = 0; i < spanCount; i++)
+                {
+                    BMLTiming current = m_BMLTimings[i];
+                    BMLTiming next = m_BMLTimings[i + 1];
+                    sb.AppendLine(BuildTimelineSpanLine(current, next));
+
+                    for (int j = 0; j < timelineBehaviors.Count; j++)
+                    {
+                        CutsceneEvent ce = timelineBehaviors[j];
+                        m_EventDebugInfo.TryGetValue(ce, out EventDebugInfo info);
+                        if (BelongsToTimelineSpan(ce, info, current, next))
+                            sb.AppendLine(BuildTimelineBehaviorLine(ce, info));
+                    }
+                }
+
+                if (spanCount == 0)
+                    sb.AppendLine("  <no marker spans>");
+            }
+
+            return sb.ToString().TrimEnd();
+        }
+
+        List<WordTimelineEntry> BuildWordTimelineEntries()
+        {
+            var entries = new List<WordTimelineEntry>();
+            if (m_Utterance == null || m_Utterance.UtteranceTiming == null || m_Utterance.UtteranceTiming.m_WordTimings == null)
+                return entries;
+
+            int markerSearchIndex = 0;
+            const float epsilon = 0.0005f;
+            for (int i = 0; i < m_Utterance.UtteranceTiming.m_WordTimings.Count; i++)
+            {
+                WordTimingData word = m_Utterance.UtteranceTiming.m_WordTimings[i];
+                if (word == null)
+                    continue;
+
+                int startIndex = FindTimingIndexAtTime(word.startTime, markerSearchIndex, epsilon);
+                if (startIndex < 0)
+                    continue;
+
+                int endIndex = FindTimingIndexAtTime(word.endTime, startIndex + 1, epsilon);
+                if (endIndex < 0)
+                    continue;
+
+                entries.Add(new WordTimelineEntry
+                {
+                    word = word,
+                    startTiming = m_BMLTimings[startIndex],
+                    endTiming = m_BMLTimings[endIndex]
+                });
+
+                markerSearchIndex = endIndex + 1;
+            }
+
+            return entries;
+        }
+
+        int FindTimingIndexAtTime(float time, int startIndex, float epsilon)
+        {
+            if (m_BMLTimings == null)
+                return -1;
+
+            for (int i = Mathf.Max(0, startIndex); i < m_BMLTimings.Count; i++)
+            {
+                if (Mathf.Abs(m_BMLTimings[i].time - time) <= epsilon)
+                    return i;
+            }
+
+            return -1;
+        }
+
+        string BuildTimelineWordLine(WordTimelineEntry entry)
+        {
+            string label = CleanTimelineText(entry?.word != null ? entry.word.text : "");
+            if (string.IsNullOrEmpty(label))
+                label = "<word n/a>";
+
+            string startId = entry?.startTiming != null ? entry.startTiming.id : "";
+            float startTime = entry?.startTiming != null ? entry.startTiming.time : 0;
+            string endId = entry?.endTiming != null ? entry.endTiming.id : "";
+            float endTime = entry?.endTiming != null ? entry.endTiming.time : startTime;
+            return $"'{label}'  {SafeValue(startId)} {startTime:F3} -> {SafeValue(endId)} {endTime:F3}";
+        }
+
+        bool ShouldIgnoreTimelineEvent(CutsceneEvent ce, EventDebugInfo info)
+        {
+            string eventType = info?.eventType ?? "";
+            string functionName = ce != null ? ce.FunctionName : "";
+            return string.Equals(eventType, "event", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(eventType, "sbm:event", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(functionName, "Marker", StringComparison.OrdinalIgnoreCase);
+        }
+
+        string BuildTimelineSpanLine(BMLTiming current, BMLTiming next)
+        {
+            string label = GetTimelineSpanLabel(current, next);
+            return $"'{label}'  {SafeValue(current.id)} {current.time:F3} -> {SafeValue(next.id)} {next.time:F3}";
+        }
+
+        string GetTimelineSpanLabel(BMLTiming current, BMLTiming next)
+        {
+            string label = GetWordLabelForSpan(current, next);
+            if (string.IsNullOrEmpty(label))
+                label = CleanTimelineText(current != null ? current.text : "");
+            if (string.IsNullOrEmpty(label))
+                label = CleanTimelineText(next != null ? next.text : "");
+            return string.IsNullOrEmpty(label) ? "<word n/a>" : label;
+        }
+
+        string GetWordLabelForSpan(BMLTiming current, BMLTiming next)
+        {
+            if (m_Utterance == null || m_Utterance.UtteranceTiming == null || m_Utterance.UtteranceTiming.m_WordTimings == null)
+                return "";
+
+            float spanStart = current != null ? current.time : 0;
+            float spanEnd = next != null ? next.time : spanStart;
+            const float epsilon = 0.0005f;
+
+            for (int i = 0; i < m_Utterance.UtteranceTiming.m_WordTimings.Count; i++)
+            {
+                WordTimingData word = m_Utterance.UtteranceTiming.m_WordTimings[i];
+                if (word == null)
+                    continue;
+
+                if (Mathf.Abs(word.startTime - spanStart) <= epsilon && Mathf.Abs(word.endTime - spanEnd) <= epsilon)
+                    return CleanTimelineText(word.text);
+            }
+
+            for (int i = 0; i < m_Utterance.UtteranceTiming.m_WordTimings.Count; i++)
+            {
+                WordTimingData word = m_Utterance.UtteranceTiming.m_WordTimings[i];
+                if (word == null)
+                    continue;
+
+                bool overlaps = word.endTime > spanStart + epsilon && word.startTime < spanEnd - epsilon;
+                if (overlaps)
+                    return CleanTimelineText(word.text);
+            }
+
+            return "";
+        }
+
+        string GetTimelineUtteranceText()
+        {
+            if (m_Utterance == null)
+                return "";
+
+            string utteranceText = CleanTimelineText(m_Utterance.UtteranceText);
+            if (!string.IsNullOrEmpty(utteranceText))
+                return utteranceText;
+
+            if (m_Utterance.UtteranceTiming == null || m_Utterance.UtteranceTiming.m_WordTimings == null || m_Utterance.UtteranceTiming.m_WordTimings.Count == 0)
+                return "";
+
+            var sb = new StringBuilder(256);
+            for (int i = 0; i < m_Utterance.UtteranceTiming.m_WordTimings.Count; i++)
+            {
+                WordTimingData word = m_Utterance.UtteranceTiming.m_WordTimings[i];
+                string wordText = CleanTimelineText(word != null ? word.text : "");
+                if (string.IsNullOrEmpty(wordText))
+                    continue;
+
+                if (sb.Length > 0)
+                    sb.Append(' ');
+
+                sb.Append(wordText);
+            }
+
+            utteranceText = sb.ToString();
+            return utteranceText;
+        }
+
+        string GetWordTimingAvailabilitySummary()
+        {
+            int wordTimingCount = 0;
+            int nonEmptyWordTextCount = 0;
+            if (m_Utterance != null && m_Utterance.UtteranceTiming != null && m_Utterance.UtteranceTiming.m_WordTimings != null)
+            {
+                wordTimingCount = m_Utterance.UtteranceTiming.m_WordTimings.Count;
+                for (int i = 0; i < m_Utterance.UtteranceTiming.m_WordTimings.Count; i++)
+                {
+                    WordTimingData word = m_Utterance.UtteranceTiming.m_WordTimings[i];
+                    if (word != null && !string.IsNullOrEmpty(CleanTimelineText(word.text)))
+                        nonEmptyWordTextCount++;
+                }
+            }
+
+            bool hasUtteranceText = !string.IsNullOrEmpty(GetTimelineUtteranceText());
+            return $"wordTimings: spans={wordTimingCount} textLabels={nonEmptyWordTextCount} utteranceTextAvailable={hasUtteranceText}";
+        }
+
+        static string CleanTimelineText(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+                return "";
+
+            string cleaned = value.Replace("\r", " ").Replace("\n", " ").Trim();
+            while (cleaned.Contains("  "))
+                cleaned = cleaned.Replace("  ", " ");
+            return cleaned;
+        }
+
+        bool BelongsToTimelineSpan(CutsceneEvent ce, EventDebugInfo info, BMLTiming current, BMLTiming next)
+        {
+            if (ce == null)
+                return false;
+
+            GetEventAnchorData(ce, info, out string _, out string markerId, out float anchorTime);
+            if (!string.IsNullOrEmpty(markerId))
+                return string.Equals(markerId, current.id, StringComparison.OrdinalIgnoreCase);
+
+            const float epsilon = 0.0005f;
+            return anchorTime >= current.time - epsilon && anchorTime < next.time + epsilon;
+        }
+
+        bool BelongsToWordTimelineEntry(CutsceneEvent ce, EventDebugInfo info, WordTimelineEntry entry)
+        {
+            if (ce == null || entry == null || entry.startTiming == null || entry.endTiming == null)
+                return false;
+
+            GetEventAnchorData(ce, info, out string _, out string markerId, out float anchorTime);
+            if (!string.IsNullOrEmpty(markerId))
+            {
+                return string.Equals(markerId, entry.startTiming.id, StringComparison.OrdinalIgnoreCase) ||
+                       string.Equals(markerId, entry.endTiming.id, StringComparison.OrdinalIgnoreCase);
+            }
+
+            const float epsilon = 0.0005f;
+            return anchorTime >= entry.startTiming.time - epsilon && anchorTime <= entry.endTiming.time + epsilon;
+        }
+
+        string BuildTimelineBehaviorLine(CutsceneEvent ce, EventDebugInfo info)
+        {
+            GetEventAnchorData(ce, info, out string anchorName, out string markerId, out float anchorTime);
+
+            var sb = new StringBuilder(256);
+            sb.Append("  [");
+            sb.Append(SafeValue(info?.eventType ?? ce.FunctionName));
+            sb.Append("] ");
+            sb.Append(SafeValue(GetTimelineBehaviorName(ce, info)));
+            sb.Append("  ");
+            sb.Append(anchorName);
+            sb.Append("=");
+            sb.Append(SafeValue(markerId));
+            sb.Append(" (");
+            sb.Append(anchorTime.ToString("F3"));
+            sb.Append(")");
+            sb.Append("  start=");
+            sb.Append(ce.StartTime.ToString("F3"));
+
+            if (info?.animationSyncResolution != null)
+            {
+                sb.Append("  clipSync=");
+                sb.Append(SafeValue(info.animationSyncResolution.syncPointName));
+                if (info.animationSyncResolution.found)
+                {
+                    sb.Append("@");
+                    sb.Append(info.animationSyncResolution.offset.ToString("F3"));
+                }
+                else
+                {
+                    sb.Append("(miss)");
+                }
+
+                if (!string.IsNullOrEmpty(info.animationSyncResolution.source) &&
+                    !string.Equals(info.animationSyncResolution.source, "clip", StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(info.animationSyncResolution.source, "none", StringComparison.OrdinalIgnoreCase))
+                {
+                    sb.Append("[");
+                    sb.Append(info.animationSyncResolution.source);
+                    sb.Append("]");
+                }
+            }
+
+            return sb.ToString();
+        }
+
+        static string GetTimelineBehaviorName(CutsceneEvent ce, EventDebugInfo info)
+        {
+            if (!string.IsNullOrEmpty(info?.sourceName))
+                return info.sourceName;
+            if (ce != null && !string.IsNullOrEmpty(ce.Name))
+                return ce.Name;
+            return "<unnamed>";
+        }
+
+        void GetEventAnchorData(CutsceneEvent ce, EventDebugInfo info, out string anchorName, out string markerId, out float anchorTime)
+        {
+            anchorName = "start";
+            markerId = "";
+            anchorTime = ce != null ? ce.StartTime : 0;
+
+            string expression = "";
+            if (!string.IsNullOrEmpty(info?.rawStroke))
+            {
+                anchorName = "stroke";
+                expression = info.rawStroke;
+            }
+            else if (!string.IsNullOrEmpty(info?.rawStrokeStart))
+            {
+                anchorName = "strokeStart";
+                expression = info.rawStrokeStart;
+            }
+            else if (!string.IsNullOrEmpty(info?.rawStart))
+            {
+                anchorName = "start";
+                expression = info.rawStart;
+            }
+            else if (!string.IsNullOrEmpty(info?.rawRelax))
+            {
+                anchorName = "relax";
+                expression = info.rawRelax;
+            }
+            else if (!string.IsNullOrEmpty(info?.rawEnd))
+            {
+                anchorName = "end";
+                expression = info.rawEnd;
+            }
+
+            if (string.IsNullOrEmpty(expression))
+                return;
+
+            anchorTime = ParseEventStartTime(expression, out TimingExpressionDebugInfo debugInfo);
+            if (debugInfo != null)
+            {
+                markerId = !string.IsNullOrEmpty(debugInfo.timingId) ? debugInfo.timingId : expression;
+                if (!debugInfo.markerFound && !debugInfo.isNumeric)
+                    markerId = expression;
+            }
+        }
+
+        static string BuildTimingResolutionLine(string syncPointName, string timing, float eventTime, float previousStartTime, float previousLength, float currentStartTime, float currentLength, TimingExpressionDebugInfo debugInfo)
+        {
+            var sb = new StringBuilder(256);
+            sb.Append("sync ");
+            sb.Append(SafeValue(syncPointName));
+            sb.Append(": ");
+            sb.Append(SafeValue(timing));
+            sb.Append(" -> ");
+            sb.Append(eventTime.ToString("F3"));
+
+            if (debugInfo != null)
+            {
+                if (debugInfo.isNumeric)
+                {
+                    sb.Append(" (numeric)");
+                }
+                else if (debugInfo.markerFound)
+                {
+                    sb.Append(" (marker ");
+                    sb.Append(SafeValue(debugInfo.timingId));
+                    sb.Append(" @ ");
+                    sb.Append(debugInfo.baseTime.ToString("F3"));
+                    if (Mathf.Abs(debugInfo.offset) > Mathf.Epsilon)
+                    {
+                        sb.Append(debugInfo.offset >= 0 ? "+" : "");
+                        sb.Append(debugInfo.offset.ToString("F3"));
+                    }
+
+                    if (!string.IsNullOrEmpty(debugInfo.timingText))
+                    {
+                        sb.Append(" text=\"");
+                        sb.Append(debugInfo.timingText.Trim());
+                        sb.Append("\"");
+                    }
+
+                    sb.Append(")");
+                }
+                else if (debugInfo.matchedSpeechId)
+                {
+                    sb.Append(" (speech matched, marker missing)");
+                }
+                else
+                {
+                    sb.Append(" (unresolved)");
+                }
+            }
+
+            sb.Append(" start ");
+            sb.Append(previousStartTime.ToString("F3"));
+            sb.Append(" -> ");
+            sb.Append(currentStartTime.ToString("F3"));
+            sb.Append(" len ");
+            sb.Append(previousLength.ToString("F3"));
+            sb.Append(" -> ");
+            sb.Append(currentLength.ToString("F3"));
+            return sb.ToString();
+        }
+
+        static string SafeValue(string value) => string.IsNullOrEmpty(value) ? "<none>" : value.Replace("\r", " ").Replace("\n", " ").Trim();
+
+
+        private static int s_xmlDumpCounter = 0;
+
+        private static string SafeFilePart(string s)
+        {
+            if (string.IsNullOrEmpty(s))
+                return "null";
+
+            foreach (char c in Path.GetInvalidFileNameChars()) s = s.Replace(c, '_');
+            s = s.Replace(' ', '_');
+            if (s.Length > 48)
+                s = s.Substring(0, 48);
+
+            return s;
+        }
+
+        private static void TryDumpXml(string character, string xmlStr, string phaseTag)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(xmlStr))
+                    return;
+
+                string dir = Path.Combine(Application.persistentDataPath, "BMLParserDumps");
+                Directory.CreateDirectory(dir);
+
+                string ts = DateTime.Now.ToString("yyyyMMdd_HHmmss_fff");
+                int id = System.Threading.Interlocked.Increment(ref s_xmlDumpCounter);
+
+                string charPart = SafeFilePart(character);
+                string phasePart = SafeFilePart(phaseTag);
+
+                string fileName = $"{ts}_{id:D5}_{charPart}_{phasePart}.xml";
+                string path = Path.Combine(dir, fileName);
+
+                File.WriteAllText(path, xmlStr, Encoding.UTF8);
+
+                Debug.Log($"BMLParser: dumped XML to: {path}");
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"BMLParser: failed to dump XML. {e.GetType().Name}: {e.Message}");
+            }
         }
     }
 }

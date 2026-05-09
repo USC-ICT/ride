@@ -31,10 +31,10 @@ namespace VHAssets
     public abstract class GazeController : MonoBehaviour, IEyeGazeProvider
     {
         #region Constants
-        public const float DefaultHeadGazeSpeed = 400f;
-        public const float DefaultEyeGazeSpeed = 400f;
-        public const float DefaultBodyGazeSpeed = 400f;
-        public const float DefaultFadeOutTime = 1.0f;  // seconds
+        public const float DefaultEyeGazeSpeed = 100f;  // Roughly degrees per second of angular gaze movement
+        public const float DefaultHeadGazeSpeed = 90f;  // See also UseParamDefaultValue() in MecanimEvents
+        public const float DefaultBodyGazeSpeed = 80f;
+        public const float DefaultFadeOutTime = 1.0f;   // Seconds
         #endregion
 
         /// <summary>
@@ -46,9 +46,9 @@ namespace VHAssets
         public enum GazeParts
         {
             None = 0,
-            Body = 1 << 0,
+            Eyes = 1 << 0,
             Head = 1 << 1,
-            Eyes = 1 << 2,
+            Body = 1 << 2,
 
             All = Body | Head | Eyes
         }
@@ -120,84 +120,134 @@ namespace VHAssets
         private GazeState m_GazeState = GazeState.Off;
 
         /// <summary>
-        /// Encapsulates the fade state for a single gaze channel (head, eyes, body, total).
+        /// Represents a time-based 0..1 ramp used to fade a gaze channel in or out.
         /// </summary>
-        private struct GazeFadeChannel
+        /// <remarks>
+        /// <para>
+        /// The gaze system separates two concepts:
+        /// </para>
+        /// <list type="bullet">
+        ///   <item>
+        ///     <description>
+        ///     <b>Configured weights</b> (e.g. <see cref="EyeGazeWeight"/>), which are user-controlled
+        ///     knobs describing how much a channel may contribute at full strength.
+        ///     </description>
+        ///   </item>
+        ///   <item>
+        ///     <description>
+        ///     <b>Runtime ramps</b> (this struct), which describe the current fade state of a channel
+        ///     as a normalized participation factor in the range [0, 1].
+        ///     </description>
+        ///   </item>
+        /// </list>
+        /// <para>
+        /// The final runtime-applied weight for a channel is computed as:
+        /// </para>
+        /// <code>
+        /// CurrentX = ConfiguredX * Ramp01
+        /// </code>
+        /// <para>
+        /// Using a normalized ramp avoids ambiguity when multiple systems contribute
+        /// (for example an overall IK "total" weight vs. per-channel weights), and makes
+        /// mid-gaze retargeting behavior easier to reason about.
+        /// </para>
+        /// </remarks>
+        private struct GazeRamp
         {
+            /// <summary>
+            /// True while the ramp is actively interpolating between <see cref="Start01"/> and <see cref="End01"/>.
+            /// When false, the ramp is considered settled at <see cref="End01"/>.
+            /// </summary>
             public bool IsActive;
-            public float Start;
-            public float End;
+            /// <summary>
+            /// Normalized ramp start value in the range [0, 1].
+            /// </summary>
+            public float Start01;
+            /// <summary>
+            /// Normalized ramp end value in the range [0, 1].
+            /// </summary>
+            public float End01;
+            /// <summary>
+            /// Ramp duration in seconds. A duration less than or equal to zero means "no ramp".
+            /// </summary>
             public float Duration;
+            /// <summary>
+            /// Elapsed time in seconds since the ramp started.
+            /// </summary>
             public float Elapsed;
 
             /// <summary>
-            /// Begins a fade from the given start weight to the given end weight
-            /// over the specified duration. Resets the fade timer and activates
-            /// the channel. If duration is zero or negative, the fade is skipped
-            /// and the channel becomes inactive.
+            /// Starts a new ramp from <paramref name="start01"/> to <paramref name="end01"/> over <paramref name="duration"/> seconds.
             /// </summary>
-            public void StartFade(float duration, float start, float end)
+            /// <remarks>
+            /// <para>
+            /// Values are clamped to [0, 1]. If <paramref name="duration"/> is less than or equal to zero,
+            /// the ramp is not activated; callers should use <see cref="Snap"/> when an immediate change is desired.
+            /// </para>
+            /// </remarks>
+            /// <param name="duration">Duration in seconds. Must be greater than zero to animate.</param>
+            /// <param name="start01">Normalized start value (0..1).</param>
+            /// <param name="end01">Normalized end value (0..1).</param>
+            public void Start(float duration, float start01, float end01)
             {
+                Start01 = Mathf.Clamp01(start01);
+                End01 = Mathf.Clamp01(end01);
+
                 if (duration <= 0f)
                 {
                     IsActive = false;
                     Duration = 0f;
-                    Elapsed  = 0f;
-                    Start    = start;
-                    End      = end;
+                    Elapsed = 0f;
                     return;
                 }
 
                 IsActive = true;
                 Duration = duration;
-                Elapsed  = 0f;
-                Start    = start;
-                End      = end;
+                Elapsed = 0f;
             }
 
             /// <summary>
-            /// Stops any active fade and clears the fade timer. The current
-            /// Start/End values are left unchanged. Callers can set new
-            /// values before starting another fade.
+            /// Immediately sets the ramp to a constant value and deactivates interpolation.
             /// </summary>
-            public void ResetFade()
+            /// <param name="value01">Normalized value (0..1) to snap to.</param>
+            public void Snap(float value01)
             {
                 IsActive = false;
                 Duration = 0f;
-                Elapsed  = 0f;
-                // Start/End left as-is; callers set them when starting a new fade.
+                Elapsed = 0f;
+                Start01 = End01 = Mathf.Clamp01(value01);
             }
 
             /// <summary>
-            /// Advances the fade timer and computes the current interpolated weight.
+            /// Advances the ramp timer and computes the current normalized value.
             /// </summary>
+            /// <remarks>
+            /// Uses <see cref="Mathf.SmoothStep(float, float, float)"/> to provide a soft ease-in/ease-out.
+            /// When the ramp completes, the value snaps to <see cref="End01"/> and <see cref="IsActive"/> becomes false.
+            /// </remarks>
             /// <param name="dt">Delta time in seconds.</param>
-            /// <param name="weight">
-            /// The interpolated weight for this frame if the channel is active; 
-            /// undefined when the method returns <c>false</c>.
-            /// </param>
+            /// <param name="value01">The computed normalized value (0..1).</param>
             /// <returns>
-            /// <c>true</c> if the channel was active and produced a new weight for this frame;
-            /// <c>false</c> if the channel is inactive or has no valid duration.
+            /// True if the ramp was active and advanced this frame; false if the ramp was already settled.
             /// </returns>
-            public bool UpdateFade(float dt, out float weight)
+            public bool Update(float dt, out float value01)
             {
-                weight = 0f;
+                value01 = End01;
 
                 if (!IsActive || Duration <= 0f)
+                {
+                    value01 = End01;
                     return false;
+                }
 
-                // Advance timer and compute normalized progress (0..1).
                 Elapsed += dt;
                 float t = Mathf.Clamp01(Elapsed / Duration);
 
-                // SmoothStep gives a softer ease-in/out compared to linear interpolation.
-                weight = Mathf.SmoothStep(Start, End, t);
+                value01 = Mathf.SmoothStep(Start01, End01, t);
 
-                // When the fade completes, snap to the final value and mark the channel idle.
                 if (Elapsed >= Duration)
                 {
-                    weight   = End;
+                    value01 = End01;
                     IsActive = false;
                 }
 
@@ -205,62 +255,149 @@ namespace VHAssets
             }
         }
 
-        // Per-channel fade state.
-        private GazeFadeChannel m_HeadFade;
-        private GazeFadeChannel m_EyeFade;
-        private GazeFadeChannel m_BodyFade;
 
-        // Optional total gaze weight (used by IK implementations).
-        private GazeFadeChannel m_TotalFade;
+        private GazeRamp m_EyeRamp;
+        private GazeRamp m_HeadRamp;
+        private GazeRamp m_BodyRamp;
+        private GazeRamp m_TotalRamp;
 
         // Position transition state (for smooth target-to-target movement).
         private bool m_IsTransitioning;
         private Vector3 m_TransitionStartPos;
         private float m_TransitionDuration;
         private float m_TransitionElapsed;
+        private Vector3 m_LastKnownGazePosition;
+        private bool m_HasLastKnownGazePosition;
 
         // When true, we check for fade-completion and call HandleGazeFinished().
         private bool m_PendingGazeFinished;
 
+        [Header("Debug Visualization")]
+        [SerializeField] protected bool m_DebugDrawGaze = false;
+
         #endregion
 
         #region Properties
-        public virtual float HeadGazeWeight { get; set; }
         public virtual float EyeGazeWeight { get; set; }
+        public virtual float HeadGazeWeight { get; set; }
         public virtual float BodyGazeWeight { get; set; }
 
-        public virtual float CurrentHeadGazeWeight { get; set; }
         public virtual float CurrentEyeGazeWeight { get; set; }
+        public virtual float CurrentHeadGazeWeight { get; set; }
         public virtual float CurrentBodyGazeWeight { get; set; }
         public virtual float CurrentTotalGazeWeight { get; set; }
+        public GameObject CurrentGazeTarget => m_GazeTarget;
 
         protected GazeState CurrentGazeState => m_GazeState;
         #endregion
 
+
         private void Update()
         {
-            // Skip work when there is nothing to animate. This keeps per-frame
-            // overhead minimal for characters whose gaze is currently static.
-            if (!m_HeadFade.IsActive && !m_EyeFade.IsActive && !m_BodyFade.IsActive && !m_TotalFade.IsActive && !m_IsTransitioning && !m_PendingGazeFinished)
+            // Skip work when idle.
+            if (!m_EyeRamp.IsActive && !m_HeadRamp.IsActive && !m_BodyRamp.IsActive && !m_TotalRamp.IsActive && !m_IsTransitioning && !m_PendingGazeFinished)
                 return;
 
-            // Central per-frame update:
-            // - Advance head/eye/body/total fade timers
-            // - Advance positional transition between old/new targets
-            // - When all fades complete, finalize the gaze state
             float dt = Time.deltaTime;
 
-            UpdateHeadFade(dt);
-            UpdateEyeFade(dt);
-            UpdateBodyFade(dt);
-            UpdateTotalFade(dt);
+            // The runtime-applied weights are computed from two components:
+            //
+            // 1) Configured weights (EyeGazeWeight/HeadGazeWeight/BodyGazeWeight):
+            //    user-controlled knobs that define each channel's maximum contribution.
+            //
+            // 2) Runtime ramps (m_EyeRamp/m_HeadRamp/m_BodyRamp/m_TotalRamp):
+            //    normalized 0..1 fade state for each channel (and an optional total IK weight).
+            //
+            // This separation keeps retargeting and fade behavior stable and avoids
+            // mixing configuration values with time-varying interpolation state.
+
+            // Advance ramps (0..1).
+            if (m_EyeRamp.Update(dt, out float eye01)) { }
+            else eye01 = m_EyeRamp.End01;
+
+            if (m_HeadRamp.Update(dt, out float head01)) { }
+            else head01 = m_HeadRamp.End01;
+
+            if (m_BodyRamp.Update(dt, out float body01)) { }
+            else body01 = m_BodyRamp.End01;
+
+            if (m_TotalRamp.Update(dt, out float total01)) { }
+            else total01 = m_TotalRamp.End01;
+
+            // Apply configured knobs * ramps.
+            CurrentTotalGazeWeight = total01;
+            CurrentEyeGazeWeight = EyeGazeWeight * eye01;
+            CurrentHeadGazeWeight = HeadGazeWeight * head01;
+            CurrentBodyGazeWeight = BodyGazeWeight * body01;
+
             UpdateTransition(dt);
 
-            if (m_PendingGazeFinished && !AnyFadeActive())
+            if (m_GazeTarget != null || m_IsTransitioning)
+            {
+                m_LastKnownGazePosition = GetGazePosition();
+                m_HasLastKnownGazePosition = true;
+            }
+
+            if (m_PendingGazeFinished && !AnyRampActive())
             {
                 m_PendingGazeFinished = false;
                 HandleGazeFinished();
             }
+        }
+
+        private void OnDisable()
+        {
+            StopGaze(0f);  // Hard stop and clear target so gaze never resumes automatically.
+        }
+
+        protected virtual void OnDrawGizmosSelected()
+        {
+            if (!m_DebugDrawGaze)
+                return;
+
+            DebugDrawGazeGizmos();
+        }
+
+        /// <summary>
+        /// Optional SendMessage hook called by RideCatalogAsset after the loaded art instance is ready.
+        /// Base implementation does nothing; derived classes may override to rebind to bones/rig data.
+        /// </summary>
+        public virtual void InitializeLoadedAsset()
+        {
+            // Intentionally empty.
+        }
+
+        /// <summary>
+        /// Optional SendMessage hook called by RideCatalogAsset when the loaded art instance is being reset/unloaded.
+        /// Clears runtime references so we do not keep acting on destroyed targets or origins.
+        /// </summary>
+        public virtual void ResetLoadedAsset()
+        {
+            // Hard stop: clears fade state, zeros weights, clears target, and resets transitions.
+            StopGaze(0f);
+
+            // If these were assigned to transforms under the loaded art instance, clear them.
+            // (We intentionally do not touch any serialized configuration beyond these references.)
+            m_GazeTarget = null;
+            m_GazeOrigin = null;
+            m_HasLastKnownGazePosition = false;
+        }
+
+        private void DebugDrawGazeGizmos()
+        {
+            if (m_GazeTarget == null)
+                return;
+
+            Vector3 origin = (m_GazeOrigin != null) ? m_GazeOrigin.position : transform.position;
+            Vector3 rawTargetPos = m_GazeTarget.transform.position;
+            Vector3 finalGazePos = GetGazePosition();
+
+            Gizmos.DrawLine(origin, finalGazePos);
+            Gizmos.DrawWireSphere(rawTargetPos, 0.02f);
+            Gizmos.DrawWireSphere(finalGazePos, 0.03f);
+
+            Gizmos.DrawLine(rawTargetPos, finalGazePos);  // Shows the "offset delta" from target -> final gaze point
+            Gizmos.DrawLine(origin, rawTargetPos);  // show line to raw target (no offset, no transition)
         }
 
         // IEyeGazeProvider implementation
@@ -402,7 +539,7 @@ namespace VHAssets
             m_GazeTarget = gazeTarget;
 
             // Cancel any pending total fade; derived classes (IK) will set the total weight explicitly.
-            m_TotalFade.ResetFade();
+            m_TotalRamp.Snap(m_TotalRamp.End01);
 
             if (m_GazeTarget != null)
                 m_GazeState = GazeState.FadeIn;
@@ -426,13 +563,16 @@ namespace VHAssets
         public void SetGazeTargetWithSpeed(GameObject gazeTarget, GazeParts gazeParts) =>
             SetGazeTargetWithSpeed(
                 gazeTarget,
-                IsSet(gazeParts, GazeParts.Head) ? DefaultHeadGazeSpeed : 0f,
-                IsSet(gazeParts, GazeParts.Eyes) ? DefaultEyeGazeSpeed : 0f,
-                IsSet(gazeParts, GazeParts.Body) ? DefaultBodyGazeSpeed : 0f);
+                IsSet(gazeParts, GazeParts.Head) ? DefaultHeadGazeSpeed : -1f,
+                IsSet(gazeParts, GazeParts.Eyes) ? DefaultEyeGazeSpeed : -1f,
+                IsSet(gazeParts, GazeParts.Body) ? DefaultBodyGazeSpeed : -1f);
 
         /// <summary>
         /// Sets a new gaze target using explicit fade-in speeds for the head, eyes, and body.
-        /// A value less than or equal <c>0</c> causes the corresponding part to fade out instead.
+        /// Convention:
+        /// - speed > 0: explicit angular speed in degrees/second
+        /// - speed == 0: uses the default speed for that channel
+        /// - speed < 0: disables that channel (fades it out)
         /// </summary>
         /// <param name="gazeTarget">The GameObject to focus on.</param>
         /// <param name="headSpeed">Fade-in speed for the head. Must be &gt; 0 to activate head movement.</param>
@@ -442,51 +582,78 @@ namespace VHAssets
         {
             if (gazeTarget == null)
             {
-                // Null target means "stop gazing" – delegate to StopGaze() so we
-                // respect the configured fade-out behavior
+                // Null target means "stop gazing" – delegate to StopGaze() so we respect the configured fade-out behavior
                 StopGaze();
                 return;
             }
+
+            // Convention:
+            //  speed > 0 : explicit degrees/second
+            //  speed == 0: use default speed for that channel
+            //  speed < 0 : disable that channel (fade out)
+            if (headSpeed == 0f) headSpeed = DefaultHeadGazeSpeed;
+            if (eyeSpeed == 0f) eyeSpeed = DefaultEyeGazeSpeed;
+            if (bodySpeed == 0f) bodySpeed = DefaultBodyGazeSpeed;
 
             ComputeGazeTransitionGeometry(gazeTarget, out bool hadTarget, out Vector3 originPos, out Vector3 toTargetPos, out Vector3 fromPos);
 
             // Compute the angular difference between old and new directions.
             // The head/eye/body durations are derived from this angle and the
             // requested speeds; this keeps behavior stable regardless of distance.
-            Vector3 fromDir = fromPos    - originPos;
-            Vector3 toDir   = toTargetPos - originPos;
+            Vector3 fromDir = fromPos - originPos;
+            Vector3 toDir = toTargetPos - originPos;
 
             float angle = 0f;
             if (fromDir.sqrMagnitude > 0.0001f && toDir.sqrMagnitude > 0.0001f)
                 angle = Vector3.Angle(fromDir, toDir);
 
-            float headDuration = (headSpeed > 0f && angle > 0.01f) ? angle / Mathf.Max(headSpeed, 0.0001f) : 0f;
             float eyeDuration = (eyeSpeed > 0f && angle > 0.01f) ? angle / Mathf.Max(eyeSpeed, 0.0001f) : 0f;
+            float headDuration = (headSpeed > 0f && angle > 0.01f) ? angle / Mathf.Max(headSpeed, 0.0001f) : 0f;
             float bodyDuration = (bodySpeed > 0f && angle > 0.01f) ? angle / Mathf.Max(bodySpeed, 0.0001f) : 0f;
 
             // Common target/transition handling.
-            ApplyTargetAndTransition(gazeTarget, hadTarget, toTargetPos, fromPos, headDuration, eyeDuration, bodyDuration);
+            ApplyTargetAndTransition(gazeTarget, hadTarget, toTargetPos, fromPos, eyeDuration, headDuration, bodyDuration);
 
-            // Head channel: fade from current head weight to the configured target
-            // head weight, if speed and duration are valid. A speed of 0 means this
-            // channel should fade out instead.
-            if (headSpeed > 0f && HeadGazeWeight > 0f && headDuration > 0f)
-                StartChannelFade(headDuration, HeadGazeWeight, CurrentHeadGazeWeight, ref m_HeadFade);
-            else if (headSpeed <= 0f)
-                // Preserve original semantics: 0 speed = fade this channel out.
-                StartChannelFadeOut(DefaultFadeOutTime, CurrentHeadGazeWeight, ref m_HeadFade);
+            // Total: ensure we're "on" while gazing.
+            if (CurrentGazeState == GazeState.Off)
+            {
+                // First time gazing: ramp total up quickly (or match fastest channel).
+                float totalDuration = 0.10f;
+                m_TotalRamp.Start(totalDuration, 0f, 1f);
+            }
+            else
+            {
+                // Already gazing.
+                m_TotalRamp.Snap(1f);
+            }
 
-            // Eye channel.
+            // Eyes.
             if (eyeSpeed > 0f && EyeGazeWeight > 0f && eyeDuration > 0f)
-                StartChannelFade(eyeDuration, EyeGazeWeight, CurrentEyeGazeWeight, ref m_EyeFade);
-            else if (eyeSpeed <= 0f)
-                StartChannelFadeOut(DefaultFadeOutTime, CurrentEyeGazeWeight, ref m_EyeFade);
+                m_EyeRamp.Start(eyeDuration, m_EyeRamp.End01, 1f);
+            else if (eyeSpeed > 0f && EyeGazeWeight > 0f && eyeDuration <= 0f)
+                m_EyeRamp.Snap(1f);
+            else if (eyeSpeed < 0f)
+                m_EyeRamp.Start(DefaultFadeOutTime, m_EyeRamp.End01, 0f);
 
-            // Body channel.
+            // Head.
+            if (headSpeed > 0f && HeadGazeWeight > 0f && headDuration > 0f)
+                m_HeadRamp.Start(headDuration, m_HeadRamp.End01, 1f);
+            else if (headSpeed > 0f && HeadGazeWeight > 0f && headDuration <= 0f)
+                m_HeadRamp.Snap(1f);
+            else if (headSpeed < 0f)
+                m_HeadRamp.Start(DefaultFadeOutTime, m_HeadRamp.End01, 0f);
+
+            // Body.
             if (bodySpeed > 0f && BodyGazeWeight > 0f && bodyDuration > 0f)
-                StartChannelFade(bodyDuration, BodyGazeWeight, CurrentBodyGazeWeight, ref m_BodyFade);
-            else if (bodySpeed <= 0f)
-                StartChannelFadeOut(DefaultFadeOutTime, CurrentBodyGazeWeight, ref m_BodyFade);
+                m_BodyRamp.Start(bodyDuration, m_BodyRamp.End01, 1f);
+            else if (bodySpeed > 0f && BodyGazeWeight > 0f && bodyDuration <= 0f)
+                m_BodyRamp.Snap(1f);
+            else if (bodySpeed < 0f)
+                m_BodyRamp.Start(DefaultFadeOutTime, m_BodyRamp.End01, 0f);
+
+            RecomputeCurrentWeightsImmediate();
+
+            m_PendingGazeFinished = true;
         }
 
         /// <summary>
@@ -510,26 +677,57 @@ namespace VHAssets
 
             // Common target/transition handling: here the per-channel values
             // are already durations, so we pass them straight through.
-            ApplyTargetAndTransition(gazeTarget, hadTarget, toTargetPos, fromPos, headFadeInDuration, eyeFadeInDuration, bodyFadeInDuration);
+            ApplyTargetAndTransition(gazeTarget, hadTarget, toTargetPos, fromPos, eyeFadeInDuration, headFadeInDuration, bodyFadeInDuration);
 
-            // Head channel: positive duration enables a fade to HeadGazeWeight,
-            // non-positive duration means fade this channel out.
-            if (headFadeInDuration > 0f && HeadGazeWeight > 0f)
-                StartChannelFade(headFadeInDuration, HeadGazeWeight, CurrentHeadGazeWeight, ref m_HeadFade);
-             else if (headFadeInDuration <= 0f)
-                StartChannelFadeOut(DefaultFadeOutTime, CurrentHeadGazeWeight, ref m_HeadFade);
+            // Total
+            if (CurrentGazeState == GazeState.Off)
+                m_TotalRamp.Start(0.10f, 0f, 1f);
+            else
+                m_TotalRamp.Snap(1f);
 
-            // Eyes.
+            // Eyes
             if (eyeFadeInDuration > 0f && EyeGazeWeight > 0f)
-                StartChannelFade(eyeFadeInDuration, EyeGazeWeight, CurrentEyeGazeWeight, ref m_EyeFade);
-            else if (eyeFadeInDuration <= 0f)
-                StartChannelFadeOut(DefaultFadeOutTime, CurrentEyeGazeWeight, ref m_EyeFade);
+                m_EyeRamp.Start(eyeFadeInDuration, m_EyeRamp.End01, 1f);
+            else
+                m_EyeRamp.Start(DefaultFadeOutTime, m_EyeRamp.End01, 0f);
 
-            // Body.
+            // Head
+            if (headFadeInDuration > 0f && HeadGazeWeight > 0f)
+                m_HeadRamp.Start(headFadeInDuration, m_HeadRamp.End01, 1f);
+            else
+                m_HeadRamp.Start(DefaultFadeOutTime, m_HeadRamp.End01, 0f);
+
+            // Body
             if (bodyFadeInDuration > 0f && BodyGazeWeight > 0f)
-                StartChannelFade(bodyFadeInDuration, BodyGazeWeight, CurrentBodyGazeWeight, ref m_BodyFade);
-            else if (bodyFadeInDuration <= 0f)
-                StartChannelFadeOut(DefaultFadeOutTime, CurrentBodyGazeWeight, ref m_BodyFade);
+                m_BodyRamp.Start(bodyFadeInDuration, m_BodyRamp.End01, 1f);
+            else
+                m_BodyRamp.Start(DefaultFadeOutTime, m_BodyRamp.End01, 0f);
+
+            RecomputeCurrentWeightsImmediate();
+
+            m_PendingGazeFinished = true;
+        }
+
+        /// <summary>
+        /// Updates the configured gaze weights and immediately recomputes the runtime-applied
+        /// weights using the current ramp state.
+        /// </summary>
+        /// <remarks>
+        /// This is used by higher-level behaviors, such as ThinkingController, that temporarily
+        /// tighten the configured eye/head/body contribution while gaze remains active. Without
+        /// the immediate recompute, the applied IK weights can remain stale until another gaze
+        /// ramp or target transition happens to advance them.
+        /// </remarks>
+        /// <param name="headWeight">Configured head gaze contribution at full strength.</param>
+        /// <param name="eyeWeight">Configured eye gaze contribution at full strength.</param>
+        /// <param name="bodyWeight">Configured body gaze contribution at full strength.</param>
+        public void SetConfiguredGazeWeights(float headWeight, float eyeWeight, float bodyWeight)
+        {
+            HeadGazeWeight = headWeight;
+            EyeGazeWeight = eyeWeight;
+            BodyGazeWeight = bodyWeight;
+
+            RecomputeCurrentWeightsImmediate();
         }
 
         /// <summary>
@@ -547,22 +745,22 @@ namespace VHAssets
             if (fadeoutTime <= 0f)
             {
                 // Hard stop: immediately clear all fade state and zero weights.
-                m_HeadFade.ResetFade();
-                m_EyeFade.ResetFade();
-                m_BodyFade.ResetFade();
-                m_TotalFade.ResetFade();
+                m_EyeRamp.Snap(0f);
+                m_HeadRamp.Snap(0f);
+                m_BodyRamp.Snap(0f);
+                m_TotalRamp.Snap(0f);
 
-                CurrentHeadGazeWeight  = 0f;
-                CurrentEyeGazeWeight   = 0f;
-                CurrentBodyGazeWeight  = 0f;
+                CurrentEyeGazeWeight = 0f;
+                CurrentHeadGazeWeight = 0f;
+                CurrentBodyGazeWeight = 0f;
                 CurrentTotalGazeWeight = 0f;
 
-                m_GazeTarget           = null;
-                m_GazeState            = GazeState.Off;
-                m_IsTransitioning      = false;
-                m_TransitionDuration   = 0f;
-                m_TransitionElapsed    = 0f;
-                m_PendingGazeFinished  = false;
+                m_GazeTarget = null;
+                m_GazeState = GazeState.Off;
+                m_IsTransitioning = false;
+                m_TransitionDuration = 0f;
+                m_TransitionElapsed = 0f;
+                m_PendingGazeFinished = false;
                 return;
             }
 
@@ -571,12 +769,12 @@ namespace VHAssets
             // HandleGazeFinished() will transition us to Off.
             m_GazeState = GazeState.FadeOut;
 
-            StartChannelFadeOut(fadeoutTime, CurrentHeadGazeWeight,  ref m_HeadFade);
-            StartChannelFadeOut(fadeoutTime, CurrentEyeGazeWeight,   ref m_EyeFade);
-            StartChannelFadeOut(fadeoutTime, CurrentBodyGazeWeight,  ref m_BodyFade);
+            m_EyeRamp.Start(fadeoutTime, m_EyeRamp.End01, 0f);
+            m_HeadRamp.Start(fadeoutTime, m_HeadRamp.End01, 0f);
+            m_BodyRamp.Start(fadeoutTime, m_BodyRamp.End01, 0f);
+            m_TotalRamp.Start(fadeoutTime, m_TotalRamp.End01, 0f);
 
-            // Fade total weight as well, so IK look-at intensity ramps down smoothly.
-            StartChannelFadeOut(fadeoutTime, CurrentTotalGazeWeight, ref m_TotalFade);
+            RecomputeCurrentWeightsImmediate();
 
             m_PendingGazeFinished = true;
         }
@@ -635,12 +833,27 @@ namespace VHAssets
         #region Helpers
 
         /// <summary>
-        /// Computes common geometric data for a gaze change:
-        /// - Whether we already had a gaze target or transition
-        /// - The origin position (character)
-        /// - The new target position
-        /// - The starting position for the positional transition
+        /// Computes common geometric data required to transition from the current gaze direction
+        /// to a new gaze target.
         /// </summary>
+        /// <remarks>
+        /// <para>
+        /// When switching targets while already gazing, the system may be mid-transition between
+        /// two gaze points. In that case, the "from" position is taken from <see cref="GetGazePosition"/>
+        /// so the new transition continues smoothly from the current in-between point rather than
+        /// snapping back to the previous target.
+        /// </para>
+        /// <para>
+        /// When no prior target exists, a synthetic "from" point is created in front of the character
+        /// at the same depth as the new target. This allows initial gaze activation to compute a
+        /// meaningful angular delta for speed-based duration calculations.
+        /// </para>
+        /// </remarks>
+        /// <param name="gazeTarget">The new target.</param>
+        /// <param name="hadTarget">True if there was an existing target or an active transition.</param>
+        /// <param name="originPos">World-space origin used for angle/direction calculations (the character root).</param>
+        /// <param name="toTargetPos">World-space position of the new target.</param>
+        /// <param name="fromPos">World-space starting position for the positional transition.</param>
         private void ComputeGazeTransitionGeometry(
             GameObject gazeTarget,
             out bool hadTarget,
@@ -648,14 +861,20 @@ namespace VHAssets
             out Vector3 toTargetPos,
             out Vector3 fromPos)
         {
-            hadTarget   = m_GazeTarget != null || m_IsTransitioning;
-            originPos   = transform.position;
+            hadTarget = m_GazeTarget != null || m_IsTransitioning;
+            originPos = transform.position;
             toTargetPos = gazeTarget.transform.position;
 
             if (hadTarget)
             {
                 // Start from the current gaze position (may already be in-between targets).
                 fromPos = GetGazePosition();
+            }
+            else if (m_HasLastKnownGazePosition)
+            {
+                // If a previous gaze just finished, keep continuity from the last
+                // real gaze position instead of synthesizing a straight-ahead point.
+                fromPos = m_LastKnownGazePosition;
             }
             else
             {
@@ -667,18 +886,51 @@ namespace VHAssets
         }
 
         /// <summary>
-        /// Applies the common target/transition logic once per gaze request:
-        /// - Sets up base gaze state via <see cref="InitGaze"/>
-        /// - Computes a transition duration from the provided per-channel durations
-        /// - Either starts an in-between transition or snaps directly to the new target
+        /// Applies the common state changes for a gaze request and configures the positional transition.
         /// </summary>
+        /// <remarks>
+        /// <para>
+        /// This helper exists to keep the gaze request pipeline consistent between the speed-based and
+        /// duration-based entry points. It performs three responsibilities:
+        /// </para>
+        /// <list type="number">
+        ///   <item>
+        ///     <description>
+        ///     Calls <see cref="InitGaze"/> to assign the target and set the controller state.
+        ///     </description>
+        ///   </item>
+        ///   <item>
+        ///     <description>
+        ///     Chooses a single positional transition duration (used by <see cref="GetGazePosition"/>),
+        ///     derived from the active channel durations.
+        ///     </description>
+        ///   </item>
+        ///   <item>
+        ///     <description>
+        ///     Starts a transition from <paramref name="fromPos"/> to the new target, or snaps directly
+        ///     if there is no previous target or no time to transition.
+        ///     </description>
+        ///   </item>
+        /// </list>
+        /// <para>
+        /// The per-channel ramping for eyes/head/body/total is configured by the caller; this method
+        /// only handles target assignment and the shared positional transition.
+        /// </para>
+        /// </remarks>
+        /// <param name="gazeTarget">The gaze target being assigned.</param>
+        /// <param name="hadTarget">True if there was an existing target or transition.</param>
+        /// <param name="toTargetPos">World-space position of the new target.</param>
+        /// <param name="fromPos">World-space starting position for positional interpolation.</param>
+        /// <param name="eyeDuration">Computed eye ramp duration (seconds) or 0 for snap/disable.</param>
+        /// <param name="headDuration">Computed head ramp duration (seconds) or 0 for snap/disable.</param>
+        /// <param name="bodyDuration">Computed body ramp duration (seconds) or 0 for snap/disable.</param>
         private void ApplyTargetAndTransition(
             GameObject gazeTarget,
             bool hadTarget,
             Vector3 toTargetPos,
             Vector3 fromPos,
-            float headDuration,
             float eyeDuration,
+            float headDuration,
             float bodyDuration)
         {
             // Choose a transition duration from the active channels.
@@ -697,49 +949,12 @@ namespace VHAssets
             else
             {
                 // No previous target or no time to transition: snap to the new target.
-                m_IsTransitioning    = false;
+                m_IsTransitioning = false;
                 m_TransitionDuration = 0f;
-                m_TransitionElapsed  = 0f;
+                m_TransitionElapsed = 0f;
                 m_TransitionStartPos = toTargetPos;
             }
         }
-
-        private void StartChannelFade(
-            float duration,
-            float targetWeight,
-            float currentWeight,
-            ref GazeFadeChannel channel)
-        {
-            if (duration <= 0f)
-                return;
-
-            // Configure a smooth fade from the current weight to a new target
-            // over the given duration. The actual interpolation is advanced
-            // in Update*Fade() each frame.
-            channel.StartFade(duration, currentWeight, targetWeight);
-
-            m_PendingGazeFinished = true;
-        }
-
-        private void StartChannelFadeOut(
-            float duration,
-            float currentWeight,
-            ref GazeFadeChannel channel)
-        {
-            if (duration <= 0f)
-                return;
-
-            // Configure a fade from the current weight down to zero.
-            // The channel will be considered "idle" once the duration elapses.
-            channel.StartFade(duration, currentWeight, 0f);
-
-            m_PendingGazeFinished = true;
-        }
-
-        private void UpdateHeadFade(float dt) { if (m_HeadFade.UpdateFade(dt, out float w)) CurrentHeadGazeWeight = w; }
-        private void UpdateEyeFade(float dt) { if (m_EyeFade.UpdateFade(dt, out float w)) CurrentEyeGazeWeight = w; }
-        private void UpdateBodyFade(float dt) { if (m_BodyFade.UpdateFade(dt, out float w)) CurrentBodyGazeWeight = w; }
-        private void UpdateTotalFade(float dt) { if (m_TotalFade.UpdateFade(dt, out float w)) CurrentTotalGazeWeight = w; }
 
         private void UpdateTransition(float dt)
         {
@@ -754,7 +969,7 @@ namespace VHAssets
                 // Clamp to the end and stop transitioning; from now on we use
                 // the live target position directly.
                 m_TransitionElapsed = m_TransitionDuration;
-                m_IsTransitioning   = false;
+                m_IsTransitioning = false;
             }
         }
 
@@ -765,22 +980,51 @@ namespace VHAssets
                 // No time to transition: mark the state as non-transitioning
                 // but remember the starting position so GetGazePosition() can
                 // still be consistent for this frame if needed.
-                m_IsTransitioning    = false;
+                m_IsTransitioning = false;
                 m_TransitionDuration = 0f;
-                m_TransitionElapsed  = 0f;
+                m_TransitionElapsed = 0f;
                 m_TransitionStartPos = fromPos;
                 return;
             }
 
             // Begin a new positional transition from 'fromPos' to the next
             // target position over the specified duration.
-            m_IsTransitioning    = true;
+            m_IsTransitioning = true;
             m_TransitionDuration = duration;
-            m_TransitionElapsed  = 0f;
+            m_TransitionElapsed = 0f;
             m_TransitionStartPos = fromPos;
         }
 
-        private bool AnyFadeActive() => m_HeadFade.IsActive || m_EyeFade.IsActive || m_BodyFade.IsActive || m_TotalFade.IsActive;
+        /// <summary>
+        /// Returns true if any per-channel ramp (eyes/head/body/total) is currently active.
+        /// </summary>
+        /// <remarks>
+        /// When this returns false and a gaze request is pending completion, the controller
+        /// can finalize its state (see <see cref="HandleGazeFinished"/>).
+        /// </remarks>
+        private bool AnyRampActive() => m_EyeRamp.IsActive || m_HeadRamp.IsActive || m_BodyRamp.IsActive || m_TotalRamp.IsActive;
+
+        private void RecomputeCurrentWeightsImmediate()
+        {
+            float eye01 = GetRampValueNoAdvance(m_EyeRamp);
+            float head01 = GetRampValueNoAdvance(m_HeadRamp);
+            float body01 = GetRampValueNoAdvance(m_BodyRamp);
+            float total01 = GetRampValueNoAdvance(m_TotalRamp);
+
+            CurrentTotalGazeWeight = total01;
+            CurrentEyeGazeWeight = EyeGazeWeight * eye01;
+            CurrentHeadGazeWeight = HeadGazeWeight * head01;
+            CurrentBodyGazeWeight = BodyGazeWeight * body01;
+        }
+
+        private static float GetRampValueNoAdvance(GazeRamp ramp)
+        {
+            if (!ramp.IsActive || ramp.Duration <= 0f)
+                return ramp.End01;
+
+            float t = Mathf.Clamp01(ramp.Elapsed / ramp.Duration);
+            return Mathf.SmoothStep(ramp.Start01, ramp.End01, t);
+        }
 
         #endregion
 
@@ -800,11 +1044,11 @@ namespace VHAssets
             }
             else if (m_GazeState == GazeState.FadeOut)
             {
-                m_GazeState        = GazeState.Off;
-                m_GazeTarget       = null;
-                m_IsTransitioning  = false;
+                m_GazeState = GazeState.Off;
+                m_GazeTarget = null;
+                m_IsTransitioning = false;
                 m_TransitionDuration = 0f;
-                m_TransitionElapsed  = 0f;
+                m_TransitionElapsed = 0f;
             }
         }
 

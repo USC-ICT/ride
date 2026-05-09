@@ -12,6 +12,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Xml;
+using System.Text;
 
 #if NATIVE_BLLIP_PARSER
 using BllipParser.Native;
@@ -422,12 +423,16 @@ namespace NonverbalBehaviorGenerator.Legacy
                     }
                 }
 
-                //Refactor for performance and fix bugs. I do not know why these characters need to be replaced.
-                sentence = Regex.Replace(sentence, "[\"\\t\\r\\n\\0]", "");
-                var matches = Regex.Matches(sentence, @"\S.*?(\S*(?=\s*?$)|!(?=\s)|\?(?=\s)|\.(?=\s))");
-                foreach (var match in matches.Cast<Match>()) {
-                    GetParseTree(match.Value);
-                }
+                ////Refactor for performance and fix bugs. I do not know why these characters need to be replaced.
+                //sentence = Regex.Replace(sentence, "[\"\\t\\r\\n\\0]", "");
+                sentence = SanitizeForParser(sentence);
+
+                //var matches = Regex.Matches(sentence, @"\S.*?(\S*(?=\s*?$)|!(?=\s)|\?(?=\s)|\.(?=\s))");
+                //foreach (var match in matches.Cast<Match>()) {
+                //    GetParseTree(match.Value);
+                //}
+                foreach (string part in SplitIntoParserSentences(sentence))
+                    GetParseTree(part);
 
                 m_totalTimeMarkers = CreatePositionTags(i);
                 CacheParseTree();
@@ -471,7 +476,97 @@ namespace NonverbalBehaviorGenerator.Legacy
 
                 await _context.GazeInfo.SetGazeAsync(_currentMessage.TargetId, "look", "1");
             }
+        }
 
+        private static string SanitizeForParser(string s)
+        {
+            // this version only creates the StringBuilder if it has to replace something, for perf
+
+            if (string.IsNullOrEmpty(s))
+                return s;
+
+            StringBuilder sb = null;
+
+            for (int i = 0; i < s.Length; i++)
+            {
+                char c = s[i];
+
+                bool remove =
+                    c == '"' ||
+                    c == '\t' ||
+                    c == '\r' ||
+                    c == '\n' ||
+                    c == '\0';
+
+                if (remove)
+                {
+                    if (sb == null)
+                    {
+                        sb = new StringBuilder(s.Length);
+                        if (i > 0)
+                            sb.Append(s, 0, i);
+                    }
+
+                    // Skip removed char.
+                    continue;
+                }
+
+                // Keep char.
+                sb?.Append(c);
+            }
+
+            return sb == null ? s : sb.ToString();
+        }
+
+        private static IEnumerable<string> SplitIntoParserSentences(string s)
+        {
+            // attempts to split the input into sentences.
+            // doesn't do well for things like 'Dr.' or '...' or other types of punctuation
+
+            if (string.IsNullOrWhiteSpace(s))
+                yield break;
+
+            int start = -1;
+
+            for (int i = 0; i < s.Length; i++)
+            {
+                char c = s[i];
+
+                if (start < 0)
+                {
+                    if (!char.IsWhiteSpace(c))
+                        start = i;
+
+                    continue;
+                }
+
+                bool isTerminator = c == '.' || c == '!' || c == '?';
+                if (!isTerminator)
+                    continue;
+
+                int j = i + 1;
+                while (j < s.Length && char.IsWhiteSpace(s[j]))
+                    j++;
+
+                // Match the old regex intent: terminator followed by whitespace or end.
+                bool isBoundary = j >= s.Length || j > i + 1;
+                if (!isBoundary)
+                    continue;
+
+                string chunk = s.Substring(start, (i + 1) - start).Trim();
+                if (chunk.Length > 0)
+                    yield return chunk;
+
+                start = -1;
+                i = j - 1; // continue scanning after whitespace
+            }
+
+            if (start >= 0)
+            {
+                string tail = s.Substring(start).Trim();
+                if (tail.Length > 0)
+                    yield return tail;
+            }
         }
 
         /// <summary>
@@ -648,6 +743,68 @@ namespace NonverbalBehaviorGenerator.Legacy
             return false;
         }
 
+
+        private readonly struct RuleInfo
+        {
+            public readonly string Type;
+            public readonly string Priority;
+
+            public RuleInfo(string type, string priority)
+            {
+                Type = type;
+                Priority = priority;
+            }
+        }
+
+        private readonly struct PawnTriggerInfo
+        {
+            public readonly string PawnName;
+            public readonly string Priority;
+
+            public PawnTriggerInfo(string pawnName, string priority)
+            {
+                PawnName = pawnName;
+                Priority = priority;
+            }
+        }
+
+        private static string NormalizeTokenForRuleMatch(string raw)
+        {
+            if (string.IsNullOrEmpty(raw))
+                return string.Empty;
+
+            // Keep behavior consistent with the legacy code: remove a small set of punctuation marks.
+            const string Strip = ".?!,";
+            bool needsStrip = false;
+
+            for (int i = 0; i < raw.Length; i++)
+            {
+                char c = raw[i];
+                if (Strip.IndexOf(c) >= 0)
+                {
+                    needsStrip = true;
+                    break;
+                }
+            }
+
+            if (!needsStrip)
+                return raw;
+
+            char[] buffer = new char[raw.Length];
+            int w = 0;
+
+            for (int i = 0; i < raw.Length; i++)
+            {
+                char c = raw[i];
+                if (Strip.IndexOf(c) >= 0)
+                    continue;
+
+                buffer[w++] = c;
+            }
+
+            return w == 0 ? string.Empty : new string(buffer, 0, w);
+        }
+
         /// <summary>
         /// Generate rules based on the parser's result and attach them to the bml
         /// </summary>
@@ -655,182 +812,241 @@ namespace NonverbalBehaviorGenerator.Legacy
         {
             try
             {
-                //XmlNode parsedResult = m_inputDoc.GetElementsByTagName("parsed_result")[0];
+                XmlDocument ruleDocument = await _context.GetBehaviorXmlDocumentAsync();
 
-                var ruleDocument = await _context.GetBehaviorXmlDocumentAsync();
-                //XmlNodeList ruleNodes = ruleDocument.GetElementsByTagName("rule");
-                XmlNodeList patterns = ruleDocument.GetElementsByTagName("pattern");
+                // Cache switches and context values (avoid awaits inside tight loops).
+                bool doPoseRules = await _context.Switch.GetPoseRulesAsync();
+                bool doGestures = await _context.Switch.GetSpeakerGesturesAsync();
+                bool doGaze = await _context.Switch.GetSpeakerGazeAsync();
 
-                XmlNodeList pawnTriggers = ruleDocument.GetElementsByTagName("pawn_trigger");
+                string speakerId = await _context.AgentInfo.GetCharacterIdAsync();
+                string postureId = await _context.AgentInfo.GetPostureIdAsync();
+                string emotion = await _context.AgentInfo.GetEmotionAsync();
+                string listenerId = await _context.CurrentDialogue.GetListenerAsync();
 
+                // Build lookup tables once.
+                XmlNodeList patternNodes = ruleDocument.GetElementsByTagName("pattern");
+                Dictionary<string, RuleInfo> poseRuleMap = new Dictionary<string, RuleInfo>(StringComparer.Ordinal);
+                Dictionary<string, RuleInfo> wordRuleMap = new Dictionary<string, RuleInfo>(StringComparer.OrdinalIgnoreCase);
 
-                XmlNode currentNode;
-
-
-                XmlNodeList posNodes = m_inputDoc.GetElementsByTagName("POS");
-
-
-                // rules applied to the parse tree result
-                if (await _context.Switch.GetPoseRulesAsync())
+                for (int i = 0; i < patternNodes.Count; i++)
                 {
-                    for (int i = 0; i < posNodes.Count; ++i)
+                    XmlNode pattern = patternNodes[i];
+                    XmlNode ruleNode = pattern.ParentNode;
+                    if (ruleNode == null || ruleNode.Attributes == null)
+                        continue;
+
+                    XmlAttribute keywordAttr = ruleNode.Attributes["keyword"];
+                    XmlAttribute priorityAttr = ruleNode.Attributes["priority"];
+                    if (keywordAttr == null || priorityAttr == null)
+                        continue;
+
+                    string key = pattern.InnerText;
+                    RuleInfo info = new RuleInfo(keywordAttr.Value, priorityAttr.Value);
+
+                    // Preserve "first match wins" behavior.
+                    if (!poseRuleMap.ContainsKey(key))
+                        poseRuleMap.Add(key, info);
+
+                    if (!wordRuleMap.ContainsKey(key))
+                        wordRuleMap.Add(key, info);
+                }
+
+                XmlNodeList pawnTriggerNodes = ruleDocument.GetElementsByTagName("pawn_trigger");
+                Dictionary<string, PawnTriggerInfo> pawnTriggerMap = new Dictionary<string, PawnTriggerInfo>(StringComparer.OrdinalIgnoreCase);
+
+                for (int i = 0; i < pawnTriggerNodes.Count; i++)
+                {
+                    XmlNode trigger = pawnTriggerNodes[i];
+                    XmlNode triggerParent = trigger.ParentNode;
+                    if (triggerParent == null || triggerParent.Attributes == null)
+                        continue;
+
+                    XmlAttribute pawnNameAttr = triggerParent.Attributes["pawn_name"];
+                    XmlAttribute priorityAttr = triggerParent.Attributes["priority"];
+                    if (pawnNameAttr == null || priorityAttr == null)
+                        continue;
+
+                    string key = trigger.InnerText;
+                    if (!pawnTriggerMap.ContainsKey(key))
+                        pawnTriggerMap.Add(key, new PawnTriggerInfo(pawnNameAttr.Value, priorityAttr.Value));
+                }
+
+                // Materialize XmlNodeLists to avoid expensive XmlNodeList indexing in loops.
+                XmlNodeList posNodesList = m_inputDoc.GetElementsByTagName("POS");
+                XmlNode[] posNodes = new XmlNode[posNodesList.Count];
+                for (int i = 0; i < posNodesList.Count; i++)
+                    posNodes[i] = posNodesList[i];
+
+                XmlNodeList markListNodeList = m_inputDoc.GetElementsByTagName("mark");
+                XmlNode[] markNodes = new XmlNode[markListNodeList.Count];
+                for (int i = 0; i < markListNodeList.Count; i++)
+                    markNodes[i] = markListNodeList[i];
+
+                // Rules applied to the parse tree result.
+                if (doPoseRules)
+                {
+                    for (int i = 0; i < posNodes.Length; i++)
                     {
-                        currentNode = posNodes[i];
+                        XmlNode currentNode = posNodes[i];
                         XmlNode parentNode = currentNode.ParentNode;
-                        string priorityValue;
+                        if (parentNode == null)
+                            continue;
 
-                        string positionTag = currentNode.Attributes["tag"].Value;
+                        XmlAttribute tagAttr = currentNode.Attributes?["tag"];
+                        if (tagAttr == null)
+                            continue;
 
-                        for (int j = 0; j < patterns.Count; ++j)
-                        {
-                            string currentPattern = patterns[j].InnerText;
+                        string positionTag = tagAttr.Value;
 
-                            if (currentPattern.Equals(positionTag))
-                            {
-                                string typeName = patterns[j].ParentNode.Attributes["keyword"].Value;
-                                priorityValue = patterns[j].ParentNode.Attributes["priority"].Value;
+                        if (!poseRuleMap.TryGetValue(positionTag, out RuleInfo info))
+                            continue;
 
-                                XmlNode docRuleNode = m_inputDoc.CreateElement("rule");
-                                XMLHelperMethods.AttachAttributeToNode(m_inputDoc, docRuleNode, "participant", await _context.AgentInfo.GetCharacterIdAsync());
-                                XMLHelperMethods.AttachAttributeToNode(m_inputDoc, docRuleNode, "type", typeName);
-                                XMLHelperMethods.AttachAttributeToNode(m_inputDoc, docRuleNode, "pose", await _context.AgentInfo.GetPostureIdAsync());
-                                XMLHelperMethods.AttachAttributeToNode(m_inputDoc, docRuleNode, "emotion", await _context.AgentInfo.GetEmotionAsync());
-                                XMLHelperMethods.AttachAttributeToNode(m_inputDoc, docRuleNode, "priority", priorityValue);
-                                XMLHelperMethods.AttachAttributeToNode(m_inputDoc, docRuleNode, "target", await _context.CurrentDialogue.GetListenerAsync());
-                                parentNode.InsertBefore(docRuleNode, currentNode);
-                                break;
-                            }
-                        }
+                        XmlNode docRuleNode = m_inputDoc.CreateElement("rule");
+                        XMLHelperMethods.AttachAttributeToNode(m_inputDoc, docRuleNode, "participant", speakerId);
+                        XMLHelperMethods.AttachAttributeToNode(m_inputDoc, docRuleNode, "type", info.Type);
+                        XMLHelperMethods.AttachAttributeToNode(m_inputDoc, docRuleNode, "pose", postureId);
+                        XMLHelperMethods.AttachAttributeToNode(m_inputDoc, docRuleNode, "emotion", emotion);
+                        XMLHelperMethods.AttachAttributeToNode(m_inputDoc, docRuleNode, "priority", info.Priority);
+                        XMLHelperMethods.AttachAttributeToNode(m_inputDoc, docRuleNode, "target", listenerId);
+                        parentNode.InsertBefore(docRuleNode, currentNode);
                     }
                 }
 
-
-                // rules applied to certain dialogue elements
-                XmlNodeList markList = m_inputDoc.GetElementsByTagName("mark");
-                string text;
-                for (int i = 0; i < markList.Count; i += 2)
+                // Rules applied to certain dialogue elements.
+                for (int i = 0; i < markNodes.Length; i += 2)
                 {
-                    XmlNode currentMark = markList[i];
+                    XmlNode currentMark = markNodes[i];
+                    if (currentMark == null)
+                        continue;
+
                     XmlNode wordNode = currentMark.NextSibling;
                     XmlNode parentNode = currentMark.ParentNode;
+                    if (wordNode == null || parentNode == null)
+                        continue;
 
-                    text = wordNode.InnerText;
-                    if ((text[text.Length - 1].Equals('.')) ||
-                        (text[text.Length - 1].Equals('!')) ||
-                        (text[text.Length - 1].Equals('?')) ||
-                        (text[text.Length - 1].Equals(',')))
+                    string rawText;
+
+                    // Prefer XmlText.Value over InnerText to avoid unnecessary traversal/concatenation work.
+                    if (wordNode is XmlText xmlText)
+                        rawText = xmlText.Value;
+                    else
+                        rawText = wordNode.InnerText;
+
+                    if (string.IsNullOrEmpty(rawText))
+                        continue;
+
+                    string token = NormalizeTokenForRuleMatch(rawText);
+
+                    if (doGestures)
                     {
-                        text.Insert(text.Length - 1, "");
-                    }
-
-
-                    text = text.ToLower();
-                    text = text.Replace(".", "");
-                    text = text.Replace("?", "");
-                    text = text.Replace("!", "");
-                    text = text.Replace(",", "");
-
-                    if (await _context.Switch.GetSpeakerGesturesAsync())
-                    {
-                        for (int j = 0; j < patterns.Count; ++j)
+                        if (wordRuleMap.TryGetValue(token, out RuleInfo info))
                         {
-                            string currentPattern = patterns[j].InnerText;
+                            bool isQuestionWord =
+                                string.Equals(token, "why", StringComparison.OrdinalIgnoreCase) ||
+                                string.Equals(token, "what", StringComparison.OrdinalIgnoreCase) ||
+                                string.Equals(token, "where", StringComparison.OrdinalIgnoreCase) ||
+                                string.Equals(token, "who", StringComparison.OrdinalIgnoreCase) ||
+                                string.Equals(token, "how", StringComparison.OrdinalIgnoreCase) ||
+                                string.Equals(token, "when", StringComparison.OrdinalIgnoreCase) ||
+                                string.Equals(token, "do", StringComparison.OrdinalIgnoreCase);
 
-                            if (currentPattern.Equals(text, StringComparison.OrdinalIgnoreCase))
+                            if (!(isQuestionWord && i != 0))
                             {
-                                if ((text.Equals("why") ||
-                                    text.Equals("what") ||
-                                    text.Equals("where") ||
-                                    text.Equals("who") ||
-                                    text.Equals("how") ||
-                                    text.Equals("when") ||
-                                    text.Equals("do")) &&
-                                    (i != 0))
-                                {
-                                    continue;
-                                }
-
-                                string typeName = patterns[j].ParentNode.Attributes["keyword"].Value;
-                                string priorityValue = patterns[j].ParentNode.Attributes["priority"].Value;
-
                                 XmlNode docRuleNode = m_inputDoc.CreateElement("rule");
-                                XMLHelperMethods.AttachAttributeToNode(m_inputDoc, docRuleNode, "participant", await _context.AgentInfo.GetCharacterIdAsync());
-                                XMLHelperMethods.AttachAttributeToNode(m_inputDoc, docRuleNode, "type", typeName);
-                                XMLHelperMethods.AttachAttributeToNode(m_inputDoc, docRuleNode, "pose", await _context.AgentInfo.GetPostureIdAsync());
-                                XMLHelperMethods.AttachAttributeToNode(m_inputDoc, docRuleNode, "emotion", await _context.AgentInfo.GetEmotionAsync());
-                                XMLHelperMethods.AttachAttributeToNode(m_inputDoc, docRuleNode, "priority", priorityValue);
-                                XMLHelperMethods.AttachAttributeToNode(m_inputDoc, docRuleNode, "target", await _context.CurrentDialogue.GetListenerAsync());
+                                XMLHelperMethods.AttachAttributeToNode(m_inputDoc, docRuleNode, "participant", speakerId);
+                                XMLHelperMethods.AttachAttributeToNode(m_inputDoc, docRuleNode, "type", info.Type);
+                                XMLHelperMethods.AttachAttributeToNode(m_inputDoc, docRuleNode, "pose", postureId);
+                                XMLHelperMethods.AttachAttributeToNode(m_inputDoc, docRuleNode, "emotion", emotion);
+                                XMLHelperMethods.AttachAttributeToNode(m_inputDoc, docRuleNode, "priority", info.Priority);
+                                XMLHelperMethods.AttachAttributeToNode(m_inputDoc, docRuleNode, "target", listenerId);
                                 parentNode.InsertBefore(docRuleNode, currentMark);
-                                break;
                             }
                         }
                     }
 
-
-                    if (await _context.Switch.GetSpeakerGazeAsync())
+                    if (doGaze && pawnTriggerMap.Count > 0)
                     {
-                        for (int j = 0; j < pawnTriggers.Count; ++j)
+                        if (pawnTriggerMap.TryGetValue(token, out PawnTriggerInfo gazeInfo))
                         {
-                            string currentTrigger = pawnTriggers[j].InnerText;
-
-                            if (currentTrigger.Equals(text))
-                            {
-                                string pawnName = pawnTriggers[j].ParentNode.Attributes["pawn_name"].Value;
-                                string priorityValue = pawnTriggers[j].ParentNode.Attributes["priority"].Value;
-
-                                XmlNode docRuleNode = m_inputDoc.CreateElement("rule");
-                                XMLHelperMethods.AttachAttributeToNode(m_inputDoc, docRuleNode, "participant", await _context.AgentInfo.GetCharacterIdAsync());
-                                XMLHelperMethods.AttachAttributeToNode(m_inputDoc, docRuleNode, "type", "fmlbml_gaze");
-                                XMLHelperMethods.AttachAttributeToNode(m_inputDoc, docRuleNode, "pose", await _context.AgentInfo.GetPostureIdAsync());
-                                XMLHelperMethods.AttachAttributeToNode(m_inputDoc, docRuleNode, "emotion", await _context.AgentInfo.GetEmotionAsync());
-                                XMLHelperMethods.AttachAttributeToNode(m_inputDoc, docRuleNode, "priority", priorityValue);
-                                XMLHelperMethods.AttachAttributeToNode(m_inputDoc, docRuleNode, "prev_target", await _context.CurrentDialogue.GetListenerAsync());
-                                XMLHelperMethods.AttachAttributeToNode(m_inputDoc, docRuleNode, "target", pawnName);
-                                parentNode.InsertBefore(docRuleNode, currentMark);
-                                break;
-                            }
+                            XmlNode docRuleNode = m_inputDoc.CreateElement("rule");
+                            XMLHelperMethods.AttachAttributeToNode(m_inputDoc, docRuleNode, "participant", speakerId);
+                            XMLHelperMethods.AttachAttributeToNode(m_inputDoc, docRuleNode, "type", "fmlbml_gaze");
+                            XMLHelperMethods.AttachAttributeToNode(m_inputDoc, docRuleNode, "pose", postureId);
+                            XMLHelperMethods.AttachAttributeToNode(m_inputDoc, docRuleNode, "emotion", emotion);
+                            XMLHelperMethods.AttachAttributeToNode(m_inputDoc, docRuleNode, "priority", gazeInfo.Priority);
+                            XMLHelperMethods.AttachAttributeToNode(m_inputDoc, docRuleNode, "prev_target", listenerId);
+                            XMLHelperMethods.AttachAttributeToNode(m_inputDoc, docRuleNode, "target", gazeInfo.PawnName);
+                            parentNode.InsertBefore(docRuleNode, currentMark);
                         }
                     }
-
                 }
 
-
-                // check to see if multiple words/phrases occur and if so apply the rule
-                if (await _context.Switch.GetSpeakerGesturesAsync()) {
+                // Check to see if multiple words/phrases occur and if so apply the rule.
+                if (doGestures)
+                {
                     await CheckForPhrasesAsync();
                 }
 
-                // rules to attach gaze shift when there is an fml-bml tag
-                if (m_fmlBml && await _context.Switch.GetSpeakerGazeAsync())
+                // Rules to attach gaze shift when there is an fml-bml tag.
+                if (m_fmlBml && doGaze)
                 {
-                    for (int i = 0; i < markList.Count; i += 2)
+                    XmlNodeList fmlBmlNodesList = m_inputDoc.GetElementsByTagName("fml-bml");
+                    if (fmlBmlNodesList != null && fmlBmlNodesList.Count > 0)
                     {
-                        XmlNode currentMark = markList[i];
-                        //XmlNode wordNode = currentMark.NextSibling;
-                        XmlNode parentNode = currentMark.ParentNode;
+                        // Map timemark -> list of (annotate,value)
+                        Dictionary<string, List<KeyValuePair<string, string>>> fmlBmlMap =
+                            new Dictionary<string, List<KeyValuePair<string, string>>>(StringComparer.Ordinal);
 
-                        string targetValue = "", annotateValue = "", timemarkValue = "";
-                        //int test = patterns.Count;
-                        string markTag = "T" + i;
-
-                        for (int j = 0; j < m_inputDoc.GetElementsByTagName("fml-bml").Count; ++j)
+                        for (int i = 0; i < fmlBmlNodesList.Count; i++)
                         {
-                            XmlNode fmlBmlElement = m_inputDoc.GetElementsByTagName("fml-bml")[j];
-                            annotateValue = fmlBmlElement.Attributes["annotate"].Value;
-                            targetValue = fmlBmlElement.Attributes["value"].Value;
-                            timemarkValue = fmlBmlElement.Attributes["timemark"].Value;
+                            XmlNode node = fmlBmlNodesList[i];
+                            if (node == null || node.Attributes == null)
+                                continue;
 
-                            if (timemarkValue.Equals(markTag))
+                            XmlAttribute annotateAttr = node.Attributes["annotate"];
+                            XmlAttribute valueAttr = node.Attributes["value"];
+                            XmlAttribute timemarkAttr = node.Attributes["timemark"];
+                            if (annotateAttr == null || valueAttr == null || timemarkAttr == null)
+                                continue;
+
+                            string timemark = timemarkAttr.Value;
+                            if (!fmlBmlMap.TryGetValue(timemark, out List<KeyValuePair<string, string>> list))
                             {
-                                if (annotateValue.Equals("addressee") && !targetValue.Equals(await _context.CurrentDialogue.GetListenerAsync()))
+                                list = new List<KeyValuePair<string, string>>(1);
+                                fmlBmlMap.Add(timemark, list);
+                            }
+
+                            list.Add(new KeyValuePair<string, string>(annotateAttr.Value, valueAttr.Value));
+                        }
+
+                        for (int i = 0; i < markNodes.Length; i += 2)
+                        {
+                            XmlNode currentMark = markNodes[i];
+                            XmlNode parentNode = currentMark?.ParentNode;
+                            if (currentMark == null || parentNode == null)
+                                continue;
+
+                            string markTag = "T" + i;
+
+                            if (!fmlBmlMap.TryGetValue(markTag, out List<KeyValuePair<string, string>> entries))
+                                continue;
+
+                            for (int j = 0; j < entries.Count; j++)
+                            {
+                                string annotateValue = entries[j].Key;
+                                string targetValue = entries[j].Value;
+
+                                if (string.Equals(annotateValue, "addressee", StringComparison.OrdinalIgnoreCase) &&
+                                    !string.Equals(targetValue, listenerId, StringComparison.Ordinal))
                                 {
                                     XmlNode docRuleNode = m_inputDoc.CreateElement("rule");
-                                    XMLHelperMethods.AttachAttributeToNode(m_inputDoc, docRuleNode, "participant", await _context.AgentInfo.GetCharacterIdAsync());
+                                    XMLHelperMethods.AttachAttributeToNode(m_inputDoc, docRuleNode, "participant", speakerId);
                                     XMLHelperMethods.AttachAttributeToNode(m_inputDoc, docRuleNode, "type", "fmlbml_gaze");
-                                    XMLHelperMethods.AttachAttributeToNode(m_inputDoc, docRuleNode, "pose", await _context.AgentInfo.GetPostureIdAsync());
-                                    XMLHelperMethods.AttachAttributeToNode(m_inputDoc, docRuleNode, "emotion", await _context.AgentInfo.GetEmotionAsync());
+                                    XMLHelperMethods.AttachAttributeToNode(m_inputDoc, docRuleNode, "pose", postureId);
+                                    XMLHelperMethods.AttachAttributeToNode(m_inputDoc, docRuleNode, "emotion", emotion);
                                     XMLHelperMethods.AttachAttributeToNode(m_inputDoc, docRuleNode, "priority", "0");
-                                    XMLHelperMethods.AttachAttributeToNode(m_inputDoc, docRuleNode, "prev_target", await _context.CurrentDialogue.GetListenerAsync());
+                                    XMLHelperMethods.AttachAttributeToNode(m_inputDoc, docRuleNode, "prev_target", listenerId);
                                     XMLHelperMethods.AttachAttributeToNode(m_inputDoc, docRuleNode, "target", targetValue);
                                     parentNode.InsertBefore(docRuleNode, currentMark);
                                 }
@@ -843,13 +1059,7 @@ namespace NonverbalBehaviorGenerator.Legacy
             {
                 _logger?.LogInformation("ERROR while attaching rule nodes to bml" + e.ToString());
             }
-
-
         }
-
-
-
-
 
         /// <summary>
         /// check to see if multiple words/phrases occur and if so apply the rule
@@ -948,314 +1158,310 @@ namespace NonverbalBehaviorGenerator.Legacy
 
                         }
                     }
-
                 }
             }
 
             m_completeUtterance = "";
-
         }
 
-
-
-
-
         /// <summary>
-        /// Convert the parser returned string to XML format. \
+        /// Convert the parser returned string to XML format.
+        /// 
         /// THIS IS GENUINELY HORRIBLE CODE WHICH WAS PORTED FROM C++ NVBG. At the time noone knew what it did. SORRY.
+        /// 
+        /// Notes:
+        /// - This function is intentionally "DOM heavy" because downstream NVBG logic expects:
+        ///   * A nested <POS> tree mirroring the parse structure
+        ///   * <mark name="T#"/> nodes inserted before/after terminal words
+        ///   * <marked_sentence><text content="..." timemark="T#"/></marked_sentence>
+        /// - However, the original port performed excessive XmlNodeList traversal and repeated lookups.
+        ///   This version preserves the same XML structure while caching nodes and minimizing repeated work.
         /// </summary>
-        /// <param name="_currentSentenceIndex"></param>
-        /// <returns></returns>
         private int CreatePositionTags(int _currentSentenceIndex)
         {
-
-            XmlNode parent;
+            XmlNode parent = null;
             bool firstNP = false;
             bool firstVP = false;
-            int markCounter = 0;
-            string currentSentence = "";
-            XmlNode markText;
 
+            string currentSentence = "";
 
             try
             {
+                // Cache frequently used nodes once (avoid GetElementsByTagName in hot loops).
+                XmlNode bmlNode = m_inputDoc.GetElementsByTagName("bml")[0];
+                XmlNode actNode = m_inputDoc.GetElementsByTagName("act")[0];
+
+                // Ensure/Cache <marked_sentence>.
+                XmlNode markText;
+                XmlNodeList markedSentenceNodes = m_inputDoc.GetElementsByTagName("marked_sentence");
+                if (markedSentenceNodes.Count > 0)
+                {
+                    markText = markedSentenceNodes[0];
+                }
+                else
+                {
+                    markText = m_inputDoc.CreateElement("marked_sentence");
+                    actNode.AppendChild(markText);
+                }
+
+                // Ensure/Cache <parsed_result>.
+                XmlNode parsedText;
+                XmlNodeList parsedResultNodes = m_inputDoc.GetElementsByTagName("parsed_result");
+                if (parsedResultNodes.Count == 0)
+                {
+                    parsedText = m_inputDoc.CreateElement("parsed_result");
+
+                    XmlNode speechNode = m_inputDoc.GetElementsByTagName("speech")[_currentSentenceIndex];
+
+                    XmlAttribute idAttribute = m_inputDoc.CreateAttribute("id");
+                    idAttribute.Value = speechNode.Attributes["id"].Value;
+                    parsedText.Attributes.Append(idAttribute);
+
+                    XmlNode refNode = speechNode.Attributes["ref"];
+                    if (refNode != null)
+                    {
+                        XmlAttribute refAttribute = m_inputDoc.CreateAttribute("ref");
+                        refAttribute.Value = speechNode.Attributes["ref"].Value;
+                        parsedText.Attributes.Append(refAttribute);
+                    }
+
+                    XmlAttribute typeAttribute = m_inputDoc.CreateAttribute("type");
+                    typeAttribute.Value = speechNode.Attributes["type"].Value;
+                    parsedText.Attributes.Append(typeAttribute);
+
+                    bmlNode.AppendChild(parsedText);
+                }
+                else
+                {
+                    parsedText = parsedResultNodes[0];
+                }
+
+                // Local helper: try to resolve SSML-processed tokens while preserving the port's behavior
+                // (first unprocessed entry "wins").
+                bool TryConsumeSsmlWord(string key, out string resolvedWord)
+                {
+                    resolvedWord = null;
+
+                    if (string.IsNullOrEmpty(key))
+                        return false;
+
+                    if (m_ssmlWords.TryGetValue(key, out List<WordProcessed> list))
+                    {
+                        for (int n = 0; n < list.Count; n++)
+                        {
+                            WordProcessed wp = list[n];
+                            if (!wp.processed)
+                            {
+                                wp.processed = true;
+                                resolvedWord = wp.word;
+                                return true;
+                            }
+                        }
+                    }
+
+                    return false;
+                }
+
+                // Local helper: the original code tried multiple punctuation-stripped keys.
+                string ResolveText(string text)
+                {
+                    if (string.IsNullOrEmpty(text) || m_ssmlWords.Count == 0)
+                        return text;
+
+                    if (TryConsumeSsmlWord(text, out string resolved))
+                        return resolved;
+
+                    // Preserve original order: ".", "?", "!", ","
+                    // Only do Replace() if needed to avoid excess allocations.
+                    if (text.IndexOf('.') >= 0)
+                    {
+                        string k = text.Replace(".", "");
+                        if (TryConsumeSsmlWord(k, out resolved))
+                            return resolved;
+                    }
+                    if (text.IndexOf('?') >= 0)
+                    {
+                        string k = text.Replace("?", "");
+                        if (TryConsumeSsmlWord(k, out resolved))
+                            return resolved;
+                    }
+                    if (text.IndexOf('!') >= 0)
+                    {
+                        string k = text.Replace("!", "");
+                        if (TryConsumeSsmlWord(k, out resolved))
+                            return resolved;
+                    }
+                    if (text.IndexOf(',') >= 0)
+                    {
+                        string k = text.Replace(",", "");
+                        if (TryConsumeSsmlWord(k, out resolved))
+                            return resolved;
+                    }
+
+                    return text;
+                }
+
+                int createdPosNodes = 0;
+                int createdTokenNodes = 0;
+                int createdMarks = 0;
 
                 for (int j = 0; j < m_parseTreeBuffer.Count; ++j)
                 {
                     parent = null;
                     firstNP = false;
                     firstVP = false;
-                    string sentence = m_parseTreeBuffer[j];
 
+                    string sentence = m_parseTreeBuffer[j];
 
                     for (int i = 0; i < sentence.Length; ++i)
                     {
-                        if (sentence[i].Equals(' '))
+                        char ch = sentence[i];
+
+                        if (ch == ' ')
+                            continue;
+
+                        if (ch == ')')
                         {
+                            // Guard against malformed parses (parent can be null if the string is unexpected).
+                            parent = parent?.ParentNode;
                             continue;
                         }
-                        else if (sentence[i].Equals(')'))
+
+                        if (ch == '(')
                         {
-                            parent = parent.ParentNode;
-                            continue;
-                        }
-                        else if (sentence[i].Equals('('))
-                        {
-                            string tagName = "";
-                            char[] tagNameChar = new char[256];
-                            int index = 0;
-                            i++;
-                            while (!sentence[i].Equals(' '))
-                            {
+                            // Parse tag: read until the next space.
+                            int tagStart = i + 1;
+                            int spaceIdx = sentence.IndexOf(' ', tagStart);
+                            if (spaceIdx < 0)
+                                break;
 
-                                tagNameChar[index] = sentence[i];//.Insert(index, sentence[i].ToString());
+                            string tagName = sentence.Substring(tagStart, spaceIdx - tagStart);
 
-                                if (sentence[i].Equals("$"))
-                                {
+                            // The original port attempted to map '$' to '1' but used char-vs-string Equals().
+                            // Doing it correctly is low-risk and avoids odd tag names.
+                            if (tagName.IndexOf('$') >= 0)
+                                tagName = tagName.Replace('$', '1');
 
-                                    tagNameChar[index] = '1';
-                                }
-                                else if (Char.IsLetter(sentence[i]))
-                                {
-                                    tagName = "PER";
-                                }
-                                i++;
-                                index++;
-                            }
-                            tagNameChar[index] = '\0';
-
-                            tagName = new string(tagNameChar);
-                            tagName = tagName.Replace("\0", "");
-
-                            if (tagName.Equals("S1"))
-                            {
+                            if (tagName == "S1")
                                 tagName = "PE";
-                            }
 
-
-                            if (tagName.Equals("NP"))
+                            if (tagName == "NP")
                             {
-                                if (firstNP == false)
+                                if (!firstNP)
                                 {
                                     firstNP = true;
                                     tagName = "first_NP";
                                 }
                             }
-                            else if (tagName.Equals("VP"))
+                            else if (tagName == "VP")
                             {
-                                if (firstVP == false)
+                                if (!firstVP)
                                 {
                                     firstVP = true;
                                     tagName = "first_VP";
                                 }
                             }
-                            else if (tagName.Equals("SBAR"))
+                            else if (tagName == "SBAR")
                             {
-                                //numAni = 0;
+                                // legacy: no-op
                             }
-
 
                             XmlNode current = m_inputDoc.CreateElement("POS");
                             XmlAttribute tagAttribute = m_inputDoc.CreateAttribute("tag");
                             tagAttribute.Value = tagName;
                             current.Attributes.Append(tagAttribute);
-
+                            createdPosNodes++;
 
                             if (parent == null)
                             {
-                                if (m_inputDoc.GetElementsByTagName("parsed_result").Count == 0)
-                                {
-                                    XmlNode parsedText = m_inputDoc.CreateElement("parsed_result");
-                                    XmlNode speechNode = m_inputDoc.GetElementsByTagName("speech")[_currentSentenceIndex];
-                                    XmlAttribute idAttribute = m_inputDoc.CreateAttribute("id");
-                                    idAttribute.Value = speechNode.Attributes["id"].Value;
-                                    parsedText.Attributes.Append(idAttribute);
-
-                                    XmlNode refNode = speechNode.Attributes["ref"];
-                                    if (refNode != null)
-                                    {
-                                        XmlAttribute refAttribute = m_inputDoc.CreateAttribute("ref");
-                                        refAttribute.Value = speechNode.Attributes["ref"].Value;
-                                        parsedText.Attributes.Append(refAttribute);
-                                    }
-
-                                    XmlAttribute typeAttribute = m_inputDoc.CreateAttribute("type");
-                                    typeAttribute.Value = speechNode.Attributes["type"].Value;
-                                    parsedText.Attributes.Append(typeAttribute);
-
-                                    XmlNode bmlNode = m_inputDoc.GetElementsByTagName("bml")[0];
-                                    bmlNode.AppendChild(parsedText);
-                                    parsedText.AppendChild(current);
-                                }
-                                else
-                                {
-                                    XmlNode parsedText = m_inputDoc.GetElementsByTagName("parsed_result")[0];
-                                    parsedText.AppendChild(current);
-                                }
+                                parsedText.AppendChild(current);
                             }
                             else
                             {
                                 parent.AppendChild(current);
                             }
 
-                            string nodeName = current.Name;
-
-                            if (nodeName.Equals("S1"))
-                            {
-                                firstNP = false;
-                            }
-
                             parent = current;
+
+                            // Continue scanning after the space following the tag.
+                            i = spaceIdx;
                             continue;
                         }
-                        else
-                        {
-                            string text = "";
-                            text = sentence.Substring(i, sentence.IndexOf(")", i) - i);
 
-                            //This is added for words which may have ssml tags
-                            if (!String.IsNullOrEmpty(text))
-                            {
-                                if (m_ssmlWords.ContainsKey(text))
-                                {
-                                    //text = m_ssmlWords[text][0].ToString();
-                                    foreach (WordProcessed wordProc in m_ssmlWords[text])
-                                    {
-                                        if (!wordProc.processed)
-                                        {
-                                            wordProc.processed = true;
-                                            text = wordProc.word.ToString();
-                                            break;
-                                        }
-                                    }
-                                }
-                                else if (m_ssmlWords.ContainsKey(text.Replace(".", "")))
-                                {
-                                    //text = m_ssmlWords[text.Replace(".", "")][0].ToString();
-                                    foreach (WordProcessed wordProc in m_ssmlWords[text.Replace(".", "")])
-                                    {
-                                        if (!wordProc.processed)
-                                        {
-                                            wordProc.processed = true;
-                                            text = wordProc.word.ToString();
-                                            break;
-                                        }
-                                    }
-                                }
-                                else if (m_ssmlWords.ContainsKey(text.Replace("?", "")))
-                                {
-                                    //text = m_ssmlWords[text.Replace("?", "")][0].ToString();
-                                    foreach (WordProcessed wordProc in m_ssmlWords[text.Replace("?", "")])
-                                    {
-                                        if (!wordProc.processed)
-                                        {
-                                            wordProc.processed = true;
-                                            text = wordProc.word.ToString();
-                                            break;
-                                        }
-                                    }
-                                }
-                                else if (m_ssmlWords.ContainsKey(text.Replace("!", "")))
-                                {
-                                    //text = m_ssmlWords[text.Replace("!", "")][0].ToString();
-                                    foreach (WordProcessed wordProc in m_ssmlWords[text.Replace("!", "")])
-                                    {
-                                        if (!wordProc.processed)
-                                        {
-                                            wordProc.processed = true;
-                                            text = wordProc.word.ToString();
-                                            break;
-                                        }
-                                    }
-                                }
-                                else if (m_ssmlWords.ContainsKey(text.Replace(",", "")))
-                                {
-                                    //text = m_ssmlWords[text.Replace(",", "")][0].ToString();
-                                    foreach (WordProcessed wordProc in m_ssmlWords[text.Replace(",", "")])
-                                    {
-                                        if (!wordProc.processed)
-                                        {
-                                            wordProc.processed = true;
-                                            text = wordProc.word.ToString();
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
-                            i += sentence.IndexOf(")", i) - i;
-                            XmlNode readyMarkNode = m_inputDoc.CreateElement("mark");
-                            XmlNode relaxMarkNode = m_inputDoc.CreateElement("mark");
+                        // Terminal word: substring until ')'
+                        int closeIdx = sentence.IndexOf(')', i);
+                        if (closeIdx < 0)
+                            break;
 
-                            string value;
-                            value = "T";
-                            value += m_totalTimeMarkers;
+                        string text = sentence.Substring(i, closeIdx - i);
+                        text = ResolveText(text);
 
-                            XmlAttribute nameAttribute = m_inputDoc.CreateAttribute("name");
-                            nameAttribute.Value = value;
-                            readyMarkNode.Attributes.Append(nameAttribute);
+                        // Advance i to the close paren we consumed.
+                        i = closeIdx;
 
-                            m_totalTimeMarkers++;
+                        // Create marks.
+                        XmlNode readyMarkNode = m_inputDoc.CreateElement("mark");
+                        XmlNode relaxMarkNode = m_inputDoc.CreateElement("mark");
 
-                            string value1;
-                            value1 = "T";
-                            value1 += m_totalTimeMarkers;
-                            XmlAttribute nameAttribute1 = m_inputDoc.CreateAttribute("name");
-                            nameAttribute1.Value = value1;
-                            relaxMarkNode.Attributes.Append(nameAttribute1);
+                        string readyName = "T" + m_totalTimeMarkers;
+                        XmlAttribute readyAttr = m_inputDoc.CreateAttribute("name");
+                        readyAttr.Value = readyName;
+                        readyMarkNode.Attributes.Append(readyAttr);
+                        m_totalTimeMarkers++;
+                        createdMarks++;
 
-                            m_totalTimeMarkers++;
+                        string relaxName = "T" + m_totalTimeMarkers;
+                        XmlAttribute relaxAttr = m_inputDoc.CreateAttribute("name");
+                        relaxAttr.Value = relaxName;
+                        relaxMarkNode.Attributes.Append(relaxAttr);
+                        m_totalTimeMarkers++;
+                        createdMarks++;
 
-                            parent.InnerText = text;
+                        // Assign word to current POS node.
+                        parent.InnerText = text;
+                        createdTokenNodes++;
 
+                        // Add marked_sentence text element (timemark points at the "ready" mark).
+                        XmlNode currentMarkedTextContent = m_inputDoc.CreateElement("text");
+                        XmlAttribute content = m_inputDoc.CreateAttribute("content");
+                        content.Value = text;
+                        currentMarkedTextContent.Attributes.Append(content);
 
-                            XmlNode currentMarkedTextContent = m_inputDoc.CreateElement("text");
-                            XmlAttribute content = m_inputDoc.CreateAttribute("content");
-                            content.Value = text;
-                            currentMarkedTextContent.Attributes.Append(content);
+                        XmlAttribute timemark = m_inputDoc.CreateAttribute("timemark");
+                        timemark.Value = readyName;
+                        currentMarkedTextContent.Attributes.Append(timemark);
 
-                            XmlAttribute timemark = m_inputDoc.CreateAttribute("timemark");
-                            timemark.Value = value;
-                            currentMarkedTextContent.Attributes.Append(timemark);
+                        markText.AppendChild(currentMarkedTextContent);
 
+                        currentSentence += text + " ";
 
-                            if (m_inputDoc.ContainsAnyElementNamedAs("marked_sentence"))
-                            {
-                                markText = m_inputDoc.GetElementsByTagName("marked_sentence")[0];
-                            }
-                            else
-                            {
-                                markText = m_inputDoc.CreateElement("marked_sentence");
-                                m_inputDoc.GetElementsByTagName("act")[0].AppendChild(markText);
-                            }
+                        // Insert marks around the terminal POS node.
+                        XmlNode tempNode = parent;
+                        parent = parent.ParentNode;
 
-                            markText.AppendChild(currentMarkedTextContent);
-                            currentSentence += text + " ";
-
-                            XmlNode tempNode = parent;
-                            parent = parent.ParentNode;
-
-                            parent.InsertBefore(readyMarkNode, tempNode);
-                            parent.AppendChild(relaxMarkNode);
-                        }
-
+                        // parent can be null if the parse is malformed; in that case, append to parsedText.
+                        XmlNode insertParent = parent ?? parsedText;
+                        insertParent.InsertBefore(readyMarkNode, tempNode);
+                        insertParent.AppendChild(relaxMarkNode);
                     }
 
                     m_processedSentences.Add(currentSentence);
                     m_completeUtterance += currentSentence;
                     currentSentence = "";
-
                 }
+
+                //_logger?.LogInformation($"CreatePositionTags: posNodes={createdPosNodes}, tokenNodes={createdTokenNodes}, marks={createdMarks}, totalTimeMarkers={m_totalTimeMarkers}, sentences={m_parseTreeBuffer.Count}");
             }
             catch (Exception e)
             {
-                _logger?.LogInformation("ERROR while creating position tags" + e.ToString());
+                _logger?.LogInformation("ERROR while creating position tags" + e);
             }
 
-            //clearing the ssml hashtable after its done processing.
+            // Clearing the SSML hashtable after processing.
             m_ssmlWords.Clear();
-            return markCounter;
+
+            // IMPORTANT: the caller expects this to be the current timemark counter (not 0).
+            return m_totalTimeMarkers;
         }
-
     }
-
 }

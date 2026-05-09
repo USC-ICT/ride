@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 
@@ -14,12 +14,14 @@ public class BMLReader
     public class UtteranceTiming
     {
         public List<BMLParser.BMLTiming> m_Timings = new List<BMLParser.BMLTiming>();
+        public List<BMLParser.WordTimingData> m_WordTimings = new List<BMLParser.WordTimingData>();
         public List<BMLParser.LipData> m_LipData = new List<BMLParser.LipData>();
         public List<BMLParser.CurveData> m_CurveData = new List<BMLParser.CurveData>();
 
         public void Clear()
         {
             m_Timings.Clear();
+            m_WordTimings.Clear();
             m_LipData.Clear();
             m_CurveData.Clear();
         }
@@ -66,7 +68,7 @@ public class BMLReader
     #region Functions
     public BMLReader()
     {
-        m_Parser = new BMLParser(OnParsedBMLTiming, OnParsedVisemeTiming, OnParsedCurveData);
+        m_Parser = new BMLParser(OnParsedBMLTiming, OnParsedWordTiming, OnParsedVisemeTiming, OnParsedCurveData);
     }
 
     public UtteranceTiming ReadBmlFile(string bmlFilePath)
@@ -86,6 +88,11 @@ public class BMLReader
     void OnParsedBMLTiming(BMLParser.BMLTiming bmlTiming)
     {
         m_UtteranceTiming.m_Timings.Add(bmlTiming);
+    }
+
+    void OnParsedWordTiming(BMLParser.WordTimingData wordTiming)
+    {
+        m_UtteranceTiming.m_WordTimings.Add(wordTiming);
     }
 
     void OnParsedVisemeTiming(BMLParser.LipData lipData)

@@ -20,8 +20,5 @@ namespace Ride.AI.ML
         public void LoadModel(byte[] modelBuffer);
 
         public byte[] SaveModel();
-
-        //RIDETensor?
-        //RIDEModel
     }
 }

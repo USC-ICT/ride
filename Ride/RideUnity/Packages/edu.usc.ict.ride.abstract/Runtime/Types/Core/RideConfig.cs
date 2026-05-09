@@ -9,7 +9,7 @@ namespace Ride
     [Serializable]
     public struct RideConfig
     {
-        public static readonly Version DefaultVersion = new Version("1.0.5.6");
+        public static readonly Version DefaultVersion = new Version("1.0.5.7");
 
 
         /// <summary>Application specific settings for Anthropic</summary>
@@ -397,10 +397,34 @@ namespace Ride
             /// <summary>The stage of the backend rest api to invoke dev, test, production, etc</summary>
             public string stage;
 
+            /// <summary>Direct endpoint for the RIDE service that creates signed storage URLs</summary>
+            public string signedUrlEndpoint;
+
+            /// <summary>Direct endpoint for the RIDE WebGL proxy service for Anthropic chat requests</summary>
+            public string anthropicProxyEndpoint;
+
+            /// <summary>Direct endpoint for the RIDE WebGL proxy service for OpenAI chat requests</summary>
+            public string openAIProxyEndpoint;
+
+            /// <summary>Direct endpoint for the RIDE WebGL proxy service for Azure Text-To-Speech requests</summary>
+            public string azureTtsProxyEndpoint;
+
+            /// <summary>Direct endpoint for the RIDE WebGL proxy service for ElevenLabs Text-To-Speech requests</summary>
+            public string elevenLabsTtsProxyEndpoint;
+
+            /// <summary>Direct endpoint for the RIDE WebGL proxy service for AWS Polly Text-To-Speech requests</summary>
+            public string pollyTtsProxyEndpoint;
+
             public static RestServerApiSettings Default => new RestServerApiSettings
             {
                 url = "https://xxxxxxxxxx.execute-api.us-west-2.amazonaws.com",
                 stage = "Prod",
+                signedUrlEndpoint = "https://cpg5yjn7apmqn3u3l5tnwqq22e0xixgd.lambda-url.us-west-2.on.aws",
+                anthropicProxyEndpoint = "https://ebntrsdtqgf4r4lcnosspkj7wy0mhjrf.lambda-url.us-west-2.on.aws/chat",
+                openAIProxyEndpoint = "https://ah7b4cjitre7z5xlems5dhvecu0pnzrb.lambda-url.us-west-2.on.aws/chat",
+                azureTtsProxyEndpoint = "https://ik5zqibyechvqdv2w4zkstfb2m0hybqr.lambda-url.us-west-2.on.aws",
+                elevenLabsTtsProxyEndpoint = "https://zmxqrfujpmzuoaobpa57aattpm0omenq.lambda-url.us-west-2.on.aws",
+                pollyTtsProxyEndpoint = "https://5seu6aym2kayhec2dw4m46udeq0xrfir.lambda-url.us-west-2.on.aws",
             };
         }
 

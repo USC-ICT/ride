@@ -858,13 +858,18 @@ public class MecanimEvents : GenericEvents
 
         public override void UseParamDefaultValue(CutsceneEvent ce, CutsceneEventParam param)
         {
-            if (param.Name == "headSpeed")
+            // Match defaults in GazeController
+            if (param.Name == "eyeSpeed")
             {
-                param.floatData = 400;
+                param.floatData = 100;
             }
-            else if (param.Name == "eyeSpeed")
+            else if (param.Name == "headSpeed")
             {
-                param.floatData = 400;
+                param.floatData = 90;
+            }
+            else if (param.Name == "bodySpeed")
+            {
+                param.floatData = 80;
             }
             else if (param.Name == "jointRange")
             {

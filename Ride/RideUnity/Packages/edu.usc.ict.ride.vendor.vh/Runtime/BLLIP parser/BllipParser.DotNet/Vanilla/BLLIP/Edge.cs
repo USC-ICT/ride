@@ -33,7 +33,15 @@ namespace BllipParser.DotNet.Vanilla
         double rightMerit_;
         double prob_;
         double merit_;
-        list<Edge> sucs_ = new list<Edge>();
+        //list<Edge> sucs_ = new list<Edge>();
+        // Intrusive successor chain (stack-like). This replaces list<Edge> sucs_.
+        // Successors are pushed as head nodes, matching the original push_front behavior.
+        Edge sucsHead_;
+        Edge sucsNext_;
+
+        // One next pointer per side (right=0 and right=1).
+        public Edge waitingNext0_;
+        public Edge waitingNext1_;
 
 
         public Edge(Term trm)  //Edge(ConstTerm* trm);
@@ -92,7 +100,10 @@ namespace BllipParser.DotNet.Vanilla
             else
             {
                 pred_ = src;
-                pred_.sucs_.push_front(this);
+                //pred_.sucs_.push_front(this);
+                // Intrusive push_front: this becomes the new head successor of pred_.
+                sucsNext_ = pred_.sucsHead_;
+                pred_.sucsHead_ = this;
                 //cerr << *pred_ << " has suc " << *this << endl;
             }
 
@@ -139,8 +150,18 @@ namespace BllipParser.DotNet.Vanilla
         public ref int heapPos() { return ref heapPos_; }
         public short start() { return start_; }
         //short&	    start() {   return start_;   }
-        public list<Edge> sucs() { return sucs_; }
+        //public list<Edge> sucs() { return sucs_; }
         //list<Edge*>&    sucs() { return sucs_; }
+        public Edge sucsHead() { return sucsHead_; }
+        public Edge sucsNext() { return sucsNext_; }
+
+        // Called on a predecessor when we want to undo the last push_front().
+        public void PopFirstSuccessor()
+        {
+            if (sucsHead_ != null)
+                sucsHead_ = sucsHead_.sucsNext_;
+        }
+
         public short loc() { return loc_; }
         //short&	    loc() {   return loc_;   }
         public Item item() { return item_; }
@@ -214,7 +235,9 @@ namespace BllipParser.DotNet.Vanilla
             else
             {
                 os += lhs_ + "(" + start() + ", " + loc_ + ") -> ";
-                LeftRightGotIter gi = new LeftRightGotIter(this);
+                //LeftRightGotIter gi = new LeftRightGotIter(this);
+                Item [] lrGotIterScratch = LeftRightGotIterThreadLocal.Get_lrGotIter_ScratchBuffer();
+                LeftRightGotIter gi = new LeftRightGotIter(this, lrGotIterScratch);
                 while (gi.next(out Item itm))
                 {
                     if (itm.term() == Term.stopTerm)
@@ -245,7 +268,9 @@ namespace BllipParser.DotNet.Vanilla
             bool sawColen = false;
             bool sawCC = false;
             int numTrm = 0;
-            LeftRightGotIter gi = new LeftRightGotIter(this);  
+            //LeftRightGotIter gi = new LeftRightGotIter(this);  
+            Item [] lrGotIterScratch = LeftRightGotIterThreadLocal.Get_lrGotIter_ScratchBuffer();
+            LeftRightGotIter gi = new LeftRightGotIter(this, lrGotIterScratch);
             int pos = 0;
             /*Change next line to indicate which non-terminals get specially
             marked to indicate that they are conjoined together */

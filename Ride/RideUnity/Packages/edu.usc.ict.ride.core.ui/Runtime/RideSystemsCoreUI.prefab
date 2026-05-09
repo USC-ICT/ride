@@ -11,7 +11,7 @@ GameObject:
   - component: {fileID: 3695044640965647704}
   - component: {fileID: 1125130659570150401}
   m_Layer: 0
-  m_Name: ViewSystemMono
+  m_Name: ViewSystemUnity
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -44,11 +44,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2cd419f27fcfeb94b8ced0a15214d4b5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  m_config:
+    flags: -1
+  m_viewSystemMenuPrefab: {fileID: 9078632038858434993, guid: 61d634a69bf9329498e0a52fde3d2aef,
+    type: 3}
   useLegacyAgentSelector: 0
   showDebugEntityData: 0
   debugEntityUICard: {fileID: 7212724641533461614, guid: fcd0c21e564cdc64bb907275c4dafe1b,
-    type: 3}
-  m_viewSystemMenuPrefab: {fileID: 9078632038858434993, guid: 61d634a69bf9329498e0a52fde3d2aef,
     type: 3}
 --- !u!1 &2578609142145978574
 GameObject:

@@ -10,9 +10,6 @@ namespace Ride
     {
         void LoadAsset();
         void ResetAsset();
-        void OnAssetLoaded(object loadedAsset);
-        void InitializeAllComponents();
         event Action AssetLoaded; //for code-based subscriptions of the loadEvent
     }
 }
-

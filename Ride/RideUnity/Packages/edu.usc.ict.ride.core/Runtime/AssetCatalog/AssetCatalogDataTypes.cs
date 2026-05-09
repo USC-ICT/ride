@@ -55,7 +55,9 @@ namespace Ride
     {
         public const string RIDE_VERSION = "1.0";
 
+        public string catalogName;
         public string rideBundleVersion;  // ride custom version number for this data type
+        public string artAssetVersion; // art revision (0 if unknown)
         public string unityVersion;  // Full Unity version used when the bundles and catalog were built.  Example: "2023.2.8f1"
         public string platform;
         public string renderPipeline;

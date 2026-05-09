@@ -19,9 +19,9 @@ namespace BllipParser.DotNet.Vanilla
 
         public EdgeHeap()
         {
-            int i;
-            for (i = 0; i < HeapSize; i++)
-                array[i] = null;
+            //int i;
+            //for (i = 0; i < HeapSize; i++)
+            //    array[i] = null;
             print = false;
             unusedPos_ = 0;
         }
@@ -29,17 +29,28 @@ namespace BllipParser.DotNet.Vanilla
         //~EdgeHeap();
 
 
+        public void Clear()
+        {
+            // Clear only the active portion so old Edge references don't keep a ton of objects alive.
+            // This preserves capacity and avoids clearing the entire 370k array each sentence.
+            if (unusedPos_ > 0)
+                Array.Clear(array, 0, unusedPos_);
+
+            unusedPos_ = 0;
+        }
+
+
         public void insert(Edge edge)
         {
             if (print)
                 Console.WriteLine("heap insertion of " + edge + " at " + unusedPos_);
 
-            Debug.Assert(unusedPos_ < HeapSize);
+            AssertInternal(unusedPos_ < HeapSize);
             array[unusedPos_] = edge;
             edge.heapPos() = unusedPos_;
             upheap(unusedPos_);
             unusedPos_++;
-            Debug.Assert(unusedPos_ < HeapSize);
+            AssertInternal(unusedPos_ < HeapSize);
         }
 
 
@@ -52,7 +63,7 @@ namespace BllipParser.DotNet.Vanilla
                 return null;
 
             Edge retVal = array[0];
-            Debug.Assert(retVal.heapPos() == 0);
+            AssertInternal(retVal.heapPos() == 0);
             del_(0);
             retVal.heapPos() = -1;
             return retVal;
@@ -65,7 +76,7 @@ namespace BllipParser.DotNet.Vanilla
                 Console.WriteLine("del " + edge);
 
             int pos = edge.heapPos();
-            Debug.Assert(pos < unusedPos_ && pos >= 0);
+            AssertInternal(pos < unusedPos_ && pos >= 0);
             del_( pos );
         }
 
@@ -79,7 +90,7 @@ namespace BllipParser.DotNet.Vanilla
             if (print)
                 Console.WriteLine("del_ " + pos);
 
-            Debug.Assert(unusedPos_ != 0);
+            AssertInternal(unusedPos_ != 0);
             if (pos == (unusedPos_ - 1))
             {
                 unusedPos_--;
@@ -113,9 +124,9 @@ namespace BllipParser.DotNet.Vanilla
             if (pos >= unusedPos_ - 1)
                 return;
 
-            Debug.Assert(pos < HeapSize);
+            AssertInternal(pos < HeapSize);
             Edge par = array[pos];
-            Debug.Assert(par.heapPos() == pos);
+            AssertInternal(par.heapPos() == pos);
             double merit = par.merit();
             int lc = left_child(pos);
             int rc = right_child(pos);
@@ -124,12 +135,12 @@ namespace BllipParser.DotNet.Vanilla
             Edge lct = null;
             if (lc < unusedPos_)
             {
-                Debug.Assert(lc < HeapSize);
+                AssertInternal(lc < HeapSize);
                 lct = array[lc];
                 if (lct != null)
                 {
                     lcthere = 1;
-                    Debug.Assert(lct.heapPos() == lc);
+                    AssertInternal(lct.heapPos() == lc);
                 }
             }
 
@@ -141,14 +152,14 @@ namespace BllipParser.DotNet.Vanilla
                 if (rct != null)
                 {
                     rcthere = 1;
-                    Debug.Assert(rct.heapPos() == rc);
+                    AssertInternal(rct.heapPos() == rc);
                 }
             }
 
             if (lcthere == 0 && rcthere == 0)
                 return;
 
-            Debug.Assert(lcthere != 0);
+            AssertInternal(lcthere != 0);
             if (rcthere == 0 || (lct.merit() > rct.merit()))
                 largec = lc;
             else
@@ -179,21 +190,21 @@ namespace BllipParser.DotNet.Vanilla
             if (pos == 0)
                 return false;
 
-            Debug.Assert(pos < HeapSize);
+            AssertInternal(pos < HeapSize);
             Edge edge = array[pos];
-            Debug.Assert(edge.heapPos() == pos);
+            AssertInternal(edge.heapPos() == pos);
             double merit = edge.merit();
             int parPos = parent(pos);
-            Debug.Assert(parPos < HeapSize);
+            AssertInternal(parPos < HeapSize);
             Edge par = array[parPos];
-            Debug.Assert(par.heapPos() == parPos);
+            AssertInternal(par.heapPos() == parPos);
 
             if (merit > par.merit())
             {
-                Debug.Assert(parPos < HeapSize);
+                AssertInternal(parPos < HeapSize);
                 array[parPos] = edge;
                 edge.heapPos() = parPos;
-                Debug.Assert(pos < HeapSize);
+                AssertInternal(pos < HeapSize);
                 array[pos] = par;
                 par.heapPos() = pos;
                 if (print)

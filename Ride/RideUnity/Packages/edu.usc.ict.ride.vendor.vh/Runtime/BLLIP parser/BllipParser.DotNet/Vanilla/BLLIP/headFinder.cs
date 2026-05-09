@@ -35,7 +35,7 @@ namespace BllipParser.DotNet.Vanilla
             //headStrm >> next;
             next = new ECString(headStrmSplit[0]);
 
-            Debug.Assert(next == "1");
+            AssertInternal(next == "1");
             int whichHeads = 1;
             for (int headStrmIdx = 1; headStrmIdx < headStrmSplit.Length; headStrmIdx++)  //while (headStrm)
             {

@@ -8,89 +8,18 @@ using UnityEngine.Networking;
 namespace Ride.NLP
 {
     #region OpenAIChatGPTDataStructs
+        
     public enum ChatGPTModel
     {
-        GPT4 = 0,
-        GPT3_5 = 20,
+        GPT4   = 10,
+        GPT5_2 = 20
     }
 
     /// <summary>
-    /// Question to be asked to the general OpenAI GPT
+    /// Question to be asked to ChatGPT; GPT 4 and below
+    /// https://platform.openai.com/docs/api-reference/chat/create 
     /// </summary>
-    [Serializable]
-    // Sample JSON:
-    // {
-    //	    "model": "text-davinci-003",
-    //	    "prompt": "Say this is a test",
-    //	    "temperature": 0,
-    //	    "max_tokens": 7
-    // }
     public struct OpenAIQuestion
-    {
-        public string model;
-        public string prompt;
-        public double temperature;
-        public int max_tokens;
-    }
-
-    /// <summary>
-    /// Response from OpenAI GPT
-    /// </summary>
-    [Serializable]
-    // Sample JSON:
-    //  {
-    //	    "id": "cmpl-6PxXPfiCt3zMdWj2zmsDLIgiKyOTP",
-    //	    "object": "text_completion",
-    //	    "created": 1671645083,
-    //	    "model": "text-davinci-003",
-    //	    "choices": [{
-    //    		"text": "\n\nThis is indeed a test",
-    //    	    "index": 0,
-    //    	    "logprobs": null,
-    //    	    "finish_reason": "length"
-    //      }],
-    //	    "usage": {
-    //    		"prompt_tokens": 5,
-    //    	    "completion_tokens": 7,
-    //    	    "total_tokens": 12
-    //	    }
-    // }
-    public struct OpenAIAnswer
-    {
-        public string id;
-        public string _object;
-        public int created;
-        public string model;
-        public OpenAIChoice[] choices;
-        public OpenAIUsage usage;
-    }
-
-    public struct OpenAIChoice
-    {
-        public string text;
-        public int index;
-        public string logprobs;
-        public string finish_reason;
-    }
-
-    public struct OpenAIUsage
-    {
-        public int prompt_tokens;
-        public int completion_tokens;
-        public int total_tokens;
-    }
-
-    // Sample JSON:
-    // {
-    //  "model": "gpt-3.5-turbo",
-    //  "messages": [{"role": "user", "content": "Hello!"}]
-    // }
-    // https://platform.openai.com/docs/api-reference/chat/create 
-
-    /// <summary>
-    /// Question to be asked to ChatGPT from OpenAI 
-    /// </summary>
-    public struct OpenAIChatQuestion
     {
         public string model;
         public OpenAIMessage[] messages;
@@ -106,49 +35,61 @@ namespace Ride.NLP
         public string content;
     }
 
-    // Example response
-    // 
-    // {"id":"chatcmpl-6pafTdDGZaQg1mFdkRqb6ZblIkf5O","object":"chat.completion",
-    // "created":1677753699,"model":"gpt-3.5-turbo-0301","usage":{"prompt_tokens":19,
-    // "completion_tokens":11,"total_tokens":30},"choices":[{"message":{"role":"assistant",
-    // "content":"Hello! How can I assist you today?"},"finish_reason":"stop","index":0}]}
+    /// <summary>
+    /// Question to be asked to ChatGPT; GPT 5 and above    
+    /// </summary>
+    public struct OpenAIQuestionGPT5
+    {
+        public string model;
+        public OpenAIMessage[] messages;
+        public double temperature;
+        public int max_completion_tokens;
+        public int n;       // How many chat completion choices to generate for each input message.
+        public bool stream; // Whether to send partial message deltas
+    }
 
     /// <summary>
     /// Response from OpenAI ChatGPT 
     /// </summary>
-    public struct OpenAIChatGPTAnswer
+    public struct OpenAIAnswer
     {
         public string id;
         public string _object;
         public int created;
-        public OpenAIChatGPTChoice[] choices;
+        public OpenAIChoice[] choices;
         public OpenAIUsage usage;
     }
 
-    public struct OpenAIChatGPTChoice
+    public struct OpenAIChoice
     {
         public int index;
         public OpenAIMessage message;
         public string finish_reason;
     }
+
+    public struct OpenAIUsage
+    {
+        public int prompt_tokens;
+        public int completion_tokens;
+        public int total_tokens;
+    }
     #endregion
 
     /// <summary>
-    /// Uses OpenAI ChatGPT (https://openai.com/api) to provide LLM functionalities.
+    /// Uses OpenAI ChatGPT (https://openai.com/api) to provide NLP functionalities.
     /// </summary>
     public class NlpSystemChatGPT : NlpSystemUnity
     {
-        public double temperature = 0.3;
-        public int max_tokens = 200;
-       
+        public double m_temperature = 0.3;
+        public int m_maxTokens = 200;       
         protected int m_answerSize = 1;
-        
-        private string m_model = "gpt-4o";
+                
+        ChatGPTModel m_model = ChatGPTModel.GPT4;        
 
         private Dictionary<ChatGPTModel, string> m_modelDictionary = new Dictionary<ChatGPTModel, string>()
-        { 
-            {ChatGPTModel.GPT4, "gpt-4o"},
-            {ChatGPTModel.GPT3_5, "gpt-3.5-turbo"},
+        {
+            {ChatGPTModel.GPT4,   "gpt-4o"},
+            {ChatGPTModel.GPT5_2, "gpt-5.2-chat-latest"}            
         };
 
         /// <inheritdoc/>
@@ -188,20 +129,38 @@ namespace Ride.NLP
 
             var history = GetParsedHistory();
             history.Add(new OpenAIMessage { role = "user", content = request.content });
-            
+
             //Serialize question to AI
-            OpenAIChatQuestion question = new OpenAIChatQuestion
+            string questionJSON = "";            
+
+            switch (m_model)
             {
-                model = m_model,
-                messages = history.ToArray(),
-                temperature = temperature,
-                max_tokens = max_tokens,
-                n = m_answerSize
-            };
-            string questionJSON = RideIO.JsonSerializeNoObjRef(question);
+                case ChatGPTModel.GPT4:
+                    OpenAIQuestion question4 = new OpenAIQuestion
+                    {
+                        model = m_modelDictionary[m_model],
+                        messages = history.ToArray(),
+                        temperature = m_temperature,
+                        max_tokens = m_maxTokens,
+                        n = m_answerSize
+                    };
+                    questionJSON = RideIO.JsonSerializeNoObjRef(question4);
+                    break;
+                case ChatGPTModel.GPT5_2:
+                    OpenAIQuestionGPT5 question5 = new OpenAIQuestionGPT5
+                    {
+                        model = m_modelDictionary[m_model],
+                        messages = history.ToArray(),
+                        temperature = 1, 
+                        max_completion_tokens = m_maxTokens,
+                        n = m_answerSize
+                    };
+                    questionJSON = RideIO.JsonSerializeNoObjRef(question5);
+                    break;
+            }                       
 
 #if UNITY_WEBGL && !UNITY_EDITOR
-            m_uri = "https://ah7b4cjitre7z5xlems5dhvecu0pnzrb.lambda-url.us-west-2.on.aws/chat";
+            m_uri = ConfigurationSystemUnity.GetOpenAIProxyEndpoint();
 #endif
 
             //Call web service
@@ -228,8 +187,10 @@ namespace Ride.NLP
 
             var response = webRequest.downloadHandler.text;
 
+            //Debug.Log($"Web response: {response}");
+
             //Parse response
-            OpenAIChatGPTAnswer oaiAnswer = RideIO.JsonDeserialize<OpenAIChatGPTAnswer>(response);
+            OpenAIAnswer oaiAnswer = RideIO.JsonDeserialize<OpenAIAnswer>(response);
             NlpResponse qnaAnswer = new NlpResponse(/*response, */oaiAnswer.choices[0].message.content);  // Pick first answer for now
 
             //Update conversation history

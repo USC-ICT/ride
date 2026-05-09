@@ -87,15 +87,31 @@ namespace VHAssets
         private readonly Dictionary<string, List<ResolvedBlendShapeTarget>> m_resolvedTargets = new(StringComparer.OrdinalIgnoreCase);
 
 
-        private void Start()
+        protected override void Start()
         {
+            base.Start();
+
             if (!TryGetComponent(out ILoadableAsset loadedAsset))
                 InitializeLoadedAsset();
         }
 
-        public void InitializeLoadedAsset()
+        public override void InitializeLoadedAsset()
         {
+            base.InitializeLoadedAsset();
+
             BuildResolvedMappings();
+        }
+
+        public override void ResetLoadedAsset()
+        {
+            base.ResetLoadedAsset();
+
+            // Best-effort: open lids (0) so we don't freeze in a closed pose
+            // during the unload frame. This is safe even if renderers are null-checked.
+            ApplyLid(0f);
+
+            // Release cached renderer/index references so assets can unload.
+            m_resolvedTargets.Clear();
         }
 
         /// <summary>
@@ -198,6 +214,18 @@ namespace VHAssets
                         Debug.LogWarning($"EyelidController_BlendShapes ({keyName}): Blendshape '{shapeName}' was not found on any SkinnedMeshRenderer under this GameObject.");
                 }
             }
+        }
+
+        /// <summary>
+        /// Editor-only helper to assign a blendshape mapping recipe and rebuild resolved targets.
+        /// Intended for prefab authoring time (e.g., CCCharacterSetupWindow).
+        /// </summary>
+        public void EditorSetBlendShapeMapping(List<BlendShapeMapping> mapping)
+        {
+            m_eyelidBlendShapeMapping = mapping ?? new List<BlendShapeMapping>();
+
+            if (Application.isPlaying)
+                BuildResolvedMappings();
         }
     }
 }

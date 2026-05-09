@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using System.Xml;
 using UnityEngine;
@@ -18,7 +18,7 @@ namespace VHAssets
 
         public ICharacterController m_CharacterController;
         public Cutscene m_CutscenePrefab;
-        public bool m_TrimBMLTimingWhenParsing = true;
+        public bool m_TrimBMLTimingWhenParsing = false;
 
         protected BMLParser m_BMLParser;
 
@@ -34,14 +34,49 @@ namespace VHAssets
         /// </remarks>
         public virtual void Start()
         {
-            m_BMLParser = new BMLParser(OnParsedBMLTiming, OnParsedVisemeTiming, OnParsedBMLEvent, OnFinishedReading, OnParsedCustomEvent);
+            m_BMLParser = new BMLParser(OnParsedBMLTiming, OnParsedWordTiming, OnParsedVisemeTiming, OnParsedBMLEvent, OnFinishedReading, OnParsedCustomEvent);
+
             if (m_CharacterController.GetCharacterControllerType() == "MecanimManager")
-            {
                 m_BMLParser.EventCategoryName = GenericEventNames.Mecanim;
-            }
 
             m_BMLParser.TrimBMLTimingWhenParsing = m_TrimBMLTimingWhenParsing;
         }
+
+        public virtual void InitializeLoadedAsset()
+        {
+            // Note we receive this message, but Start() may have already run.
+            // Don't use the RIDE pattern of initializing after asset load, to avoid bringing in ILoadableAsset dependency.
+
+            if (m_BMLParser != null)
+                return;
+
+            m_BMLParser = new BMLParser(OnParsedBMLTiming, OnParsedWordTiming, OnParsedVisemeTiming, OnParsedBMLEvent, OnFinishedReading, OnParsedCustomEvent);
+
+            if (m_CharacterController != null && m_CharacterController.GetCharacterControllerType() == "MecanimManager")
+                m_BMLParser.EventCategoryName = GenericEventNames.Mecanim;
+
+            m_BMLParser.TrimBMLTimingWhenParsing = m_TrimBMLTimingWhenParsing;
+        }
+
+        public virtual void ResetLoadedAsset()
+        {
+            // Destroy any Cutscenes currently parented under this handler.
+            // These can keep events alive which may reference unloaded character objects.
+            for (int i = transform.childCount - 1; i >= 0; i--)
+            {
+                var child = transform.GetChild(i);
+                if (child == null)
+                    continue;
+
+                var cs = child.GetComponent<Cutscene>();
+                if (cs != null)
+                    Destroy(child.gameObject);
+            }
+
+            m_BMLParser = null;  // Drop parser reference so it can be GC'd (and so we re-create cleanly on reload).
+            m_OnCutsceneCreated = null;  // Also clear any callbacks to avoid accidentally holding references.
+        }
+
 
         #region Public API
 
@@ -57,6 +92,7 @@ namespace VHAssets
         #region Parser Callbacks
 
         protected virtual void OnParsedBMLTiming(BMLParser.BMLTiming bmlTiming) { }
+        protected virtual void OnParsedWordTiming(BMLParser.WordTimingData wordTiming) { }
         protected virtual void OnParsedVisemeTiming(BMLParser.LipData lipData) { }
         protected virtual void OnParsedBMLEvent(XmlTextReader reader, string eventType, CutsceneEvent ce)
         {
@@ -80,11 +116,24 @@ namespace VHAssets
         /// </remarks>
         protected virtual void OnFinishedReading(bool succeeded, List<CutsceneEvent> createdEvents)
         {
+            if (m_CutscenePrefab == null)
+            {
+                Debug.LogError($"{nameof(BMLEventHandler)} ({name}): Cutscene prefab is null.");
+                return;
+            }
+
+            if (m_CharacterController == null)
+            {
+                Debug.LogError($"{nameof(BMLEventHandler)} ({name}): CharacterController is null.");
+                return;
+            }
+
             Cutscene cs = Instantiate(m_CutscenePrefab);
 
             foreach (var ce in createdEvents)
             {
-                if (m_BMLParser.IgnoreSpeechEvent && ce.FunctionName == "PlayAudio")
+                bool ignoreSpeech = m_BMLParser != null && m_BMLParser.IgnoreSpeechEvent;
+                if (ignoreSpeech && ce.FunctionName == "PlayAudio")
                     continue;
 
                 //Debug.Log($"OnFinishedReading() - {ce.Name} - {ce.StartTime} - {ce.Length}");

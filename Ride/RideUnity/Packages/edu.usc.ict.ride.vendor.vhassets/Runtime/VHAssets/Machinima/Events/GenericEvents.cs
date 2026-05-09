@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
+using System.Text;
 using System.Xml;
 using UnityEngine;
 
@@ -186,19 +187,66 @@ public class GenericEvents : MonoBehaviour
 
         MethodInfo method = null;
         ICutsceneEventInterface obj = CreateInterfaceFromMethod(eventMethodName, internalFunctionName, 0, ref method);
-        if (obj != null && method != null)
+
+        if (obj == null || method == null)
+        {
+            Debug.LogError($"Failed InvokeEventMethod on {internalFunctionName} (eventMethodName={eventMethodName})");
+            return;
+        }
+
+        // DEBUG ONLY: log reflection target before invoking.
+        //{
+        //    string targetType = obj.GetType().FullName;
+        //    string declaringType = method.DeclaringType != null ? method.DeclaringType.FullName : "<unknown>";
+        //    string paramDump = FormatParameters(parameters);
+        //    Debug.Log(
+        //        $"GenericEvents.InvokeMethod() - about to invoke. " +
+        //        $"eventMethodName={eventMethodName}, internalFunctionName={internalFunctionName}, " +
+        //        $"targetType={targetType}, declaringType={declaringType}, method={method.Name}, " +
+        //        $"params={paramDump}"
+        //    );
+        //}
+
+        try
         {
             method.Invoke(obj, parameters);
         }
-        else
+        catch (TargetInvocationException tie)
         {
-            Debug.LogError("Failed InvokeEventMethod on " + internalFunctionName);
+            var root = GetRootException(tie);
+            string targetType = obj.GetType().FullName;
+            string declaringType = method.DeclaringType != null ? method.DeclaringType.FullName : "<unknown>";
+            string paramDump = FormatParameters(parameters);
+            Debug.LogError(
+                $"GenericEvents.InvokeMethod() - reflection invoke failed. " +
+                $"eventMethodName={eventMethodName}, internalFunctionName={internalFunctionName}, " +
+                $"targetType={targetType}, declaringType={declaringType}, method={method.Name}, " +
+                $"params={paramDump}, " +
+                $"root={(root != null ? (root.GetType().FullName + ": " + root.Message) : "<null>")}, " +
+                $"exception={tie}"
+            );
+            throw;
+        }
+        catch (Exception e)
+        {
+            var root = GetRootException(e);
+            string targetType = obj.GetType().FullName;
+            string declaringType = method.DeclaringType != null ? method.DeclaringType.FullName : "<unknown>";
+            string paramDump = FormatParameters(parameters);
+            Debug.LogError(
+                $"GenericEvents.InvokeMethod() - invoke failed. " +
+                $"eventMethodName={eventMethodName}, internalFunctionName={internalFunctionName}, " +
+                $"targetType={targetType}, declaringType={declaringType}, method={method.Name}, " +
+                $"params={paramDump}, " +
+                $"root={(root != null ? (root.GetType().FullName + ": " + root.Message) : "<null>")}, " +
+                $"exception={e}"
+            );
+            throw;
         }
     }
 
     T GetReturnValueFromFunction<T>(string eventMethodName, string internalFunctionName, object[] parameters)
     {
-        T retVal = default;
         if (m_EventFunctions.Count == 0)
         {
             CheckAvailableEvents();
@@ -206,16 +254,87 @@ public class GenericEvents : MonoBehaviour
 
         MethodInfo method = null;
         ICutsceneEventInterface obj = CreateInterfaceFromMethod(eventMethodName, internalFunctionName, 0, ref method);
-        if (obj != null && method != null)
+
+        if (obj == null || method == null)
         {
-            retVal = (T)(method.Invoke(obj, parameters));
-        }
-        else
-        {
-            Debug.LogError("Failed InvokeEventMethod on " + internalFunctionName);
+            Debug.LogError($"Failed GetReturnValueFromFunction on {internalFunctionName} (eventMethodName={eventMethodName})");
+            return default;
         }
 
-        return retVal;
+        // DEBUG ONLY: log reflection target before invoking.
+        //{
+        //    string targetType = obj.GetType().FullName;
+        //    string declaringType = method.DeclaringType != null ? method.DeclaringType.FullName : "<unknown>";
+        //    string paramDump = FormatParameters(parameters);
+        //    Debug.Log(
+        //        $"GenericEvents.GetReturnValueFromFunction() - about to invoke. " +
+        //        $"eventMethodName={eventMethodName}, internalFunctionName={internalFunctionName}, " +
+        //        $"targetType={targetType}, declaringType={declaringType}, method={method.Name}, " +
+        //        $"params={paramDump}"
+        //    );
+        //}
+
+        try
+        {
+            object ret = method.Invoke(obj, parameters);
+
+            // DEBUG ONLY: log return value.
+            //Debug.Log(
+            //    $"GenericEvents.GetReturnValueFromFunction() - invoked. " +
+            //    $"eventMethodName={eventMethodName}, internalFunctionName={internalFunctionName}, " +
+            //    $"method={method.Name}, returnType={(ret != null ? ret.GetType().FullName : "<null>")}, " +
+            //    $"returnValue={SafeToString(ret)}"
+            //);
+
+            if (ret == null)
+                return default;
+
+            if (ret is T typed)
+                return typed;
+
+            // Some code paths might return a boxed value type, or something convertible.
+            try
+            {
+                return (T)Convert.ChangeType(ret, typeof(T));
+            }
+            catch
+            {
+                Debug.LogError($"GenericEvents.GetReturnValueFromFunction() - return value is not assignable. expectedType={typeof(T).FullName}, actualType={ret.GetType().FullName}, value={SafeToString(ret)}");
+                return default;
+            }
+        }
+        catch (TargetInvocationException tie)
+        {
+            var root = GetRootException(tie);
+            string targetType = obj.GetType().FullName;
+            string declaringType = method.DeclaringType != null ? method.DeclaringType.FullName : "<unknown>";
+            string paramDump = FormatParameters(parameters);
+            Debug.LogError(
+                $"GenericEvents.GetReturnValueFromFunction() - reflection invoke failed. " +
+                $"eventMethodName={eventMethodName}, internalFunctionName={internalFunctionName}, " +
+                $"targetType={targetType}, declaringType={declaringType}, method={method.Name}, " +
+                $"params={paramDump}, " +
+                $"root={(root != null ? (root.GetType().FullName + ": " + root.Message) : "<null>")}, " +
+                $"exception={tie}"
+            );
+            throw;
+        }
+        catch (Exception e)
+        {
+            var root = GetRootException(e);
+            string targetType = obj.GetType().FullName;
+            string declaringType = method.DeclaringType != null ? method.DeclaringType.FullName : "<unknown>";
+            string paramDump = FormatParameters(parameters);
+            Debug.LogError(
+                $"GenericEvents.GetReturnValueFromFunction() - invoke failed. " +
+                $"eventMethodName={eventMethodName}, internalFunctionName={internalFunctionName}, " +
+                $"targetType={targetType}, declaringType={declaringType}, method={method.Name}, " +
+                $"params={paramDump}, " +
+                $"root={(root != null ? (root.GetType().FullName + ": " + root.Message) : "<null>")}, " +
+                $"exception={e}"
+            );
+            throw;
+        }
     }
 
     /// <summary>
@@ -323,6 +442,64 @@ public class GenericEvents : MonoBehaviour
         Debug.LogErrorFormat("GenericEvents.CheckAvailableEvents() - not implemented on this platform.");
         return null;
 #endif
+    }
+
+    private static string SafeToString(object obj)
+    {
+        if (obj == null)
+            return "<null>";
+
+        try
+        {
+            if (obj is string s)
+                return $"\"s\"";
+
+            if (obj is XmlReader xr)
+            {
+                // Best-effort details without advancing the reader.
+                string where = "";
+                if (xr is IXmlLineInfo li && li.HasLineInfo())
+                    where = $" line={li.LineNumber} pos={li.LinePosition}";
+                return $"XmlReader{{name=\"{xr.Name}\"{where}}}";
+            }
+
+            return obj.ToString();
+        }
+        catch
+        {
+            return "<ToString() threw>";
+        }
+    }
+
+    private static string FormatParameters(object[] parameters)
+    {
+        if (parameters == null)
+            return "<null>";
+
+        if (parameters.Length == 0)
+            return "<none>";
+
+        var sb = new StringBuilder(256);
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            object p = parameters[i];
+            string typeName = p != null ? p.GetType().FullName : "<null>";
+            sb.Append($"[{i}] {typeName} = {SafeToString(p)}");
+            if (i < parameters.Length - 1)
+                sb.Append(", ");
+        }
+        return sb.ToString();
+    }
+
+    private static Exception GetRootException(Exception e)
+    {
+        if (e == null)
+            return null;
+
+        while (e.InnerException != null)
+            e = e.InnerException;
+
+        return e;
     }
 
     #endregion

@@ -1,7 +1,7 @@
 using System;
 using System.Diagnostics;
 
-using Items = BllipParser.DotNet.Vanilla.list<BllipParser.DotNet.Vanilla.Item>;  //typedef list<Item*> Items;
+using Items = BllipParser.DotNet.Vanilla.vector<BllipParser.DotNet.Vanilla.Item>;  //typedef list<Item*> Items;
 
 using static BllipParser.DotNet.Vanilla.Feature_global;
 using static BllipParser.DotNet.Vanilla.utils;
@@ -25,8 +25,39 @@ namespace BllipParser.DotNet.Vanilla
         static vector<Item> [] itemsToDelete = new vector<Item>[MAXNUMTHREADS];
         protected static bool guided = false;
         protected Items [,] regs = new Items[MAXSENTLEN, MAXSENTLEN];
+
+        // keep records of what regs were touched to improve reset perf
+        protected bool [,] regsTouched = new bool[MAXSENTLEN, MAXSENTLEN];
+        protected vector<int> regsTouchedList = new vector<int>();
+
         //vector<short>   guide[MAXSENTLEN][MAXSENTLEN];
-        protected list<Edge> [,] waitingEdges = new list<Edge>[2, MAXSENTLEN];
+        //protected list<Edge> [,] waitingEdges = new list<Edge>[2, MAXSENTLEN];
+        protected Edge[,] waitingEdges_Head = new Edge[2, MAXSENTLEN];
+        private readonly Edge[,] waitingEdges_Tail = new Edge[2, MAXSENTLEN];
+
+        protected static Edge GetWaitNext(Edge e, int right) => right != 0 ? e.waitingNext1_ : e.waitingNext0_;
+        private static void SetWaitNext(Edge e, int right, Edge next)
+        {
+            if (right != 0) e.waitingNext1_ = next;
+            else e.waitingNext0_ = next;
+        }
+
+        protected void WaitListAddTail(int right, int loc, Edge e)
+        {
+            SetWaitNext(e, right, null);
+
+            Edge tail = waitingEdges_Tail[right, loc];
+            if (tail == null)
+            {
+                waitingEdges_Head[right, loc] = e;
+                waitingEdges_Tail[right, loc] = e;
+                return;
+            }
+
+            SetWaitNext(tail, right, e);
+            waitingEdges_Tail[right, loc] = e;
+        }
+
         protected double crossEntropy_;
         protected int wrd_count_;
         protected int poppedEdgeCount_;
@@ -39,6 +70,18 @@ namespace BllipParser.DotNet.Vanilla
         int endPos;
         protected static int ruleiCountTimeout_ = 360000; //how many rulei's before we time out.
         protected static int poppedTimeout_ = 50000;
+
+
+        // Scratch Buffers
+
+        public static double [][] s_setAlphas_ScratchBuffer = new double[MAXNUMTHREADS][];
+        private double [] Get_setAlphas_ScratchBuffer(int thrdid)
+        {
+            var s = s_setAlphas_ScratchBuffer[thrdid];
+            if (s == null)
+                s_setAlphas_ScratchBuffer[thrdid] = s = new double[400];
+            return s;
+        }
 
 
         static ChartBase()
@@ -54,9 +97,9 @@ namespace BllipParser.DotNet.Vanilla
                 for (int j = 0; j < regs.GetLength(1); j++)
                     regs[i, j] = new Items();
 
-            for (int i = 0; i < waitingEdges.GetLength(0); i++)
-                for (int j = 0; j < waitingEdges.GetLength(1); j++)
-                    waitingEdges[i, j] = new list<Edge>();
+            //for (int i = 0; i < waitingEdges.GetLength(0); i++)
+            //    for (int j = 0; j < waitingEdges.GetLength(1); j++)
+            //        waitingEdges[i, j] = new list<Edge>();
 
 
             thrdid = id;
@@ -102,6 +145,70 @@ namespace BllipParser.DotNet.Vanilla
         //virtual ~ChartBase();
 
 
+        protected void ResetChartBase(SentRep sentence)
+        {
+            sentence_ = sentence;
+
+            crossEntropy_ = 0.0;
+            poppedEdgeCount_ = 0;
+            ruleiCounts_ = 0;
+            totEdgeCountAtS_ = 0;
+            poppedEdgeCountAtS_ = 0;
+
+            wrd_count_ = sentence.length();
+            numItemsToDelete[thrdid] = 0;
+
+            // recompute endPos like ctor
+            endPos = wrd_count_;
+            string endwrd = null;
+            if (wrd_count_ > 0)
+                endwrd = sentence_.op(wrd_count_ - 1).lexeme();
+
+            if (endwrd != null && finalPunc(endwrd))
+            {
+                endPos = wrd_count_ - 1;
+            }
+            else if (wrd_count_ > 2)
+            {
+                endwrd = sentence.op(wrd_count_ - 2).lexeme();
+                if (finalPunc(endwrd))
+                {
+                    endPos = wrd_count_ - 2;
+                }
+                else
+                {
+                    endwrd = sentence.op(wrd_count_ - 3).lexeme();
+                    if (finalPunc(endwrd))
+                        endPos = wrd_count_ - 3;
+                }
+            }
+
+            // clear only touched
+            for (int t = 0; t < (int)regsTouchedList.size(); t++)
+            {
+                int packed = regsTouchedList.at(t);
+                int diff = packed / MAXSENTLEN;
+                int st = packed - (diff * MAXSENTLEN);
+
+                regs[diff, st].clear();
+                regsTouched[diff, st] = false;
+            }
+
+            regsTouchedList.clear();
+
+            // Clear intrusive waiting lists (heads/tails) for the next parse.
+            // We clear all slots because it's only 2 * MAXSENTLEN, which is cheap and avoids tracking touched indices.
+            for (int right = 0; right < 2; right++)
+            {
+                for (int loc = 0; loc < MAXSENTLEN; loc++)
+                {
+                    waitingEdges_Head[right, loc] = null;
+                    waitingEdges_Tail[right, loc] = null;
+                }
+            }
+        }
+
+
         //enum Err { OK, OVERFLW, FAILURE };
 
         // parsing functions, what the class is all about.
@@ -112,7 +219,7 @@ namespace BllipParser.DotNet.Vanilla
         public void set_Alphas()
         {
             Item snode = get_S();
-            double [] tempAlpha = new double[400]; //400 has no particular meaning, just large enough.
+            double [] tempAlpha = Get_setAlphas_ScratchBuffer(thrdid);  //double [] tempAlpha = new double[400]; //400 has no particular meaning, just large enough.
   
             if (snode == null || snode.prob() == 0.0)
             {
@@ -130,26 +237,26 @@ namespace BllipParser.DotNet.Vanilla
                 for (int i = 0; i <= wrd_count_ - j; i++)
                 {
                     Items il = regs[j, i];
-                    var ili = il.First;  //list<Item*>::iterator ili = il.begin();
-                    Item itm;
-                    for (; ili != null; ili = ili.Next)  //for(; ili != il.end(); ili++ )
+                    //var ili = il.First;  //list<Item*>::iterator ili = il.begin();
+                    int ilCount = (int)il.size();
+                    for (int k = 0; k < ilCount; k++)  //for (; ili != null; ili = ili.Next)  //for(; ili != il.end(); ili++ )
                     {
-                        itm = ili.Value;  //itm = *ili;
-                        if (itm != snode)
-                            itm.poutside() = 0; //init outside probs to 0;
+                        Item itmInit = il.at(k);  //itm = ili.Value;  //itm = *ili;
+                        if (itmInit != snode)
+                            itmInit.poutside() = 0; //init outside probs to 0;
                     }
 
                     bool valuesChanging = true;
                     /* do alpha calulcations until values settle down */
-                    ili = il.First;  //ili = il.begin();
+                    //ili = il.First;  //ili = il.begin();
                     while (valuesChanging)
                     {
                         valuesChanging = false;
                         int tempPos = 0;  //position in tempAlpha;
-                        ili = il.First;  //ili = il.begin();
-                        for (; ili != null; ili = ili.Next)  //for(; ili != il.end(); ili++ )
+                        //ili = il.First;  //ili = il.begin();
+                        for (int k = 0; k < ilCount; k++)  //for (; ili != null; ili = ili.Next)  //for(; ili != il.end(); ili++ )
                         {
-                            itm = ili.Value;  //itm = *ili;
+                            Item itm = il.at(k);  //itm = ili.Value;  //itm = *ili;
                             if (itm == snode)
                                 continue;
 
@@ -163,17 +270,17 @@ namespace BllipParser.DotNet.Vanilla
                                     itmalpha += lhsItem.poutside() * e.prob();
                             }
 
-                            Debug.Assert(tempPos < 400);
+                            AssertInternal(tempPos < 400);
                             double val = itmalpha / itm.prob();
                             tempAlpha[tempPos++] = val;
                         }
 
                         /* at this point the new alpha values are stored in tempAlpha */
                         int temppos = 0;
-                        ili = il.First;  //ili = il.begin();
-                        for (; ili != null; ili = ili.Next)  //for(; ili != il.end(); ili++ )
+                        //ili = il.First;  //ili = il.begin();
+                        for (int k = 0; k < ilCount; k++)  //for (; ili != null; ili = ili.Next)  //for(; ili != il.end(); ili++ )
                         {
-                            itm = ili.Value;  //itm = *ili;
+                            Item itm = il.at(k);  //itm = ili.Value;  //itm = *ili;
                             if (itm == snode)
                                 continue;
 
@@ -299,13 +406,12 @@ namespace BllipParser.DotNet.Vanilla
         protected Item get_S()
         {
             Term sterm = Term.rootTerm;
-            Item itm;
-
             Items il = regs[wrd_count_ - 1, 0];
-            var ili = il.First;  //Items::iterator ili = il.begin();
-            for (; ili != null; ili = ili.Next)  //for (; ili != il.end(); ili++ )
+            //var ili = il.First;  //Items::iterator ili = il.begin();
+            int count = (int)il.size();
+            for (int i = 0; i < count; i++)  //for (; ili != null; ili = ili.Next)  //for (; ili != il.end(); ili++ )
             {
-                itm = ili.Value;  //itm = *ili;
+                Item itm = il.at(i);  //itm = ili.Value;  //itm = *ili;
                 if (itm.term() == sterm)
                     return itm;
             }

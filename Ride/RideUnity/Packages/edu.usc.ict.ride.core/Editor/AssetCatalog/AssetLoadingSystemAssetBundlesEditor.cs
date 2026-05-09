@@ -94,6 +94,9 @@ namespace Ride
                 m_target.m_catalogsToLoad.Add(newCatalog);
                 EditorUtility.SetDirty(m_target);
             }
+
+            SerializedProperty verboseLogging = serializedObject.FindProperty("m_verboseLogging");
+            EditorGUILayout.PropertyField(verboseLogging, new GUIContent("Verbose Logging?"));
             serializedObject.ApplyModifiedProperties();
         }
 

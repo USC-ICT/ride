@@ -36,6 +36,12 @@ namespace Ride.Samples
         public void OnGUINonverbalBehaviorGeneration()
         {
             m_debugMenu.Label("<b>NVBG</b>");
+            m_debugMenu.Label("<b>Text Generation Only</b>");
+
+            m_debugMenu.Space();
+            m_debugMenu.Label("<i>Generates NVBG text only - does not drive the current character.</i>");
+            m_debugMenu.Space();
+
             using (m_debugMenu.Horizontal())
             {
                 m_debugMenu.Label("Utterance", 150);

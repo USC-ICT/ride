@@ -1,6 +1,5 @@
-﻿using System.IO;
+using System.IO;
 using UnityEngine;
-using SavWavWebsterNoble;
 
 namespace VHAssets
 {
@@ -40,7 +39,7 @@ public static class AudioConverter
 
     public static byte [] ConvertClipToWav(AudioClip clip, string filename)
     {
-        if (!SavWav.Save(filename, clip))
+        if (!WavUtility.Save(filename, clip))
         {
             Debug.LogError("ConvertClipToWav FAILED: " + filename);
             return null;

@@ -524,6 +524,8 @@ namespace NonverbalBehaviorGenerator
 
                 //Original Comment: clean up the bml and remove unwanted nodes in the xml
                 CleanUpBml(resultBml);
+
+                PruneDuplicateBehaviors(resultBml);
                 
                 Trace.Assert(requestClone.SourceId == await context.AgentInfo.GetCharacterIdAsync(), "NVBG refactor simplification assumption broken");
                 if (await context.Switch.GetSaliencyGlanceAsync())
@@ -1165,6 +1167,187 @@ namespace NonverbalBehaviorGenerator
 
             document.Normalize();
 
+        }
+
+        /// <summary>
+        /// Performs a post-transform deduplication pass over generated BML behaviors.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// This method is executed after the XSLT transformation stage (and after any
+        /// legacy cleanup such as <c>FilterGestures()</c> and <c>CleanUpBml()</c>).
+        /// At this point the BML document contains fully materialized behavior elements
+        /// such as &lt;head&gt;, &lt;gaze&gt;, &lt;animation&gt;, etc.
+        /// </para>
+        /// 
+        /// <para>
+        /// The primary purpose of this pass is to remove exact duplicate behaviors
+        /// introduced by the XSL transform stage. In particular, duplicate
+        /// &lt;head type="NOD"&gt; elements have been observed when multiple rules
+        /// resolve to the same timing anchor (e.g., identical <c>relax</c> values).
+        /// </para>
+        /// 
+        /// <para>
+        /// A behavior is considered a duplicate when its identifying attributes
+        /// (currently including element name, timing attributes, and key identity
+        /// attributes such as type, amount, repeats, priority, participant, etc.)
+        /// exactly match a previously encountered behavior within the same &lt;bml&gt; block.
+        /// </para>
+        /// 
+        /// <para>
+        /// This method is intentionally conservative:
+        /// <list type="bullet">
+        /// <item>
+        /// Only exact matches are removed.
+        /// </item>
+        /// <item>
+        /// Timing relationships are not modified.
+        /// </item>
+        /// <item>
+        /// Priority rules and overlap resolution are left unchanged.
+        /// </item>
+        /// </list>
+        /// </para>
+        /// 
+        /// <para>
+        /// This pass acts as a safety net to prevent visually redundant gestures
+        /// (e.g., two identical nods at the same timestamp) without altering the
+        /// underlying rule generation logic.
+        /// </para>
+        /// 
+        /// <para>
+        /// Future enhancements may expand this method to support:
+        /// <list type="bullet">
+        /// <item>
+        /// Throttling behaviors within a configurable time window.
+        /// </item>
+        /// <item>
+        /// Mood-based filtering (e.g., reduce gestures when character is subdued).
+        /// </item>
+        /// <item>
+        /// Deduplication across additional behavior types beyond nods.
+        /// </item>
+        /// <item>
+        /// Replacement of legacy filtering logic in <c>FilterGestures()</c>.
+        /// </item>
+        /// </list>
+        /// </para>
+        /// </remarks>
+        /// <param name="document">
+        /// The BML <see cref="XmlDocument"/> containing the generated behavior output.
+        /// The method modifies the document in place.
+        /// </param>
+        /// <param name="nodsOnly">
+        /// When <c>true</c>, only duplicate &lt;head type="NOD"&gt; elements are pruned.
+        /// When <c>false</c>, the method may be extended to consider other behavior types.
+        /// </param>
+        private void PruneDuplicateBehaviors(XmlDocument document, bool nodsOnly = true)
+        {
+            try
+            {
+                XmlNode bml = document.GetElementsByTagName("bml")[0];
+                if (bml == null)
+                    return;
+
+                // Track the first instance of each behavior signature.
+                Dictionary<string, XmlNode> seen = new Dictionary<string, XmlNode>(StringComparer.Ordinal);
+                List<XmlNode> toRemove = new List<XmlNode>();
+
+                // We want to operate on the flattened behaviors under <bml>.
+                // Iterate children rather than GetElementsByTagName to avoid surprising scope.
+                for (XmlNode node = bml.FirstChild; node != null; node = node.NextSibling)
+                {
+                    if (node.NodeType != XmlNodeType.Element)
+                        continue;
+
+                    // For now, focus on <head type="NOD"> duplicates.
+                    if (nodsOnly)
+                    {
+                        if (!string.Equals(node.Name, "head", StringComparison.Ordinal))
+                            continue;
+
+                        string type = node.Attributes?["type"]?.Value ?? "";
+                        if (!string.Equals(type, "NOD", StringComparison.OrdinalIgnoreCase))
+                            continue;
+                    }
+
+                    string key = BuildBehaviorDedupKey(node);
+                    if (key.Length == 0)
+                        continue;
+
+                    if (seen.ContainsKey(key))
+                    {
+                        toRemove.Add(node);
+                    }
+                    else
+                    {
+                        seen[key] = node;
+                    }
+                }
+
+                if (toRemove.Count > 0)
+                {
+                    for (int i = 0; i < toRemove.Count; i++)
+                    {
+                        XmlNode n = toRemove[i];
+                        // Defensive: node might already be detached.
+                        if (n?.ParentNode == bml)
+                            bml.RemoveChild(n);
+                    }
+
+                    UnityEngine.Debug.LogWarning("[NVBG] PruneDuplicateBehaviors removed " + toRemove.Count + " duplicate behaviors.");
+                    document.Normalize();
+                }
+            }
+            catch (Exception e)
+            {
+                _logger?.LogError(e, "Error while pruning duplicate behaviors");
+            }
+        }
+
+        private static string BuildBehaviorDedupKey(XmlNode node)
+        {
+            // Minimal, stable key based on:
+            // - element name
+            // - relevant attributes
+            //
+            // For head nods, relax is the key time anchor in your output.
+            // We include other timing attrs too if present for future compatibility.
+
+            if (node?.Attributes == null)
+                return "";
+
+            string name = node.Name ?? "";
+
+            // Common timing attributes in your BML variants.
+            string start = node.Attributes["start"]?.Value ?? "";
+            string ready = node.Attributes["ready"]?.Value ?? "";
+            string stroke = node.Attributes["stroke"]?.Value ?? "";
+            string relax = node.Attributes["relax"]?.Value ?? "";
+
+            // Common identity attributes.
+            string type = node.Attributes["type"]?.Value ?? "";
+            string participant = node.Attributes["participant"]?.Value ?? "";
+            string target = node.Attributes["target"]?.Value ?? "";
+
+            // NOD-specific knobs (present in your XSL output).
+            string amount = node.Attributes["amount"]?.Value ?? "";
+            string repeats = node.Attributes["repeats"]?.Value ?? "";
+            string priority = node.Attributes["priority"]?.Value ?? "";
+
+            // Build a deterministic signature.
+            // If you later want "less strict" dedupe (time window based), change here.
+            return "name=" + name +
+                   "|type=" + type +
+                   "|participant=" + participant +
+                   "|target=" + target +
+                   "|start=" + start +
+                   "|ready=" + ready +
+                   "|stroke=" + stroke +
+                   "|relax=" + relax +
+                   "|amount=" + amount +
+                   "|repeats=" + repeats +
+                   "|priority=" + priority;
         }
 
         /// <summary>

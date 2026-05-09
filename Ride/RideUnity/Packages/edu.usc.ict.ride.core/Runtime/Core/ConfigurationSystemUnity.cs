@@ -1,4 +1,6 @@
 ﻿using System.IO;
+using System;
+using System.Reflection;
 using UnityEngine;
 using Newtonsoft.Json;
 
@@ -122,22 +124,21 @@ namespace Ride
         /// <returns>The parsed configuration, or <see cref="RideConfig.Default"/> on failure.</returns>
         public static RideConfig LoadFromJsonContent(string json)
         {
-            var config = RideConfig.Default;
-
             if (string.IsNullOrWhiteSpace(json))
-                return config;
+                return RideConfig.Default;
 
             try
             {
-                config = RideIO.JsonDeserialize<RideConfig>(json);
+                if (IsJsonCurrentVersion(json))
+                    return RideIO.JsonDeserialize<RideConfig>(json);
+
+                return LoadMergedOntoDefaults(json);
             }
-            catch (JsonReaderException e)
+            catch (Exception e)
             {
                 Debug.LogWarning($"ConfigurationSystemUnity.LoadFromJson() - error reading config contents. Is it out of date? Exception: {e}");
-                config = RideConfig.Default;
+                return RideConfig.Default;
             }
-
-            return config;
         }
 
         public static void Save(RideConfig config, string path)
@@ -147,6 +148,139 @@ namespace Ride
 
             string json = RideIO.JsonSerialize(config);
             File.WriteAllText(path, json);
+        }
+
+        [Serializable]
+        private class VersionNumber
+        {
+            public int Major;
+            public int Minor;
+            public int Build;
+            public int Revision;
+        }
+
+        [Serializable]
+        private class VersionProbe
+        {
+            public VersionNumber version;
+        }
+
+        private static bool IsJsonCurrentVersion(string json)
+        {
+            try
+            {
+                var probe = JsonConvert.DeserializeObject<VersionProbe>(json);
+                if (probe.version == null)
+                    return false;
+
+                return probe.version.Major == RideConfig.Default.version.Major &&
+                       probe.version.Minor == RideConfig.Default.version.Minor &&
+                       probe.version.Build == RideConfig.Default.version.Build &&
+                       probe.version.Revision == RideConfig.Default.version.Revision;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static RideConfig LoadMergedOntoDefaults(string json)
+        {
+            var result = RideConfig.Default;
+
+            var settings = new JsonSerializerSettings
+            {
+                MissingMemberHandling = MissingMemberHandling.Ignore,
+                NullValueHandling = NullValueHandling.Include,
+                DefaultValueHandling = DefaultValueHandling.Populate,
+                ObjectCreationHandling = ObjectCreationHandling.Replace,
+                Error = (sender, args) => { args.ErrorContext.Handled = true; }
+            };
+
+            RideConfig temp;
+            try
+            {
+                temp = JsonConvert.DeserializeObject<RideConfig>(json, settings);
+            }
+            catch
+            {
+                temp = default;
+            }
+
+            object boxedDst = result;
+            OverlayRecursive(temp, boxedDst, typeof(RideConfig));
+            return (RideConfig)boxedDst;
+        }
+
+        private static void OverlayRecursive(object src, object dst, Type t)
+        {
+            if (src == null || dst == null || IsLeaf(t))
+                return;
+
+            const BindingFlags Flags = BindingFlags.Instance | BindingFlags.Public;
+            var fields = t.GetFields(Flags);
+            for (int i = 0; i < fields.Length; i++)
+            {
+                var field = fields[i];
+                var fieldType = field.FieldType;
+                var srcVal = field.GetValue(src);
+                var dstVal = field.GetValue(dst);
+
+                if (IsLeaf(fieldType))
+                {
+                    if (LooksPresent(srcVal, fieldType))
+                        field.SetValue(dst, CoerceIfNeeded(srcVal, fieldType));
+                }
+                else if (srcVal != null)
+                {
+                    if (dstVal == null && fieldType.IsClass)
+                    {
+                        dstVal = Activator.CreateInstance(fieldType);
+                        field.SetValue(dst, dstVal);
+                    }
+
+                    OverlayRecursive(srcVal, dstVal, fieldType);
+                    field.SetValue(dst, dstVal);
+                }
+            }
+        }
+
+        private static bool IsLeaf(Type t)
+        {
+            if (t.IsPrimitive) return true;
+            if (t == typeof(string)) return true;
+            if (t.IsEnum) return true;
+            if (t == typeof(Version)) return true;
+
+            return false;
+        }
+
+        private static bool LooksPresent(object val, Type t)
+        {
+            if (val == null) return false;
+            if (t == typeof(string)) return !string.IsNullOrEmpty((string)val);
+            if (t.IsEnum) return true;
+            if (t == typeof(bool)) return true;
+            if (t == typeof(ushort)) return (ushort)val != default(ushort);
+            if (t == typeof(int)) return (int)val != default;
+            if (t == typeof(float)) return Math.Abs((float)val - default(float)) > float.Epsilon;
+            if (t == typeof(double)) return Math.Abs((double)val - default(double)) > double.Epsilon;
+            if (t == typeof(Version)) return true;
+
+            return true;
+        }
+
+        private static object CoerceIfNeeded(object val, Type t)
+        {
+            if (t == typeof(ushort))
+            {
+                int asInt = Convert.ToInt32(val);
+                if (asInt < 0) asInt = 0;
+                if (asInt > 65535) asInt = 65535;
+                return (ushort)asInt;
+            }
+
+            return val;
         }
 
         /// <summary>
@@ -209,18 +343,129 @@ namespace Ride
             return split[0];
         }
 
+        /// <summary>
+        /// Builds the configured RIDE REST API endpoint URL for the specified backend function.
+        /// </summary>
+        /// <param name="functionName">The REST API function path to append to the configured base URL and stage.</param>
+        /// <returns>
+        /// The full RIDE REST API endpoint URL, or <c>null</c> if the configuration system is unavailable
+        /// or the REST API configuration is incomplete.
+        /// </returns>
         public static string GetRideRestApi(string functionName)
         {
-            const string RideProductionApi = "https://e5kjenv7gc.execute-api.us-west-2.amazonaws.com/Prod";
-
-            string url = "";
             var configSystem = Systems.Get<ConfigurationSystemUnity>();
             if (configSystem == null)
-                url = $"{RideProductionApi}/{functionName}";
-            else
-                url = $"{configSystem.Config.restApi.url}/{configSystem.Config.restApi.stage}/{functionName}";
+            {
+                RideLog.LogError($"{nameof(ConfigurationSystemUnity)}.{nameof(GetRideRestApi)}() failed. ConfigurationSystemUnity is not available.");
+                return null;
+            }
 
-            return url;
+            if (string.IsNullOrWhiteSpace(configSystem.Config.restApi.url) ||
+                string.IsNullOrWhiteSpace(configSystem.Config.restApi.stage) ||
+                string.IsNullOrWhiteSpace(functionName))
+            {
+                RideLog.LogError($"{nameof(ConfigurationSystemUnity)}.{nameof(GetRideRestApi)}() failed. REST API configuration is incomplete.");
+                return null;
+            }
+
+            return $"{configSystem.Config.restApi.url}/{configSystem.Config.restApi.stage}/{functionName}";
+        }
+
+        /// <summary>
+        /// Gets the configured RIDE endpoint that creates signed storage URLs.
+        /// </summary>
+        /// <returns>
+        /// The configured signed URL endpoint, or <c>null</c> if the configuration system is unavailable
+        /// or the endpoint is not configured.
+        /// </returns>
+        public static string GetStorageSignedUrlEndpoint()
+        {
+            if (!TryGetRestApiSettings(nameof(GetStorageSignedUrlEndpoint), out var restApi))
+                return null;
+
+            return GetConfiguredEndpoint(restApi.signedUrlEndpoint, nameof(RideConfig.RestServerApiSettings.signedUrlEndpoint), nameof(GetStorageSignedUrlEndpoint));
+        }
+
+        /// <summary>Gets the configured RIDE WebGL proxy endpoint for Anthropic chat requests.</summary>
+        /// <returns>The configured Anthropic proxy endpoint, or <c>null</c> if it is not configured.</returns>
+        public static string GetAnthropicProxyEndpoint()
+        {
+            if (!TryGetRestApiSettings(nameof(GetAnthropicProxyEndpoint), out var restApi))
+                return null;
+
+            return GetConfiguredEndpoint(restApi.anthropicProxyEndpoint, nameof(RideConfig.RestServerApiSettings.anthropicProxyEndpoint), nameof(GetAnthropicProxyEndpoint));
+        }
+
+        /// <summary>Gets the configured RIDE WebGL proxy endpoint for OpenAI chat requests.</summary>
+        /// <returns>The configured OpenAI proxy endpoint, or <c>null</c> if it is not configured.</returns>
+        public static string GetOpenAIProxyEndpoint()
+        {
+            if (!TryGetRestApiSettings(nameof(GetOpenAIProxyEndpoint), out var restApi))
+                return null;
+
+            return GetConfiguredEndpoint(restApi.openAIProxyEndpoint, nameof(RideConfig.RestServerApiSettings.openAIProxyEndpoint), nameof(GetOpenAIProxyEndpoint));
+        }
+
+        /// <summary>Builds a configured RIDE WebGL proxy endpoint URL for Azure Text-To-Speech requests.</summary>
+        /// <param name="route">The proxy route to append to the configured Azure Text-To-Speech proxy endpoint.</param>
+        /// <returns>The configured Azure Text-To-Speech proxy URL, or <c>null</c> if it is not configured.</returns>
+        public static string GetAzureTtsProxyEndpoint(string route)
+        {
+            if (!TryGetRestApiSettings(nameof(GetAzureTtsProxyEndpoint), out var restApi))
+                return null;
+
+            return GetConfiguredEndpoint(restApi.azureTtsProxyEndpoint, nameof(RideConfig.RestServerApiSettings.azureTtsProxyEndpoint), nameof(GetAzureTtsProxyEndpoint), route);
+        }
+
+        /// <summary>Builds a configured RIDE WebGL proxy endpoint URL for ElevenLabs Text-To-Speech requests.</summary>
+        /// <param name="route">The proxy route to append to the configured ElevenLabs Text-To-Speech proxy endpoint.</param>
+        /// <returns>The configured ElevenLabs Text-To-Speech proxy URL, or <c>null</c> if it is not configured.</returns>
+        public static string GetElevenLabsTtsProxyEndpoint(string route)
+        {
+            if (!TryGetRestApiSettings(nameof(GetElevenLabsTtsProxyEndpoint), out var restApi))
+                return null;
+
+            return GetConfiguredEndpoint(restApi.elevenLabsTtsProxyEndpoint, nameof(RideConfig.RestServerApiSettings.elevenLabsTtsProxyEndpoint), nameof(GetElevenLabsTtsProxyEndpoint), route);
+        }
+
+        /// <summary>Builds a configured RIDE WebGL proxy endpoint URL for AWS Polly Text-To-Speech requests.</summary>
+        /// <param name="route">The proxy route to append to the configured AWS Polly Text-To-Speech proxy endpoint.</param>
+        /// <returns>The configured AWS Polly Text-To-Speech proxy URL, or <c>null</c> if it is not configured.</returns>
+        public static string GetPollyTtsProxyEndpoint(string route)
+        {
+            if (!TryGetRestApiSettings(nameof(GetPollyTtsProxyEndpoint), out var restApi))
+                return null;
+
+            return GetConfiguredEndpoint(restApi.pollyTtsProxyEndpoint, nameof(RideConfig.RestServerApiSettings.pollyTtsProxyEndpoint), nameof(GetPollyTtsProxyEndpoint), route);
+        }
+
+        private static bool TryGetRestApiSettings(string callerName, out RideConfig.RestServerApiSettings restApi)
+        {
+            restApi = default;
+
+            var configSystem = Systems.Get<ConfigurationSystemUnity>();
+            if (configSystem == null)
+            {
+                RideLog.LogError($"{nameof(ConfigurationSystemUnity)}.{callerName}() failed. ConfigurationSystemUnity is not available.");
+                return false;
+            }
+
+            restApi = configSystem.Config.restApi;
+            return true;
+        }
+
+        private static string GetConfiguredEndpoint(string endpoint, string endpointName, string callerName, string route = null)
+        {
+            if (string.IsNullOrWhiteSpace(endpoint))
+            {
+                RideLog.LogError($"{nameof(ConfigurationSystemUnity)}.{callerName}() failed. REST API endpoint '{endpointName}' is not configured.");
+                return null;
+            }
+
+            if (string.IsNullOrWhiteSpace(route))
+                return endpoint;
+
+            return $"{endpoint.TrimEnd('/')}/{route.TrimStart('/')}";
         }
 
         #endregion

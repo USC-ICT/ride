@@ -1,62 +1,81 @@
-﻿using Ride;
-using Ride.UI;
-using Ride.WorldState;
 using UnityEngine;
+using Ride.WorldState;
 
 namespace Ride.UI
 {
+    /// <summary>
+    /// Implements a world-space toggle backed by a <see cref="BillboardIcon"/> so users can select
+    /// and unselect billboards with pointer input.
+    /// </summary>
     public class BillboardIconToggle : RideToggle, IToggle, IBillboardIconToggle
     {
+        [Tooltip("The billboard icon whose highlighted state is driven by this toggle.")]
         public BillboardIcon billboardIcon;
 
         private bool interactable = true;
 
+        /// <summary>
+        /// Tracks the click result for the current frame.
+        /// 0 means no hit, 1 means the billboard was hit, and -1 means the click landed outside the billboard.
+        /// </summary>
+        private int hitThisFrame = 0;
+
+
         public override bool isOn { get => (billboardIcon != null) ? billboardIcon.IsHighlighted : false; set => billboardIcon.IsHighlighted = value; }
         public override bool isInteractable { get => interactable; set => interactable = value; }
 
-        /// <summary>
-        /// 0: no hit
-        /// 1: hit inside
-        /// -1: hit outside
-        /// </summary>
-        int hitThisFrame = 0;
-        public int HitThisFrame { get { return hitThisFrame; } }
+        /// <summary>Gets the click result recorded for the current frame.</summary>
+        public int HitThisFrame => hitThisFrame;
 
+
+        /// <summary>
+        /// Processes pointer input to toggle billboard selection and dispatch the corresponding world-state events.
+        /// </summary>
         protected override void Update()
         {
+            base.Update();
+
             if (interactable)
             {
-                if (Globals.api != null && Globals.api.inputSystem != null && Globals.api.inputSystem.GetMouseButtonUp(0))
+                if (Systems.Input != null && Systems.Input.GetMouseButtonUp(0))
                 {
-                    RideRay mouseRay = new RideRay(Camera.main.ScreenPointToRay(Globals.api.inputSystem.mousePosition.ToVector2()));
+                    RideRay mouseRay = new RideRay(Camera.main.ScreenPointToRay(Systems.Input.mousePosition.ToVector2()));
                     RideRaycastHit hitInfo = RideMath.GetRaycastHit(mouseRay.origin, mouseRay.direction, RideLayerMask.AllLayers);
                     if (hitInfo.isHit)
                     {
-                        if (ChildBelongToToggle(hitInfo.transform)) {
+                        if (ChildBelongToToggle(hitInfo.transform))
+                        {
                             isOn = !isOn;
                             hitThisFrame = 1;
-                            Globals.api.worldStateSystem.DispatchEvent(WorldEvent.billboardSelected, new BillboardSelectedEvent(id));
-
+                            Systems.WorldState.DispatchEvent(WorldEvent.billboardSelected, new BillboardSelectedEvent(id));
                         }
-                        else{
+                        else
+                        {
                             isOn = false;
                             hitThisFrame = -1;
-                            Globals.api.worldStateSystem.DispatchEvent(WorldEvent.billboardUnselected, new BillboardUnselectedEvent(id));
+                            Systems.WorldState.DispatchEvent(WorldEvent.billboardUnselected, new BillboardUnselectedEvent(id));
                         }
                     }
-                    else {
+                    else
+                    {
                         isOn = false;
                         hitThisFrame = -1;
-                        Globals.api.worldStateSystem.DispatchEvent(WorldEvent.billboardUnselected, new BillboardUnselectedEvent(id));
+                        Systems.WorldState.DispatchEvent(WorldEvent.billboardUnselected, new BillboardUnselectedEvent(id));
                     }
                 }
-                else {
+                else
+                {
                     hitThisFrame = 0;
                 }
             }
         }
 
-        bool ChildBelongToToggle(Transform child)
+        /// <summary>
+        /// Determines whether the supplied transform belongs to this toggle or one of its child transforms.
+        /// </summary>
+        /// <param name="child">The transform to inspect.</param>
+        /// <returns>True if the transform resolves back to this toggle; otherwise, false.</returns>
+        private bool ChildBelongToToggle(Transform child)
         {
             if (child.GetComponent<BillboardIconToggle>() == this)
                 return true;

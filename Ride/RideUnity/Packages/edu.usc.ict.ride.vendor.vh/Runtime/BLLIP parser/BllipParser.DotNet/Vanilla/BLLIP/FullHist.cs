@@ -1,6 +1,8 @@
 using System;
 using System.Diagnostics;
 
+using static BllipParser.DotNet.Vanilla.utils;
+
 
 namespace BllipParser.DotNet.Vanilla
 {
@@ -19,7 +21,7 @@ namespace BllipParser.DotNet.Vanilla
         public Bchart cb;
         public int hpos;
         public int preTerm;
-        public FullHist [] fharray = new FullHist[400];
+        public FullHist [] fharray;  //public FullHist [] fharray = new FullHist[400];
         public int size;
 
 
@@ -62,25 +64,71 @@ namespace BllipParser.DotNet.Vanilla
         }
 
 
-        public FullHist extendByEdge(Edge e1)
+        private void Init(int term, FullHist back, Item itm, Bchart cb)
+        {
+            cpos = 0;
+            e = null;
+            this.itm = itm;
+            this.term = term;
+            this.back = back;
+            pos = -1;
+            hd = null;
+            this.cb = cb;
+            // leave hpos/preTerm as-is
+        }
+
+
+        public void InitForEdge(Edge edge, Bchart cb)
+        {
+            cpos = 0;
+            e = edge;
+
+            itm = null;
+            term = 0;
+
+            back = null;
+            pos = -1;
+            hd = null;
+
+            this.cb = cb;
+
+            // Match constructor-default behavior (avoid stale pooled values).
+            hpos = 0;
+            preTerm = 0;
+
+            // Keep the pooled array, but reset logical state.
+            size = 0;
+        }
+
+
+        public FullHist extendByEdge(Edge e1, Item [] lrScratchBuffer)
         {
             //cerr << "ebe " << *e1 << endl;
             if (back != null)
-                Debug.Assert(back.term != Term.stopTerm.toInt());
+                AssertInternal(back.term != Term.stopTerm.toInt());
 
             //if(back) assert(back->term != 47);
 
+            if (fharray == null)
+                fharray = new FullHist[400];
+
             e = e1;
-            LeftRightGotIter gi = new LeftRightGotIter(e1);
+            LeftRightGotIter gi = new LeftRightGotIter(e1, lrScratchBuffer);
             int i = 0;
             while (gi.next(out Item itm))
             {
                 int termInt = itm.term().toInt();
                 //cerr << "ebei " << termInt << endl;
-                FullHist st = new FullHist(termInt, this, itm);
-                Debug.Assert(i < 400);
-                fharray[i++] = st;
-                st.cpos = 0;
+                AssertInternal(i < 400);
+
+                //FullHist st = new FullHist(termInt, this, itm);
+                //fharray[i++] = st;
+                //st.cpos = 0;
+                FullHist st = fharray[i];
+                if (st == null)
+                    fharray[i] = st = new FullHist();
+                st.Init(termInt, this, itm, cb);
+                i++;
             }
 
             //cerr << "ebe ret " << *fharray[hpos] << endl;
@@ -112,6 +160,10 @@ namespace BllipParser.DotNet.Vanilla
 
         public FullHist retractByEdge()
         {
+            if (fharray != null && size > 0)
+                Array.Clear(fharray, 0, size);
+            size = 0;
+
             //assert(cpos == size);
             int i = 0;
             for (; i < size; i++)

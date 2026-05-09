@@ -11,9 +11,33 @@ namespace Ride.SpeechRecognition
     {
         UnityEngine.Windows.Speech.DictationRecognizer m_dictationRecognizer;
 
-        public override bool IsSupported => VHUtils.IsWindows10OrGreater() && m_dictationRecognizer != null && m_dictationRecognizer.Status != UnityEngine.Windows.Speech.SpeechSystemStatus.Failed;
-        public override float AutoSilenceTimeoutSeconds { get => m_dictationRecognizer.AutoSilenceTimeoutSeconds; set => m_dictationRecognizer.AutoSilenceTimeoutSeconds = value; }
-        public override float InitialSilenceTimeoutSeconds { get => m_dictationRecognizer.InitialSilenceTimeoutSeconds; set => m_dictationRecognizer.InitialSilenceTimeoutSeconds = value; }
+        public override bool IsSupported => 
+            VHUtils.IsWindows10OrGreater() && 
+            m_dictationRecognizer != null && 
+            m_dictationRecognizer.Status != UnityEngine.Windows.Speech.SpeechSystemStatus.Failed;
+
+        public override float AutoSilenceTimeoutSeconds
+        {
+            get => base.AutoSilenceTimeoutSeconds;
+            set
+            {
+                base.AutoSilenceTimeoutSeconds = value;
+                if (m_dictationRecognizer != null)
+                    m_dictationRecognizer.AutoSilenceTimeoutSeconds = base.AutoSilenceTimeoutSeconds;
+            }
+        }
+
+        public override float InitialSilenceTimeoutSeconds
+        {
+            get => base.InitialSilenceTimeoutSeconds;
+            set
+            {
+                base.InitialSilenceTimeoutSeconds = value;
+                if (m_dictationRecognizer != null)
+                    m_dictationRecognizer.InitialSilenceTimeoutSeconds = base.InitialSilenceTimeoutSeconds;
+            }
+        }
+
         public override bool SupportsContinuousRecognition => true;
 
         /// <inheritdoc/>
@@ -61,7 +85,9 @@ namespace Ride.SpeechRecognition
                 StopRecognizing();
             };
 
-            m_dictationRecognizer.InitialSilenceTimeoutSeconds = 999;
+            // Apply inspector-configured timeouts from base class.
+            m_dictationRecognizer.AutoSilenceTimeoutSeconds = AutoSilenceTimeoutSeconds;
+            m_dictationRecognizer.InitialSilenceTimeoutSeconds = InitialSilenceTimeoutSeconds;
         }
 
         /// <inheritdoc/>

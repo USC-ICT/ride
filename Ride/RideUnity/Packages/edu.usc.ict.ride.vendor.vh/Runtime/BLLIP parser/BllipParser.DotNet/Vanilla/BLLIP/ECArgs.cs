@@ -31,7 +31,7 @@ namespace BllipParser.DotNet.Vanilla
                 {
                     nopts_++;
                     int l = (int)arg.length();
-                    Debug.Assert(l > 1);
+                    AssertInternal(l > 1);
                     ECString opt = new ECString(1, arg[1]);
                     optList.push_back(opt);
                     if (l == 2)

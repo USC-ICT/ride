@@ -24,24 +24,32 @@ namespace VHAssets
     public class GazeController_IK : GazeController
     {
         #region Fields
+        [Header("Gaze Weights")]
+        [SerializeField][Range(0f, 1f)] private float m_EyeGazeWeight = 1f;
         [SerializeField][Range(0f, 1f)] private float m_HeadGazeWeight = 0.5f;
         [SerializeField][Range(0f, 1f)] private float m_BodyGazeWeight = 0;
-        [SerializeField][Range(0f, 1f)] private float m_EyeGazeWeight = 1f;
 
-        [SerializeField][Range(0f, 1f)] private float m_CurrentTotalGazeWeight = 0;
+        [Header("Runtime (Debug / Visualization Only)")]
+        [Tooltip(
+            "These values show the *current, runtime-applied* gaze weights after fades and IK blending.\n" +
+            "They are for debugging and visualization only.\n" +
+            "Changing these in the inspector has no effect; they are overwritten every frame.\n" +
+            "They may differ from the configured weights due to fades, angle thresholds, or solver behavior."
+        )]
         [SerializeField][Range(0f, 1f)] private float m_CurrentEyeGazeWeight = 0;
         [SerializeField][Range(0f, 1f)] private float m_CurrentHeadGazeWeight = 0;
         [SerializeField][Range(0f, 1f)] private float m_CurrentBodyGazeWeight = 0;
+        [SerializeField][Range(0f, 1f)] private float m_CurrentTotalGazeWeight = 0;
 
         private Animator m_Animator;
         #endregion
 
         #region Properties
-        public override float HeadGazeWeight { get => m_HeadGazeWeight; set => m_HeadGazeWeight = value; }
         public override float EyeGazeWeight { get => m_EyeGazeWeight; set => m_EyeGazeWeight = value; }
+        public override float HeadGazeWeight { get => m_HeadGazeWeight; set => m_HeadGazeWeight = value; }
         public override float BodyGazeWeight { get => m_BodyGazeWeight; set => m_BodyGazeWeight = value; }
-        public override float CurrentHeadGazeWeight { get => m_CurrentHeadGazeWeight; set => m_CurrentHeadGazeWeight = value; }
         public override float CurrentEyeGazeWeight { get => m_CurrentEyeGazeWeight; set => m_CurrentEyeGazeWeight = value; }
+        public override float CurrentHeadGazeWeight { get => m_CurrentHeadGazeWeight; set => m_CurrentHeadGazeWeight = value; }
         public override float CurrentBodyGazeWeight { get => m_CurrentBodyGazeWeight; set => m_CurrentBodyGazeWeight = value; }
         public override float CurrentTotalGazeWeight { get => m_CurrentTotalGazeWeight; set => m_CurrentTotalGazeWeight = value; }
         #endregion
@@ -59,6 +67,13 @@ namespace VHAssets
             UpdateGaze();
         }
 
+        protected override void OnDrawGizmosSelected()
+        {
+            base.OnDrawGizmosSelected();
+
+            DebugDrawRigGizmos();
+        }
+
         /// <summary>
         /// Initializes the gaze system for a loaded asset, ensuring that
         /// an <see cref="Animator"/> is available and that an initial gaze
@@ -68,8 +83,10 @@ namespace VHAssets
         /// has finished loading, but can also be used for immediate initialization
         /// on non-loadable characters.
         /// </summary>
-        public void InitializeLoadedAsset()
+        public override void InitializeLoadedAsset()
         {
+            base.InitializeLoadedAsset();
+
             EnsureAnimator();
             EnsureGazeOrigin();
 
@@ -78,6 +95,20 @@ namespace VHAssets
                 InitGaze(m_GazeTarget);
                 SetGazeTargetWithSpeed(m_GazeTarget, GazeParts.All);
             }
+        }
+
+        public override void ResetLoadedAsset()
+        {
+            base.ResetLoadedAsset();
+
+            // Clear cached reference; next InitializeLoadedAsset will re-find it.
+            m_Animator = null;
+
+            // Reset runtime weights (keeps inspector defaults intact).
+            m_CurrentEyeGazeWeight = 0f;
+            m_CurrentHeadGazeWeight = 0f;
+            m_CurrentBodyGazeWeight = 0f;
+            m_CurrentTotalGazeWeight = 0f;
         }
 
         /// <summary>
@@ -94,7 +125,13 @@ namespace VHAssets
         /// </summary>
         public override void UpdateGaze()
         {
-            if (m_GazeTarget == null || m_Animator == null)
+            if (m_Animator == null)
+                EnsureAnimator();
+
+            if (m_Animator == null)
+                return;
+
+            if (m_GazeTarget == null)
                 return;
 
             // Position: where the character should look.
@@ -186,17 +223,81 @@ namespace VHAssets
         /// 
         /// This override:
         /// - Ensures that an <see cref="Animator"/> is available
-        /// - Forces <see cref="CurrentTotalGazeWeight"/> to 1.0 so that
-        ///   the IK look-at can use the full range of the per-channel weights
         /// - Delegates to the base implementation to configure gaze state,
         ///   fades, and positional transitions
         /// </summary>
         protected override void InitGaze(GameObject gazeTarget)
         {
             EnsureAnimator();
-            m_CurrentTotalGazeWeight = 1;
 
             base.InitGaze(gazeTarget);
+        }
+
+        private static readonly Color DebugColorEyes = new(0.2f, 1f, 0.2f); // green
+        private static readonly Color DebugColorHead = new(1f, 0.8f, 0.1f); // yellow
+        private static readonly Color DebugColorBody = new(0.2f, 0.6f, 1f); // blue
+
+        private void DebugDrawRigGizmos()
+        {
+            if (!m_DebugDrawGaze)
+                return;
+
+            if (m_GazeTarget == null)
+                return;
+
+            if (m_Animator == null)
+                return;
+
+            Avatar avatar = m_Animator.avatar;
+            if (avatar == null || !avatar.isValid || !avatar.isHuman)
+                return;
+
+            Vector3 origin = (m_GazeOrigin != null) ? m_GazeOrigin.position : transform.position;
+            Vector3 rawTargetPos = m_GazeTarget.transform.position;
+            Vector3 finalGazePos = GetGazePosition();
+
+            Vector3 debugTargetPos = finalGazePos;
+
+            Transform head = m_Animator.GetBoneTransform(HumanBodyBones.Head);
+            Transform leftEye = m_Animator.GetBoneTransform(HumanBodyBones.LeftEye);
+            Transform rightEye = m_Animator.GetBoneTransform(HumanBodyBones.RightEye);
+
+            Transform chest = m_Animator.GetBoneTransform(HumanBodyBones.Chest);
+            Transform upperChest = m_Animator.GetBoneTransform(HumanBodyBones.UpperChest);
+            Transform spine = m_Animator.GetBoneTransform(HumanBodyBones.Spine);
+            Transform body = upperChest != null ? upperChest : (chest != null ? chest : spine);
+
+            DebugDrawBoneGizmos(leftEye, debugTargetPos, DebugColorEyes);
+            DebugDrawBoneGizmos(rightEye, debugTargetPos, DebugColorEyes);
+            DebugDrawBoneGizmos(head, debugTargetPos, DebugColorHead);
+            DebugDrawBoneGizmos(body, debugTargetPos, DebugColorBody);
+        }
+
+        private static readonly Color DebugColorFwd  = new(1f, 0.3f, 0.3f); // red
+
+        private void DebugDrawBoneGizmos(Transform bone, Vector3 targetPos, Color boneColor)
+        {
+            const float DebugRigRayLength = 0.25f;
+
+            if (bone == null)
+                return;
+
+            Vector3 bonePos = bone.position;
+            Vector3 toTarget = targetPos - bonePos;
+            if (toTarget.sqrMagnitude < 0.000001f)
+                return;
+
+            Vector3 toTargetDir = toTarget.normalized;
+            Vector3 boneForward = bone.forward;
+
+            // Draw bone forward ray and bone->target ray
+            var origColor = Gizmos.color;
+            Gizmos.color = DebugColorFwd;
+            Gizmos.DrawLine(bonePos, bonePos + boneForward * DebugRigRayLength);
+            Gizmos.color = boneColor;
+            Gizmos.DrawLine(bonePos, bonePos + toTargetDir * DebugRigRayLength);
+            Gizmos.DrawWireSphere(bonePos, 0.01f);
+            Gizmos.color = origColor;
         }
         #endregion
     }

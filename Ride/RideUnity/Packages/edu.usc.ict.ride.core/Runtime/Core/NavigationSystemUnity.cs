@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using Unity.AI.Navigation;
@@ -40,7 +40,7 @@ namespace Ride.Terrain.Navigation
             LoadNavigationProgress progress = new LoadNavigationProgress();
             loadNavigationProgress?.Report(progress);
 
-            NavigationMono navMeshAsset = GetAssetFromPath(customMeshPath);
+            NavigationUnity navMeshAsset = GetAssetFromPath(customMeshPath);
             if (navMeshAsset != null)
                 navMeshAsset.StartCoroutine(GenerateNavMeshCustom(navMeshAsset, progress));
             else
@@ -73,7 +73,7 @@ namespace Ride.Terrain.Navigation
                 {
                     case NavigationMeshGenerationType.Tiled:
 #if false
-                        NavigationMono navMono = (terrainMono.terrainRoot.GetComponentInChildren<NavigationMono>() == null) ? terrainMono.terrainRoot.AddComponent<NavigationMono>() : terrainMono.terrainRoot.GetComponentInChildren<NavigationMono>();
+                        NavigationUnity navMono = (terrainMono.terrainRoot.GetComponentInChildren<NavigationUnity>() == null) ? terrainMono.terrainRoot.AddComponent<NavigationUnity>() : terrainMono.terrainRoot.GetComponentInChildren<NavigationUnity>();
                         navMono.StartCoroutine(GenerateNavMeshTiled(terrainMono.terrainRoot, progress));
                         navMeshDataList.Add(navMono);
                         return navMono;
@@ -85,7 +85,7 @@ namespace Ride.Terrain.Navigation
 #if false
                         GameObject newObject = new GameObject("CombinedTerrain");
                         newObject.transform.parent = terrainMono.terrainRoot.transform;
-                        navMono = newObject.AddComponent<NavigationMono>();
+                        navMono = newObject.AddComponent<NavigationUnity>();
                         navMono.StartCoroutine(GenerateNavMeshCombined(terrainMono.terrainRoot, progress, navMono));
                         navMeshDataList.Add(navMono);
                         return navMono;
@@ -119,7 +119,7 @@ namespace Ride.Terrain.Navigation
         /// <returns>True if navigation mesh data rebuilds successfully</returns>
         public bool RebuildNavMesh(INavigation navMeshData)
         {
-            if (navMeshData != null && navMeshData is NavigationMono navMeshDataMono)
+            if (navMeshData != null && navMeshData is NavigationUnity navMeshDataMono)
             {
                 navMeshDataMono.StartCoroutine(RebuildNavMesh_Internal(navMeshDataMono));
                 return true;
@@ -145,7 +145,7 @@ namespace Ride.Terrain.Navigation
         /// <returns>True if there was navigation mesh data to clear</returns>
         public bool ClearNavMeshData(INavigation navMeshData)
         {
-            if (navMeshData != null && navMeshData is NavigationMono navMeshDataMono)
+            if (navMeshData != null && navMeshData is NavigationUnity navMeshDataMono)
             {
                 foreach (NavMeshSurface surface in navMeshDataMono.GetComponentsInChildren<NavMeshSurface>())
                     surface.RemoveData();
@@ -207,7 +207,7 @@ namespace Ride.Terrain.Navigation
             MeshFilter clonedAsset = (meshAsset != null) ? UnityEngine.Object.Instantiate(meshAsset) : null;
             if (clonedAsset != null)
             {
-                NavigationMono navMonoAsset = clonedAsset.gameObject.AddComponent<NavigationMono>();
+                NavigationUnity navMonoAsset = clonedAsset.gameObject.AddComponent<NavigationUnity>();
                 navMonoAsset.StartCoroutine(PlaceNavMeshObstacle_Custom_Internal(navMonoAsset, position.ToVector3(), rotation.ToVector3(), localScale.ToVector3()));
             }
 #endif
@@ -216,7 +216,7 @@ namespace Ride.Terrain.Navigation
 
 
         #region NavigationSystemMono funcs
-        IEnumerator GenerateNavMeshCustom(NavigationMono customNavMesh, LoadNavigationProgress progress)
+        IEnumerator GenerateNavMeshCustom(NavigationUnity customNavMesh, LoadNavigationProgress progress)
         {
             Debug.Log("Building Nav Mesh (Custom)");
             float startTime = Time.realtimeSinceStartup;
@@ -238,7 +238,7 @@ namespace Ride.Terrain.Navigation
             }
         }
 
-        IEnumerator GenerateNavMeshCombined(GameObject terrainRoot, LoadNavigationProgress progress, NavigationMono navMono = null)
+        IEnumerator GenerateNavMeshCombined(GameObject terrainRoot, LoadNavigationProgress progress, NavigationUnity navMono = null)
         {
             Debug.Log("Building Nav Mesh (Combined)");
             float startTime = Time.realtimeSinceStartup;
@@ -291,7 +291,7 @@ namespace Ride.Terrain.Navigation
             Debug.Log("Nav mesh built in: " + (Time.realtimeSinceStartup - startTime).ToString("F10"));
         }
 
-        private GameObject CombineTerrain(GameObject terrainRoot, NavigationMono navMono = null)
+        private GameObject CombineTerrain(GameObject terrainRoot, NavigationUnity navMono = null)
         {
             List<MeshFilter> meshFilterList = new List<MeshFilter>(terrainRoot.transform.GetComponentsInChildren<MeshFilter>());
             meshFilterList.RemoveAll(x => x.GetComponent<MeshRenderer>() == null);
@@ -321,13 +321,13 @@ namespace Ride.Terrain.Navigation
             return combinedTerrain;
         }
 
-        private NavigationMono GetAssetFromPath(string path)
+        private NavigationUnity GetAssetFromPath(string path)
         {
 #if UNITY_EDITOR
             GameObject assetObj = AssetDatabase.LoadAssetAtPath<GameObject>(path);
             MeshFilter meshAsset = assetObj.GetComponentInChildren<MeshFilter>();
             MeshFilter clonedAsset = (meshAsset != null) ? UnityEngine.Object.Instantiate(meshAsset) : null;
-            return (clonedAsset != null) ? clonedAsset.gameObject.AddComponent<NavigationMono>() : null;
+            return (clonedAsset != null) ? clonedAsset.gameObject.AddComponent<NavigationUnity>() : null;
 #else
             return null; // TODO: Implement alternative method of retrieving mesh asset
 #endif
@@ -356,7 +356,7 @@ namespace Ride.Terrain.Navigation
 
         IEnumerator PlaceNavMeshObstacle_Custom_Internal(INavigation obstacleData, Vector3 position, Vector3 rotation, Vector3 localScale)
         {
-            if (obstacleData is NavigationMono obstacleDataMono)
+            if (obstacleData is NavigationUnity obstacleDataMono)
             {
                 NavMeshModifier navMeshModifier = obstacleDataMono.gameObject.AddComponent<NavMeshModifier>();
                 navMeshModifier.transform.SetPositionAndRotation(position, Quaternion.Euler(rotation));
@@ -366,7 +366,7 @@ namespace Ride.Terrain.Navigation
 
                 foreach (INavigation navMeshData in navMeshDataList)
                 {
-                    if (navMeshData is NavigationMono navMeshDataMono)
+                    if (navMeshData is NavigationUnity navMeshDataMono)
                         yield return navMeshDataMono.StartCoroutine(RebuildNavMesh_Internal(navMeshDataMono));
                 }
 
@@ -375,7 +375,7 @@ namespace Ride.Terrain.Navigation
             }
         }
 
-        IEnumerator RebuildNavMesh_Internal(NavigationMono navMeshDataMono)
+        IEnumerator RebuildNavMesh_Internal(NavigationUnity navMeshDataMono)
         {
             if (navMeshDataMono != null)
             {

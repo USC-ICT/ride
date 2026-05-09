@@ -6,7 +6,7 @@ namespace BllipParser.DotNet.Vanilla
     class FBinaryArray
     {
         int size_;
-        public Feat [] array_;
+        Feat [] array_;
 
 
         public FBinaryArray()
@@ -18,39 +18,50 @@ namespace BllipParser.DotNet.Vanilla
         public void set(int sz)
         {
             size_ = sz;
-            array_ = new Feat[sz];
-            for (int i = 0; i < array_.Length; i++)
-                array_[i] = new Feat();
+            //array_ = new Feat[sz];
+            if (array_ == null || array_.Length < sz)
+                array_ = new Feat[sz];
         }
 
 
-        public Feat find(in int id)
+        //Feat* FBinaryArray::find(const int id) const
+
+        public bool try_find_index(int id, out int index)
         {
             int top = size_;
             int bot = -1;
-            int midInd;
-            for ( ; ; )
+
+            while (true)
             {
                 if (top <= bot + 1)
                 {
-                    return null;
+                    index = -1;
+                    return false;
                 }
 
                 int mid = (top + bot) / 2;
-                Feat midH = array_[mid];
-                midInd = midH.ind();
+                int midInd = array_[mid].ind_;
+
                 if (id == midInd)
-                    return midH;
+                {
+                    index = mid;
+                    return true;
+                }
                 else if (id < midInd)
+                {
                     top = mid;
+                }
                 else
+                {
                     bot = mid;
+                }
             }
         }
 
 
         public int size() { return size_; }
-        public Feat index(int i) { return array_[i]; }
+        public ref Feat index_ref(int i) { return ref array_[i]; }
+        public ref readonly Feat index_ref_readonly(int i) { return ref array_[i]; }
     }
 
 
@@ -69,9 +80,21 @@ namespace BllipParser.DotNet.Vanilla
         public void set(int sz)
         {
             size_ = sz;
-            array_ = new FeatureTree[sz];
-            for (int i = 0; i < array_.Length; i++)
-                array_[i] = new FeatureTree();
+
+            // Reuse backing array (avoid per-set allocations).
+            if (array_ == null || array_.Length < sz)
+            {
+                // Grow; keep existing objects.
+                int oldLen = array_ != null ? array_.Length : 0;
+                Array.Resize(ref array_, sz);
+
+                for (int i = oldLen; i < sz; i++)
+                    array_[i] = new FeatureTree();
+            }
+
+            // Reset only the active range that will be filled by the reader.
+            for (int i = 0; i < sz; i++)
+                array_[i].ResetForRead();
         }
 
 

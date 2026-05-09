@@ -250,86 +250,127 @@ MonoBehaviour:
   m_streams:
   - fileName: NVBG_behavior_description.xsl
     textAsset: {fileID: 4900000, guid: 9d6391c31ed95a849900d970353c668b, type: 3}
+    isZip: 0
   - fileName: NVBG_rules.xsl
     textAsset: {fileID: 4900000, guid: 32475dd59d969b24a9d0ad6116343b2b, type: 3}
+    isZip: 0
   - fileName: NVBG_transform.xsl
     textAsset: {fileID: 4900000, guid: 92e811dcdf491ec46a04f5c550f41976, type: 3}
+    isZip: 0
   - fileName: rule_input_ChrKevin.xml
     textAsset: {fileID: 4900000, guid: 1f10124ad8f62174b952879c2d4bd34a, type: 3}
+    isZip: 0
   - fileName: saliency_map_init_kevin.xml
     textAsset: {fileID: 4900000, guid: 5de5315935e5e2741aa7bffc8b879088, type: 3}
+    isZip: 0
   - fileName: endings.txt
     textAsset: {fileID: 4900000, guid: 7ee7f7a24abcd414aaad165ee6fd2bed, type: 3}
+    isZip: 1
   - fileName: featInfo.h
     textAsset: {fileID: 4900000, guid: 31da19ec7856c56429fb63e1df046adf, type: 3}
+    isZip: 0
   - fileName: featInfo.l
     textAsset: {fileID: 4900000, guid: b767d68684a867b46b29ac8fc58461de, type: 3}
+    isZip: 0
   - fileName: featInfo.lm
     textAsset: {fileID: 4900000, guid: 184b1629ee1ece74b82ed6168379fdca, type: 3}
+    isZip: 0
   - fileName: featInfo.m
     textAsset: {fileID: 4900000, guid: ab40791878ef7ba4b929f1dcf5c3e21e, type: 3}
+    isZip: 0
   - fileName: featInfo.r
     textAsset: {fileID: 4900000, guid: 081e8ad2141b656489f9977c8cefdd80, type: 3}
+    isZip: 0
   - fileName: featInfo.rm
     textAsset: {fileID: 4900000, guid: f08c13bc7a8051f458ac8003b629ed64, type: 3}
+    isZip: 0
   - fileName: featInfo.ru
     textAsset: {fileID: 4900000, guid: b84196ba7266c5e4db63f3b6d539ca33, type: 3}
+    isZip: 0
   - fileName: featInfo.s
     textAsset: {fileID: 4900000, guid: b4b218193c392324fb044ab1b0544b7a, type: 3}
+    isZip: 0
   - fileName: featInfo.t
     textAsset: {fileID: 4900000, guid: c4dda0a50ef52c447bfeeb78c71abd70, type: 3}
+    isZip: 0
   - fileName: featInfo.tt
     textAsset: {fileID: 4900000, guid: 90938482cf7c6da48aa23e47fd38e2e9, type: 3}
+    isZip: 0
   - fileName: featInfo.u
     textAsset: {fileID: 4900000, guid: f695fd5ac68779c46b3c254e708062b4, type: 3}
+    isZip: 0
   - fileName: h.g
     textAsset: {fileID: 4900000, guid: a3f96f348b85cf045a3cf1bdd57e7881, type: 3}
+    isZip: 1
   - fileName: h.lambdas
     textAsset: {fileID: 4900000, guid: f7a7010cadf73374e9ef6ee1d9cfc4be, type: 3}
+    isZip: 0
   - fileName: headInfo.txt
     textAsset: {fileID: 4900000, guid: 7d312dc26ea0a8849bdad3a9b0a668ba, type: 3}
+    isZip: 0
   - fileName: l.g
     textAsset: {fileID: 4900000, guid: 873dacc27a7f56e47999cd92e1cec294, type: 3}
+    isZip: 1
   - fileName: l.lambdas
     textAsset: {fileID: 4900000, guid: 69733212dd0c07641921cd666526dcda, type: 3}
+    isZip: 0
   - fileName: lm.g
     textAsset: {fileID: 4900000, guid: 3e837fbf04b125348bb6dcde2bfd28de, type: 3}
+    isZip: 1
   - fileName: lm.lambdas
     textAsset: {fileID: 4900000, guid: e3db213b228496440bd33109467aa52b, type: 3}
+    isZip: 0
   - fileName: m.g
     textAsset: {fileID: 4900000, guid: b1b41e4d68acdc7439432721f6d8beed, type: 3}
+    isZip: 1
   - fileName: m.lambdas
     textAsset: {fileID: 4900000, guid: cf112bb87526cea4598c6116020e25b1, type: 3}
+    isZip: 0
   - fileName: nttCounts.txt
     textAsset: {fileID: 4900000, guid: 587bf8ccafd31b44ab9e67738f9374ce, type: 3}
+    isZip: 0
   - fileName: pSgT.txt
     textAsset: {fileID: 4900000, guid: 76bd22942bf8fe841bff80f253586d65, type: 3}
+    isZip: 1
   - fileName: pUgT.txt
     textAsset: {fileID: 4900000, guid: 2aa895079dddf90418a7e8b3894db2ad, type: 3}
+    isZip: 0
   - fileName: r.g
     textAsset: {fileID: 4900000, guid: ac9ccbd698d3ca641803879c01acf9dd, type: 3}
+    isZip: 1
   - fileName: r.lambdas
     textAsset: {fileID: 4900000, guid: 23a8128465453a34fbf6379612441bcc, type: 3}
+    isZip: 0
   - fileName: rm.g
     textAsset: {fileID: 4900000, guid: ead8a17a1e95e8947a7abd200d0952bf, type: 3}
+    isZip: 1
   - fileName: rm.lambdas
     textAsset: {fileID: 4900000, guid: 8fd22a1ed5bbb744f9adc07bf9e0ab10, type: 3}
+    isZip: 0
   - fileName: ru.g
     textAsset: {fileID: 4900000, guid: 3c910a3a22934db49a3f35e7d183bede, type: 3}
+    isZip: 1
   - fileName: ru.lambdas
     textAsset: {fileID: 4900000, guid: def87e4e8533805499c3803577867536, type: 3}
+    isZip: 0
   - fileName: terms.txt
     textAsset: {fileID: 4900000, guid: 3120067855dc31c47bd674e5a025cb67, type: 3}
+    isZip: 0
   - fileName: tt.g
     textAsset: {fileID: 4900000, guid: d594e822269f2544f840755c93d57693, type: 3}
+    isZip: 1
   - fileName: tt.lambdas
     textAsset: {fileID: 4900000, guid: b3821377d31a2e8429fdbb5ead98e8b9, type: 3}
+    isZip: 0
   - fileName: u.g
     textAsset: {fileID: 4900000, guid: e2220d293874a5b40b8751ea72c9dd48, type: 3}
+    isZip: 1
   - fileName: u.lambdas
     textAsset: {fileID: 4900000, guid: a9f1606731730e14a80d2540661368a5, type: 3}
+    isZip: 0
   - fileName: unitRules.txt
     textAsset: {fileID: 4900000, guid: 6e2863258284e3844bc0ac05165e9811, type: 3}
+    isZip: 0
   CharacterId: Kevin
   IdlePostureId: ChrGenericMleAdult@IdleStandingUpright01
   m_launchOnStartup: 1

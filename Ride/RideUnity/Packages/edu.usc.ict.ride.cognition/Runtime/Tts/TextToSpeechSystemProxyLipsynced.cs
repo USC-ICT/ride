@@ -37,7 +37,12 @@ namespace Ride.TextToSpeech
         protected virtual void OnProxyAudioSpeechGeneration(AudioSpeechMap audioSpeechMap)
         {
             StartCoroutine(WaitForTTSCompletion(() =>
-                CompleteLipsyncGeneration(LipsyncAutoScheduler.RescaleLipsyncTime(TextToSpeechXMLBuilder.BuildSpeechXML(audioSpeechMap), generatedAudioLength))));
+            {
+                string xml = audioSpeechMap != null ? TextToSpeechXMLBuilder.BuildSpeechXML(audioSpeechMap) : string.Empty;
+                xml = LipsyncAutoScheduler.RescaleLipsyncTime(xml, generatedAudioLength);
+                LogSpeechXmlDebug(audioSpeechMap, xml, "Proxy");
+                CompleteLipsyncGeneration(xml);
+            }));
         }
 
         protected virtual IEnumerator WaitForTTSCompletion(System.Action callback)

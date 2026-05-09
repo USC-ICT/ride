@@ -36,9 +36,8 @@ namespace BllipParser.DotNet.Vanilla
         int finish_;
         Term term_;
         Wrd word_;
-        list<Edge> needme_;	/* A list of rules requiring a term starting at start */
-
-        list<Edge> ineed_;	// needme = rules predicted by this (art) item
+        vector<Edge> needme_;  /* A list of rules requiring a term starting at start */
+        vector<Edge> ineed_;   // needme = rules predicted by this (art) item
                     // ineed = rules that predict this (art) item
         double prob_;
         double poutside_;
@@ -54,8 +53,8 @@ namespace BllipParser.DotNet.Vanilla
             finish_ = _finish;
             term_ = _term;
             word_ = null;
-            needme_ = new list<Edge>();
-            ineed_ = new list<Edge>();
+            needme_ = new vector<Edge>();
+            ineed_ = new vector<Edge>();
             prob_ = 1.0;
             poutside_ = 0.0;
             storeP_ = 0.0;
@@ -85,8 +84,8 @@ namespace BllipParser.DotNet.Vanilla
         public ref Wrd word() { return ref word_; }
         public ref int start() { return ref start_; }
         public ref int finish() { return ref finish_; }
-        public list<Edge> needme() { return needme_; }
-        public list<Edge> ineed() { return ineed_; }
+        public vector<Edge> needme() { return needme_; }
+        public vector<Edge> ineed() { return ineed_; }
         //void            check();
         public ref double prob() { return ref prob_; }
         /* storeP can be used as beta for rParse */

@@ -1,5 +1,14 @@
-﻿namespace Ride.Networking
+namespace Ride.Networking
 {
+    /// <summary>
+    /// Describes how a raised network event should be cached or otherwise treated by the networking backend.
+    /// </summary>
+    /// <remarks>
+    /// These values mirror Photon-style event caching semantics, where an event can be sent immediately,
+    /// stored for later replay to room participants, or used to mutate the cached event history itself.
+    /// Relevant docs:
+    /// https://doc.photonengine.com/realtime/current/gameplay/cached-events
+    /// </remarks>
     public enum EventCaching : byte
     {
         /// <summary>Default value (not sent).</summary>
@@ -30,6 +39,18 @@
         SlicePurgeUpToIndex = 13,
     }
 
+    /// <summary>
+    /// Collects optional delivery settings for a raised network event, such as caching behavior,
+    /// interest-group routing, explicit target actors, and receiver-group selection.
+    /// </summary>
+    /// <remarks>
+    /// Ride surfaces this as a backend-agnostic event-delivery options container on its networking APIs.
+    /// In practice, callers use it to control who receives an event and whether that event should persist
+    /// in room cache for late joiners or other cache-management workflows.
+    /// Relevant docs:
+    /// https://doc.photonengine.com/realtime/current/reference/dotnet-api/class_photon_1_1_realtime_1_1_raise_event_options.html
+    /// https://doc.photonengine.com/realtime/current/gameplay/interestgroups
+    /// </remarks>
     public class RaiseEventOptions
     {
         /// <summary>Default options: CachingOption: DoNotCache, InterestGroup: 0, targetActors: null, receivers: Others, sequenceChannel: 0.</summary>

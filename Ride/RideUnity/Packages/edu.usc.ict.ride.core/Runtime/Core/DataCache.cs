@@ -44,7 +44,7 @@ namespace Ride
 
         LinkedList<FileLoadRequest> m_jobQueue = new();
 
-        // File i/O
+        // File I/O
         CancellationTokenSource m_copyCancelToken;
         Task m_copyTask;
 
@@ -108,10 +108,10 @@ namespace Ride
         public void ClearCache(string sourcePath) => ClearCacheInternal(CreateDestinationPath(sourcePath));
 
         /// <inheritdoc/>
-        public (int, Int64) ComputeCacheSize() => ComputeCacheSizeInternal(CachePath);
+        public (int, Int64) ComputeCacheSize() => RideIO.ComputeDirectorySize(CachePath);
 
         /// <inheritdoc/>
-        public (int, Int64) ComputeCacheSize(string sourcePath) => ComputeCacheSizeInternal(CreateDestinationPath(sourcePath));
+        public (int, Int64) ComputeCacheSize(string sourcePath) => RideIO.ComputeDirectorySize(CreateDestinationPath(sourcePath));
 
         #endregion
 
@@ -134,7 +134,7 @@ namespace Ride
 
             byte [] encrypted = File.ReadAllBytes(destinationPath);
 
-            // decrypt
+            // Decrypt
             contents = m_encryptionMethod switch
                 {
                     EncryptionMethod.NONE => encrypted,
@@ -168,7 +168,7 @@ namespace Ride
                     }
                 }
 
-                return true; // can't compare timestamps, assume it's valid
+                return true; // Can't compare timestamps, assume it's valid
             }
 
             // Compute the CRC32C checksum of the decrypted contents and compare it to the expected value.
@@ -470,34 +470,6 @@ namespace Ride
         {
             if (Directory.Exists(path))
                 Directory.Delete(path, true);
-        }
-
-        private static (int, Int64) ComputeCacheSizeInternal(string path)
-        {
-            // Returns <number of files, bytes>
-
-            // TODO - move to RideIO (ComputeDirectorySize()?)
-
-            try
-            {
-                int fileCount = 0;
-                Int64 totalBytes = 0;
-
-                var directoryInfo = new DirectoryInfo(path);
-                var files = directoryInfo.EnumerateFiles("*", SearchOption.AllDirectories);
-                foreach (var file in files)
-                {
-                    fileCount++;
-                    totalBytes += file.Length;
-                }
-
-                return (fileCount, totalBytes);
-            }
-            catch (Exception ex)
-            {
-                Debug.LogWarning($"ComputeCacheSizeInternal() - error reading directory '{path}': {ex}");
-                return (0, 0);
-            }
         }
 
         private static readonly byte [] AesKey = new byte[] { 21, 181, 221, 47, 136, 229, 30, 172, 228, 245, 146, 46, 241, 98, 102, 169, 85, 165, 145, 227, 181, 198, 187, 7, 204, 29, 223, 226, 187, 70, 0, 233 };

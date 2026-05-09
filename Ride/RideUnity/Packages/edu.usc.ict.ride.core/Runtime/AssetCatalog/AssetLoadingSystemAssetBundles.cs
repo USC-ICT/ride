@@ -19,11 +19,11 @@ namespace Ride
     /// (either from a local path or a signed remote URL), extracts the requested asset,
     /// and immediately unloads the bundle. The returned asset remains valid for as long
     /// as the caller holds references to it, and the caller is responsible for managing
-    /// the asset’s lifetime.
+    /// the asset's lifetime.
     ///
     /// <para>
-    /// This behavior allows large bundles—such as Virtual Human characters, terrain
-    /// chunks, or high-resolution textures—to be streamed on demand without permanently
+    /// This behavior allows large bundles - such as Virtual Human characters, terrain
+    /// chunks, or high-resolution textures - to be streamed on demand without permanently
     /// increasing memory usage. The system does not retain references to loaded bundles
     /// or assets; once the load operation completes, the asset bundle is unloaded and
     /// only the returned asset remains in memory.
@@ -91,7 +91,7 @@ namespace Ride
     /// </para>
     /// <list type="number">
     /// <item><description>
-    /// Attempt to load from the catalog’s configured <c>localPrefixPath</c> if the bundle
+    /// Attempt to load from the catalog's configured <c>localPrefixPath</c> if the bundle
     /// file exists on disk.
     /// </description></item>
     /// <item><description>
@@ -123,6 +123,17 @@ namespace Ride
 
         public bool CatalogCurrentlyLoading { get; private set; }
         public int NumCatalogsLoaded => m_catalogs.Count;
+        public bool RemoteBundleDownloadActive { get; private set; }
+        public string RemoteBundleAssetName { get; private set; }
+        public string RemoteBundleName { get; private set; }
+        public string RemoteBundleUrl { get; private set; }
+        public float RemoteBundleRequestProgress { get; private set; }
+        public float RemoteBundleOverallProgress { get; private set; }
+        public ulong RemoteBundleDownloadedBytes { get; private set; }
+        public float RemoteBundleElapsedSeconds { get; private set; }
+        public float RemoteBundleAverageBytesPerSecond { get; private set; }
+        public string RemoteBundleLastResult { get; private set; }
+        public string RemoteBundleLastError { get; private set; }
 
 
         /// <inheritdoc/>
@@ -187,6 +198,13 @@ namespace Ride
 
                     m_catalogs.Add(catalog);
                     newCatalogLoaded = true;
+
+                    Debug.Log(
+                        $"[AssetLoadingSystemAssetBundles] Catalog loaded (TextAsset). " +
+                        $"rideBundleVersion='{catalog.rideBundleVersion ?? "(none)"}', " +
+                        $"artAssetSvnRevision={catalog.artAssetVersion}."
+                    );
+
                     LogCatalogContents(catalog, "[AssetLoadingSystemAssetBundles] Loaded catalog from TextAsset.");
                 }
                 catch (Exception ex)
@@ -215,8 +233,30 @@ namespace Ride
                     signedUrlOp.Then(url => { signedCatalogUrl = url; done = true; })
                                .Catch(error => { Debug.LogError(error); done = true; });
 
-                    while (!done)
-                        yield return null;
+                    {
+                        float startWait = Time.realtimeSinceStartup;
+                        float lastLog = 0f;
+                        const float TimeoutSeconds = 15f;
+
+                        while (!done)
+                        {
+                            float now = Time.realtimeSinceStartup;
+
+                            if ((now - startWait) >= TimeoutSeconds)
+                            {
+                                Debug.LogWarning($"[AssetLoadingSystemAssetBundles] SignedURL TIMEOUT (catalog) after {TimeoutSeconds}s path='{catalogFilePath}'");
+                                break;
+                            }
+
+                            if ((now - lastLog) >= 3f)
+                            {
+                                Debug.Log($"[AssetLoadingSystemAssetBundles] SignedURL WAIT (catalog) elapsed={(now - startWait):0.000}s path='{catalogFilePath}'");
+                                lastLog = now;
+                            }
+
+                            yield return null;
+                        }
+                    }
 
                     if (string.IsNullOrEmpty(signedCatalogUrl))
                     {
@@ -227,17 +267,45 @@ namespace Ride
                     }
 
                     using var www = UnityWebRequest.Get(signedCatalogUrl);
-                    var request = www.SendWebRequest();
+                    www.timeout = 60;
 
-                    while (!request.isDone)
                     {
-                        op.SetProgress(0.3f * request.progress);
-                        yield return null;
+                        var request = www.SendWebRequest();
+
+                        float dlStart = Time.realtimeSinceStartup;
+                        float lastProgressChange = dlStart;
+                        float lastLog = 0f;
+                        float lastProgress = -1f;
+                        ulong lastBytes = 0;
+
+                        while (!request.isDone)
+                        {
+                            op.SetProgress(0.3f * request.progress);
+
+                            float now = Time.realtimeSinceStartup;
+                            bool progressed = (request.progress > lastProgress + 0.0001f) || (www.downloadedBytes > lastBytes);
+
+                            if (progressed)
+                            {
+                                lastProgress = request.progress;
+                                lastBytes = www.downloadedBytes;
+                                lastProgressChange = now;
+                            }
+                            else if ((now - lastProgressChange) >= 3f && (now - lastLog) >= 3f)
+                            {
+                                Debug.LogWarning(
+                                    $"[AssetLoadDiag] CatalogDownload STALL? elapsed={(now - dlStart):0.000}s " +
+                                    $"progress={request.progress:0.000} bytes={www.downloadedBytes} url='{signedCatalogUrl}'");
+                                lastLog = now;
+                            }
+
+                            yield return null;
+                        }
                     }
 
                     if (www.result != UnityWebRequest.Result.Success)
                     {
-                        Debug.LogWarning($"Failed to download remote catalog: {signedCatalogUrl} : {www.error}");
+                        Debug.LogWarning($"Failed to download remote catalog: code={www.responseCode} url={signedCatalogUrl} error={www.error}");
                         op.SetFailed($"Remote catalog download failed. {signedCatalogUrl} : {www.error}");
                         CatalogCurrentlyLoading = false;
                         yield break;
@@ -251,6 +319,15 @@ namespace Ride
 
                     m_catalogs.Add(catalog);
                     newCatalogLoaded = true;
+
+                    Debug.Log(
+                        $"[AssetLoadingSystemAssetBundles] Catalog loaded (Remote). " +
+                        $"'{catalog.catalogName ?? "(unknown)"}'," +
+                        $"rideBundleVersion={catalog.rideBundleVersion ?? "(none)"} " +
+                        $"(cur={AssetCatalogData.RIDE_VERSION})," +
+                        $"artAssetSvnRevision={catalog.artAssetVersion ?? "(unknown)"}."
+                    );
+
                     LogCatalogContents(catalog, "[AssetLoadingSystemAssetBundles] Loaded remote catalog.");
                 }
                 else
@@ -271,6 +348,13 @@ namespace Ride
 
                     m_catalogs.Add(catalog);
                     newCatalogLoaded = true;
+
+                    Debug.Log(
+                        $"[AssetLoadingSystemAssetBundles] Catalog loaded (Local). " +
+                        $"rideBundleVersion='{catalog.rideBundleVersion ?? "(none)"}', " +
+                        $"artAssetSvnRevision={catalog.artAssetVersion}."
+                    );
+
                     LogCatalogContents(catalog, "[AssetLoadingSystemAssetBundles] Loaded local catalog.");
                 }
             }
@@ -338,36 +422,53 @@ namespace Ride
             }
 
             string source = catalog.isRemoteCatalog ? "Remote" : "Local";
+            string rideVersion = catalog.rideBundleVersion ?? "(none)";
+            string artVersion = catalog.artAssetVersion ?? "0";
+            string unityVersion = catalog.unityVersion ?? "(unknown)";
+            string platform = catalog.platform ?? "(unknown)";
+            string renderPipeline = catalog.renderPipeline ?? "(unknown)";
+            string rpVersion = catalog.renderPipelineVersion ?? "(unknown)";
+            int entryCount = catalog.entries?.Count ?? 0;
 
-            Debug.Log($"{headerMessage}");
-            Debug.Log(
+            string summaryLine =
+                $"{source} | " +
+                $"Ver={rideVersion} | " +
+                $"Art={artVersion} | " +
+                $"Unity={unityVersion} | " +
+                $"{platform} | {renderPipeline} | " +
+                $"Entries={entryCount}";
+
+            string catalogText =
+                $"{headerMessage} {summaryLine}\n" +
                 $"AssetLoadingSystemAssetBundles - [RIDE Asset Catalog]\n" +
                 $"  Source:                       {source}\n" +
                 $"  Local Prefix Path:            {catalog.localPrefixPath}\n" +
                 $"  Remote Prefix Path:           {catalog.remotePrefixPath}\n" +
-                $"  --- Version Metadata ---\n" +
-                $"  Ride Bundle Version:          {catalog.rideBundleVersion ?? "(none)"}\n" +
-                $"  Unity Version (Built With):   {catalog.unityVersion ?? "(unknown)"}\n" +
-                $"  Platform:                     {catalog.platform ?? "(unknown)"}\n" +
-                $"  Render Pipeline:              {catalog.renderPipeline ?? "(unknown)"}\n" +
-                $"  Render Pipeline Version:      {catalog.renderPipelineVersion ?? "(unknown)"}\n" +
-                $"  --- Asset Entries ---\n" +
-                $"  Entry Count:                  {catalog.entries?.Count ?? 0}"
-            );
+                $"  Ride Bundle Version:          {rideVersion}\n" +
+                $"  Art Version:                  {artVersion}\n" +
+                $"  Unity Version (Built With):   {unityVersion}\n" +
+                $"  Platform:                     {platform}\n" +
+                $"  Render Pipeline:              {renderPipeline}\n" +
+                $"  Render Pipeline Version:      {rpVersion}\n" +
+                $"  Entry Count:                  {entryCount}";
+
+            Debug.Log(catalogText);
 
             if (catalog.entries != null)
             {
                 foreach (var entry in catalog.entries)
                 {
-                    var labels = entry.labels != null ? string.Join(", ", entry.labels) : "(none)";
-
-                    Debug.Log(
-                        $"AssetLoadingSystemAssetBundles - [RIDE Asset Catalog Entry]\n" +
-                        $"    Asset:        {entry.assetName}\n" +
-                        $"    Bundle:       {entry.bundleFileName}\n" +
-                        $"    Hash128:      {entry.bundleHash128}\n" +
-                        $"    Labels:       {labels}\n"
-                    );
+                    string asset = entry.assetName ?? "(null)";
+                    string bundle = entry.bundleFileName ?? "(null)";
+                    string hash = entry.bundleHash128 ?? "(null)";
+                    string labels = entry.labels != null && entry.labels.Count > 0 ? string.Join(",", entry.labels) : "(none)";
+                    string shortHash = hash.Length > 8 ? hash.Substring(0, 8) : hash;  // Shorten hash (first 8 chars is enough for human scan)
+                    string entryText =
+                        $"[AssetLoadingSystemAssetBundles] {asset} | " +
+                        $"bundle={bundle} | " +
+                        $"hash={shortHash} | " +
+                        $"labels={labels}";
+                    Debug.Log(entryText);
                 }
             }
         }
@@ -480,15 +581,35 @@ namespace Ride
                     {
                         // Remote load
 
-                        bool done = false;
                         string signedUrl = null;
+                        bool done = false;
                         string remoteBundlePath = Path.Combine(catalog.remotePrefixPath, bundleName).Replace("\\", "/");
                         var urlOp = RequestSignedURL(remoteBundlePath);
                         urlOp.Then(url => { signedUrl = url; done = true; })
-                             .Catch(err => { Debug.LogError(err); done = true; });
+                            .Catch(err => { Debug.LogError(err); done = true; });
+
+                        float startWait = Time.realtimeSinceStartup;
+                        float lastLogSignedUrl = 0f;
+                        const float TimeoutSeconds = 15f;
 
                         while (!done)
+                        {
+                            float now = Time.realtimeSinceStartup;
+
+                            if ((now - startWait) >= TimeoutSeconds)
+                            {
+                                Debug.LogWarning($"[AssetLoadDiag] SignedURL TIMEOUT (bundle) after {TimeoutSeconds}s path='{remoteBundlePath}' asset='{entry.assetName}'");
+                                break;
+                            }
+
+                            if ((now - lastLogSignedUrl) >= 3f)
+                            {
+                                Debug.Log($"[AssetLoadDiag] SignedURL WAIT (bundle) elapsed={(now - startWait):0.000}s path='{remoteBundlePath}' asset='{entry.assetName}'");
+                                lastLogSignedUrl = now;
+                            }
+
                             yield return null;
+                        }
 
                         if (string.IsNullOrEmpty(signedUrl))
                         {
@@ -502,25 +623,93 @@ namespace Ride
                         //if (!string.IsNullOrEmpty(entry.bundleHash128) && Caching.IsVersionCached(new CachedAssetBundle(bundleName, Hash128.Parse(entry.bundleHash128))))
                         //    Debug.Log($"[AssetLoad] Using cached version of '{bundleName}'");
 
+                        BeginRemoteBundleDownloadStatus(entry.assetName, bundleName, signedUrl);
+
                         using var www = string.IsNullOrEmpty(entry.bundleHash128)
                             ? UnityWebRequestAssetBundle.GetAssetBundle(signedUrl)
                             : UnityWebRequestAssetBundle.GetAssetBundle(signedUrl, Hash128.Parse(entry.bundleHash128));
+
+                        www.timeout = 180; // bundles can be larger; tune later
                         var request = www.SendWebRequest();
+
+                        float dlStart = Time.realtimeSinceStartup;
+                        float lastProgressChange = dlStart;
+                        float lastLog = 0f;
+                        float lastProgress = -1f;
+                        ulong lastBytes = 0;
 
                         while (!request.isDone)
                         {
-                            op.SetProgress(0.2f + 0.5f * request.progress);
+                            float overallProgress = 0.2f + 0.5f * request.progress;
+                            op.SetProgress(overallProgress);
+
+                            float now = Time.realtimeSinceStartup;
+                            ulong currentBytes = www.downloadedBytes;
+                            bool progressed = (request.progress > lastProgress + 0.0001f) || (currentBytes > lastBytes);
+
+                            if (progressed)
+                            {
+                                lastProgress = request.progress;
+                                lastBytes = currentBytes;
+                                lastProgressChange = now;
+                            }
+
+                            float elapsed = now - dlStart;
+                            UpdateRemoteBundleDownloadStatus(request.progress, overallProgress, currentBytes, elapsed);
+
+                            bool stalled = (now - lastProgressChange) >= 3f;
+                            if ((now - lastLog) >= 3f && (m_verboseLogging || stalled))
+                            {
+                                if (m_verboseLogging)
+                                {
+                                    string speedText = FormatBytesPerSecond(RemoteBundleAverageBytesPerSecond);
+                                    string bytesText = FormatBytes(currentBytes);
+                                    string lastBytesText = FormatBytes(lastBytes);
+                                    string diagPrefix = stalled ? "STALL?" : "PROGRESS";
+                                    string message =
+                                        $"[AssetLoadDiag] BundleDownload {diagPrefix} asset='{entry.assetName}' bundle='{bundleName}' " +
+                                        $"elapsed={elapsed:0.000}s requestProgress={request.progress:0.000} overallProgress={overallProgress:0.000} " +
+                                        $"bytes={currentBytes} ({bytesText}) lastObservedBytes={lastBytes} ({lastBytesText}) avgSpeed={speedText} url='{signedUrl}'";
+
+                                    if (stalled) Debug.LogWarning(message);
+                                    else Debug.Log(message);
+                                }
+                                else
+                                {
+                                    Debug.LogWarning(
+                                        $"[AssetLoadDiag] BundleDownload STALL? asset='{entry.assetName}' bundle='{bundleName}' " +
+                                        $"elapsed={elapsed:0.000}s progress={request.progress:0.000} bytes={currentBytes} url='{signedUrl}'");
+                                }
+
+                                lastLog = now;
+                            }
+
                             yield return null;
                         }
 
+                        float finalElapsed = Time.realtimeSinceStartup - dlStart;
+                        UpdateRemoteBundleDownloadStatus(
+                            request.progress,
+                            0.2f + 0.5f * request.progress,
+                            www.downloadedBytes,
+                            finalElapsed);
+
                         if (www.result != UnityWebRequest.Result.Success)
                         {
-                            Debug.LogWarning($"Failed to download asset bundle: {signedUrl} : {www.error}");
+                            CompleteRemoteBundleDownloadStatus("Failed", www.error);
+                            Debug.LogWarning($"Failed to download asset bundle: code={www.responseCode} url={signedUrl} error={www.error}");
                             op.SetFailed($"Bundle download failed. {signedUrl} : {www.error}");
                             yield break;
                         }
 
-                        //Debug.Log($"WWW result: {www.result} - downloaded {www.downloadedBytes} bytes");
+                        CompleteRemoteBundleDownloadStatus("Success");
+                        if (m_verboseLogging)
+                        {
+                            Debug.Log(
+                                $"[AssetLoadDiag] BundleDownload COMPLETE asset='{entry.assetName}' bundle='{bundleName}' " +
+                                $"elapsed={RemoteBundleElapsedSeconds:0.000}s bytes={www.downloadedBytes} ({FormatBytes(www.downloadedBytes)}) " +
+                                $"avgSpeed={FormatBytesPerSecond(RemoteBundleAverageBytesPerSecond)} url='{signedUrl}'");
+                        }
 
                         bundle = DownloadHandlerAssetBundle.GetContent(www);
                         if (bundle == null)
@@ -795,6 +984,69 @@ namespace Ride
                     $"Loading will continue, but issues may occur."
                 );
             }
+        }
+
+        private void BeginRemoteBundleDownloadStatus(string assetName, string bundleName, string url)
+        {
+            RemoteBundleDownloadActive = true;
+            RemoteBundleAssetName = assetName;
+            RemoteBundleName = bundleName;
+            RemoteBundleUrl = url;
+            RemoteBundleRequestProgress = 0f;
+            RemoteBundleOverallProgress = 0f;
+            RemoteBundleDownloadedBytes = 0;
+            RemoteBundleElapsedSeconds = 0f;
+            RemoteBundleAverageBytesPerSecond = 0f;
+            RemoteBundleLastResult = "InProgress";
+            RemoteBundleLastError = null;
+        }
+
+        private void UpdateRemoteBundleDownloadStatus(
+            float requestProgress,
+            float overallProgress,
+            ulong downloadedBytes,
+            float elapsedSeconds)
+        {
+            RemoteBundleRequestProgress = Mathf.Clamp01(requestProgress);
+            RemoteBundleOverallProgress = Mathf.Clamp01(overallProgress);
+            RemoteBundleDownloadedBytes = downloadedBytes;
+            RemoteBundleElapsedSeconds = Mathf.Max(0f, elapsedSeconds);
+            RemoteBundleAverageBytesPerSecond = elapsedSeconds > 0.0001f
+                ? (float)(downloadedBytes / elapsedSeconds)
+                : 0f;
+        }
+
+        private void CompleteRemoteBundleDownloadStatus(string result, string error = null)
+        {
+            RemoteBundleDownloadActive = false;
+            RemoteBundleLastResult = result;
+            RemoteBundleLastError = error;
+        }
+
+        private static string FormatBytes(ulong bytes)
+        {
+            const float KB = 1024f;
+            const float MB = KB * 1024f;
+            const float GB = MB * 1024f;
+
+            if (bytes >= GB) return $"{bytes / GB:0.00} GB";
+            if (bytes >= MB) return $"{bytes / MB:0.00} MB";
+            if (bytes >= KB) return $"{bytes / KB:0.0} KB";
+            return $"{bytes} B";
+        }
+
+        private static string FormatBytesPerSecond(float bytesPerSecond)
+        {
+            if (bytesPerSecond <= 0f) return "0 B/s";
+
+            const float KB = 1024f;
+            const float MB = KB * 1024f;
+            const float GB = MB * 1024f;
+
+            if (bytesPerSecond >= GB) return $"{bytesPerSecond / GB:0.00} GB/s";
+            if (bytesPerSecond >= MB) return $"{bytesPerSecond / MB:0.00} MB/s";
+            if (bytesPerSecond >= KB) return $"{bytesPerSecond / KB:0.0} KB/s";
+            return $"{bytesPerSecond:0} B/s";
         }
     }
 }

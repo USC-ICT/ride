@@ -790,6 +790,23 @@
 	</xsl:element>	
 </xsl:template>
 
+<!-- domain_topics animation -->
+<xsl:template name="ani_domain_topics">
+	<xsl:param name="participant" />
+	<xsl:param name="speech_id" />
+	<xsl:param name="start_time" />
+	<xsl:param name="stroke" />	
+	<xsl:param name="priority" />
+	<xsl:param name="posture" /> 
+	
+	<xsl:element name="animation">
+		<!-- <xsl:attribute name="ready"><xsl:value-of select="$speech_id" />:<xsl:value-of select="$start_time" /></xsl:attribute>-->
+		<xsl:attribute name="stroke"><xsl:value-of select="$speech_id" />:<xsl:value-of select="$stroke" /></xsl:attribute>
+		<xsl:attribute name="priority"><xsl:value-of select="$priority" /></xsl:attribute>
+		<xsl:attribute name="name"> <xsl:value-of select="external:xslGetAnimation('domain_topics_animation', $posture, $participant)" /></xsl:attribute> 
+	</xsl:element>	
+</xsl:template>
+
   <!-- gaze: cursory -->
   <xsl:template name="gaze_cursory">
     <xsl:param name="participant" />

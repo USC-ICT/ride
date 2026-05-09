@@ -15,49 +15,23 @@ namespace VHAssets
 public static class VHUtils
 {
     /// <summary>
-    /// Helper functions for Unity's FindObjectOfType. If it isn't found, an error is logged, stating the the searcher couldn't find the component 
-    /// </summary>
-    /// <typeparam name="T"></typeparam>
-    /// <param name="searcherName">The gameobject name or identier for who is looking for this component</param>
-    /// <returns></returns>
-    public static T FindObjectOfType<T>(string searcherName) where T : Component
-    {
-        T component = GameObject.FindFirstObjectByType<T>();
-        if (component == null)
-        {
-            Debug.LogErrorFormat("{0} couldn't find object in scene with component {1}", searcherName, component.GetType().ToString());
-        }
-        return component;
-    }
-
-    public static T FindGameObjectAndGetComponent<T>(string gameObjectName, string searcherName) where T : Component
-    {
-        GameObject go = GameObject.Find(gameObjectName);
-        T component = null;
-        if (go != null)
-        {
-            component = go.GetComponent<T>();
-            if (component == null)
-            {
-                Debug.LogErrorFormat("{0} failed to find animator on gameobject {1}", searcherName, gameObjectName);
-            }
-        }
-        else
-        {
-            Debug.LogErrorFormat("{0} failed to find gameobject with name {1}", searcherName, gameObjectName);
-        }
-        return component;
-    }
-
-    /// <summary>
     /// This will find all components of the given type that exist in the scene, regardless of whether or not their gameobject is active
     /// </summary>
     /// <typeparam name="T"></typeparam>
     /// <returns></returns>
     public static List<T> FindObjectsOfTypeAll<T>()
     {
-        List<T> results = new List<T>();
-        UnityEngine.SceneManagement.SceneManager.GetActiveScene().GetRootGameObjects().ToList().ForEach(g => results.AddRange(g.GetComponentsInChildren<T>(true)));
+        var results = new List<T>();
+        for (int i = 0; i < UnityEngine.SceneManagement.SceneManager.sceneCount; i++)
+        {
+            var scene = UnityEngine.SceneManagement.SceneManager.GetSceneAt(i);
+            if (!scene.isLoaded)
+                continue;
+
+            foreach (var root in scene.GetRootGameObjects())
+                results.AddRange(root.GetComponentsInChildren<T>(true));
+        }
+
         return results;
     }
 
@@ -68,16 +42,20 @@ public static class VHUtils
     /// <returns></returns>
     public static T FindObjectOfTypeAll<T>()
     {
-        T result = default;
-        List<GameObject> rootGos = UnityEngine.SceneManagement.SceneManager.GetActiveScene().GetRootGameObjects().ToList();
-        foreach (GameObject root in rootGos)
+        for (int i = 0; i < UnityEngine.SceneManagement.SceneManager.sceneCount; i++)
         {
-            result = root.GetComponentInChildren<T>(true);
-            if (result != null)
+            var scene = UnityEngine.SceneManagement.SceneManager.GetSceneAt(i);
+            if (!scene.isLoaded)
+                continue;
+
+            foreach (var root in scene.GetRootGameObjects())
             {
-                return result;
+                T result = root.GetComponentInChildren<T>(true);
+                if (result != null)
+                    return result;
             }
         }
+
         return default;
     }
 
@@ -95,53 +73,25 @@ public static class VHUtils
         // this function will search all active and inactive objects.  does a recursive search through all child objects and their children
         // you cannot specify a 'path' in 'name'.  'name' must match the name of the object
 
-        if (root.name == name)
-            return root;
-
-        for (int i = 0; i < root.transform.childCount; i++)
+        foreach (var child in root.GetComponentsInChildren<Transform>(true))
         {
-            GameObject found = FindChildRecursive(root.transform.GetChild(i).gameObject, name);
-            if (found != null)
-                return found;
+            if (child.name == name)
+                return child.gameObject;
         }
 
         return null;
     }
 
 
-    public static GameObject[] FindAllChildren(GameObject root)
-    {
-        // this function will return all active and inactive objects.  only returns one layer deep in the hierarchy
-
-        List<GameObject> objects = new List<GameObject>();
-
-        for (int i = 0; i < root.transform.childCount; i++)
-        {
-            objects.Add(root.transform.GetChild(i).gameObject);
-        }
-
-        return objects.ToArray();
-    }
-
     public static GameObject[] FindAllChildrenRecursive(GameObject root)
     {
         // this function will return all active and inactive objects.  searches through all child objects and their children
 
-        Stack<Transform> stack = new Stack<Transform>();
-        List<GameObject> objects = new List<GameObject>();
-
-        stack.Push(root.transform);
-
-        while (stack.Count > 0)
+        var objects = new List<GameObject>();
+        foreach (var child in root.GetComponentsInChildren<Transform>(true))
         {
-            Transform trans = stack.Pop();
-
-            for (int i = 0; i < trans.childCount; i++)
-            {
-                Transform child = trans.GetChild(i);
-                stack.Push(child);
+            if (child != root.transform)
                 objects.Add(child.gameObject);
-            }
         }
 
         return objects.ToArray();
@@ -152,76 +102,37 @@ public static class VHUtils
         // this function will search all active and inactive objects and active and inactive components.
         // This is a recursive search through all children.
         // it will return the first child it finds that matches the type
-
-        GameObject[] children = FindAllChildrenRecursive(root);
-
-        foreach (var child in children)
+        foreach (T component in root.GetComponentsInChildren<T>(true))
         {
-            T[] components = child.GetComponents<T>();
-            if (components.Length > 0)
-                return components[0];
+            if (component.gameObject != root)
+                return component;
         }
 
         return default;
-    }
-
-    public static T[] FindAllChildrenOfType<T>(GameObject root) where T : Component
-    {
-        // this function will search all active and inactive objects and active and inactive components.
-        // This is a recursive search through all children.
-        // it will return all children it finds that matches the type.  Note that it returns script components. So if the same components is attached twice to a gameobject, it will return both of them.
-
-        GameObject[] children = FindAllChildrenRecursive(root);
-        List<T> childrenOfType = new List<T>();
-
-        foreach (var child in children)
-        {
-            T[] components = child.GetComponents<T>();
-            foreach (var component in components)
-                childrenOfType.Add(component);
-        }
-
-        return childrenOfType.ToArray();
     }
 
     public static T FindParentOfType<T>(GameObject child) where T : Component
     {
         // this function will walk up the hierarchy until it finds a gameobject with a parent of the given type.
         // it will return that gameobject or null if not found
-
-        Transform curr = child.transform;
-        if (curr == null)
+        if (child == null)
             return null;
 
-        while (curr.parent != null)
-        {
-            var component = curr.parent.GetComponent<T>();
-            if (component != null)
-                return component;
-
-            curr = curr.parent;
-        }
-
-        return null;
+        Transform parent = child.transform.parent;
+        return parent != null ? parent.GetComponentInParent<T>(true) : null;
     }
 
     public static ICharacter FindCharacter(string gameObjectName, string eventName)
     {
         if (string.IsNullOrEmpty(gameObjectName))
-        {
             return null;
-        }
 
-        ICharacter[] chrs = GameObject.FindObjectsByType<ICharacter>(FindObjectsSortMode.None);
-        foreach (ICharacter chr in chrs)
-        {
-            if (chr.CharacterName == gameObjectName || chr.gameObject.name == gameObjectName)
-            {
-                return chr;
-            }
-        }
+        var character = GameObject.FindObjectsByType<ICharacter>(FindObjectsSortMode.None)
+            .FirstOrDefault(c => c.CharacterName == gameObjectName || c.gameObject.name == gameObjectName);
+        if (character != null)
+            return character;
 
-        Debug.LogWarning(string.Format("Couldn't find Character {0} in the scene. Event {1} needs to be looked at", gameObjectName, eventName));
+        Debug.LogWarning($"Couldn't find Character {gameObjectName} in the scene. Event {eventName} needs to be looked at");
         return null;
     }
 
@@ -229,33 +140,39 @@ public static class VHUtils
     {
         // this function will walk up the hierarchy until it finds a gameobject with a parent of 'null'.
         // it will return that gameobject
-
-        Transform curr = child.transform;
-        if (curr == null)
+        if (child == null)
             return null;
-
-        while (curr.parent != null)
-        {
-            curr = curr.parent;
-        }
-
-        return curr.gameObject;
+        return child.transform.root.gameObject;
     }
 
-    public static string GetGameObjectPath(GameObject o)
+    public static string GetGameObjectPath(GameObject obj)
     {
         // this function returns the 'path' in the scene hierarchy, returned as a string, separated by a slash
         // most likely very inefficient, but concise
 
-        // https://answers.unity.com/questions/8500/how-can-i-get-the-full-path-to-a-gameobject.html
-        return string.Join("/", o.GetComponentsInParent<Transform>().Select(t => t.name).Reverse().ToArray());
+        if (obj == null)
+            return string.Empty;
+
+        var names = new Stack<string>();
+        var current = obj.transform;
+        while (current != null)
+        {
+            names.Push(current.name);
+            current = current.parent;
+        }
+
+        return string.Join("/", names);
     }
 
     public static void DestroyChildren(Transform parent)
     {
-        for (int i = 0; parent != null && i < parent.childCount; i++)
+        for (int i = parent != null ? parent.childCount - 1 : -1; i >= 0; i--)
         {
-            GameObject.Destroy(parent.GetChild(i).gameObject);
+            var child = parent.GetChild(i).gameObject;
+            if (VHUtils.IsEditor())
+                GameObject.DestroyImmediate(child);
+            else
+                GameObject.Destroy(child);
         }
     }
 
@@ -268,32 +185,24 @@ public static class VHUtils
 
     public delegate void OnAudioFinishedPlaying(AudioClip clip);
 
-    public static void PlayWWWSound(MonoBehaviour behaviour, UnityWebRequest www, AudioSource source, bool loop)
-    {
+    public static void PlayWWWSound(MonoBehaviour behaviour, UnityWebRequest www, AudioSource source, bool loop) =>
         behaviour.StartCoroutine(PlayWWWSoundInternal(behaviour, www.url, source, loop, AudioType.WAV, null));
-    }
 
-    public static void PlayWWWSound(MonoBehaviour behaviour, UnityWebRequest www, AudioSource source, bool loop, AudioType audioType)
-    {
+    public static void PlayWWWSound(MonoBehaviour behaviour, UnityWebRequest www, AudioSource source, bool loop, AudioType audioType) =>
         behaviour.StartCoroutine(PlayWWWSoundInternal(behaviour, www.url, source, loop, audioType, null));
-    }
 
-    public static void PlayWWWSound(MonoBehaviour behaviour, string url, AudioSource source, bool loop, AudioType audioType)
-    {
+    public static void PlayWWWSound(MonoBehaviour behaviour, string url, AudioSource source, bool loop, AudioType audioType) =>
         behaviour.StartCoroutine(PlayWWWSoundInternal(behaviour, url, source, loop, audioType, null));
-    }
 
-    public static void PlayWWWSound(MonoBehaviour behaviour, string url, AudioSource source, bool loop, AudioType audioType, OnAudioFinishedPlaying onFinishedPlaying)
-    {
+    public static void PlayWWWSound(MonoBehaviour behaviour, string url, AudioSource source, bool loop, AudioType audioType, OnAudioFinishedPlaying onFinishedPlaying) =>
         behaviour.StartCoroutine(PlayWWWSoundInternal(behaviour, url, source, loop, audioType, onFinishedPlaying));
-    }
 
     public static IEnumerator PlayWWWSoundInternal(MonoBehaviour behaviour, string url, AudioSource source, bool loop, AudioType audioType, OnAudioFinishedPlaying onFinishedPlaying)
     {
         using (UnityEngine.Networking.UnityWebRequest request = UnityEngine.Networking.UnityWebRequestMultimedia.GetAudioClip(url, audioType))
         {
             yield return request.SendWebRequest();
-            if (request.result == UnityEngine.Networking.UnityWebRequest.Result.ConnectionError)
+            if (request.result != UnityEngine.Networking.UnityWebRequest.Result.Success)
             {
                 Debug.Log(request.error);
             }
@@ -313,19 +222,22 @@ public static class VHUtils
                 source.loop = loop;
                 source.Play();
 
-                if (onFinishedPlaying != null)
-                {
-                    behaviour.StartCoroutine(WaitForClipToFinish(source.clip, onFinishedPlaying));
-                }
+                if (onFinishedPlaying != null && !loop)
+                    behaviour.StartCoroutine(WaitForClipToFinish(source, source.clip, onFinishedPlaying));
             }
         }
     }
 
-    static IEnumerator WaitForClipToFinish(AudioClip clip, OnAudioFinishedPlaying onFinishedPlaying)
+    static IEnumerator WaitForClipToFinish(AudioSource source, AudioClip clip, OnAudioFinishedPlaying onFinishedPlaying)
     {
+        //while (source != null && source.clip == clip && !source.isPlaying)
+        //    yield return null;
+        //while (source != null && source.clip == clip && source.isPlaying)
+        //    yield return null;
         yield return new WaitForSeconds(clip.length);
 
-        onFinishedPlaying?.Invoke(clip);
+        if (source != null && source.clip == clip && !source.loop)
+            onFinishedPlaying?.Invoke(clip);
     }
 
 
@@ -354,65 +266,42 @@ public static class VHUtils
         cylinder.GetComponent<Renderer>().material.color = color;
     }
 
-    public static string GetCommonAspectText(float aspectRatio)
+    static readonly (float ratio, string text)[] CommonAspectRatios =
     {
         // http://en.wikipedia.org/wiki/List_of_common_resolutions
-        const float check = 0.04f;
-        if (Math.Abs(aspectRatio - 1.0000f) < check) return "1:1";
-        else if (Math.Abs(aspectRatio - 1.2500f) < check) return "5:4";
-        else if (Math.Abs(aspectRatio - 1.3333f) < check) return "4:3";
-        else if (Math.Abs(aspectRatio - 1.5000f) < check) return "3:2";
-        else if (Math.Abs(aspectRatio - 1.6000f) < check) return "16:10";
-        else if (Math.Abs(aspectRatio - 1.6667f) < check) return "5:3";
-        else if (Math.Abs(aspectRatio - 1.7778f) < check) return "16:9";
-        else if (Math.Abs(aspectRatio - 2.0556f) < check) return "37:18";
-        else if (Math.Abs(aspectRatio - 2.1667f) < check) return "19.5:9";
-        else if (Math.Abs(aspectRatio - 2.3889f) < check) return "21:9";
+        (1.0000f, "1:1"),
+        (1.2500f, "5:4"),
+        (1.3333f, "4:3"),
+        (1.5000f, "3:2"),
+        (1.6000f, "16:10"),
+        (1.6667f, "5:3"),
+        (1.7778f, "16:9"),
+        (2.0556f, "37:18"),
+        (2.1667f, "19.5:9"),
+        (2.3889f, "21:9"),
 
         // reverse
-        else if (Math.Abs(aspectRatio - 0.8000f) < check) return "4:5";
-        else if (Math.Abs(aspectRatio - 0.7500f) < check) return "3:4";
-        else if (Math.Abs(aspectRatio - 0.6667f) < check) return "2:3";
-        else if (Math.Abs(aspectRatio - 0.6250f) < check) return "10:16";
-        else if (Math.Abs(aspectRatio - 0.6000f) < check) return "3:5";
-        else if (Math.Abs(aspectRatio - 0.5625f) < check) return "9:16";
-        else if (Math.Abs(aspectRatio - 0.4865f) < check) return "18:37";
-        else if (Math.Abs(aspectRatio - 0.4615f) < check) return "9:19.5";
-        else if (Math.Abs(aspectRatio - 0.4186f) < check) return "9:21";
+        (0.8000f, "4:5"),
+        (0.7500f, "3:4"),
+        (0.6667f, "2:3"),
+        (0.6250f, "10:16"),
+        (0.6000f, "3:5"),
+        (0.5625f, "9:16"),
+        (0.4865f, "18:37"),
+        (0.4615f, "9:19.5"),
+        (0.4186f, "9:21"),
+    };
 
-        else return "";
-    }
-
-
-    public static T DeserializeBytes<T>(byte[] bytes)
+    public static string GetCommonAspectText(float aspectRatio)
     {
-        T binaryData = default;
-
-#if !UNITY_WSA
-        MemoryStream stream = new MemoryStream(bytes);
-        try
+        const float tolerance = 0.04f;
+        foreach (var (ratio, text) in CommonAspectRatios)
         {
-            var formatter = new System.Runtime.Serialization.Formatters.Binary.BinaryFormatter();
-
-            // Deserialize the hashtable from the file and
-            // assign the reference to the local variable.
-            binaryData = (T)formatter.Deserialize(stream);
-        }
-        catch (SerializationException e)
-        {
-            binaryData = default;
-            Debug.LogError("Failed to deserialize. Reason: " + e.Message);
-        }
-        finally
-        {
-            stream.Close();
+            if (Math.Abs(aspectRatio - ratio) < tolerance)
+                return text;
         }
 
-        return binaryData;
-#else
-        Debug.LogError("VHUtils.DeserializeBytes() - not supported on this platform");
-        return binaryData;
-#endif
+        return string.Empty;
     }
 
 
@@ -437,7 +326,11 @@ public static class VHUtils
         if (Application.isEditor)
         {
 #if UNITY_EDITOR
+#if UNITY_6000_0_OR_NEWER
+            UnityEditor.EditorApplication.ExitPlaymode();
+#else
             UnityEditor.EditorApplication.ExecuteMenuItem("Edit/Play");
+#endif
 #endif
         }
         else
@@ -446,41 +339,21 @@ public static class VHUtils
         }
     }
 
-    public static void SceneManagerLoadScene(string sceneName)
-    {
-        // helper function for Application.LoadLevel(), for backward compatibility
+    /// <summary>Backward-compatibility wrapper. Use UnityEngine.SceneManagement.SceneManager.LoadScene(string) directly.</summary>
+    public static void SceneManagerLoadScene(string sceneName) => UnityEngine.SceneManagement.SceneManager.LoadScene(sceneName);
 
-        UnityEngine.SceneManagement.SceneManager.LoadScene(sceneName);
-    }
+    /// <summary>Backward-compatibility wrapper. Use UnityEngine.SceneManagement.SceneManager.LoadScene(int) directly.</summary>
+    public static void SceneManagerLoadScene(int sceneBuildIndex) => UnityEngine.SceneManagement.SceneManager.LoadScene(sceneBuildIndex);
 
-    public static void SceneManagerLoadScene(int sceneBuildIndex)
-    {
-        // helper function for Application.LoadLevel(), for backward compatibility
+    /// <summary>Backward-compatibility wrapper. Use UnityEngine.SceneManagement.SceneManager.LoadSceneAsync(string) directly.</summary>
+    public static AsyncOperation SceneManagerLoadSceneAsync(string sceneName) => UnityEngine.SceneManagement.SceneManager.LoadSceneAsync(sceneName);
 
-        UnityEngine.SceneManagement.SceneManager.LoadScene(sceneBuildIndex);
-    }
-
-    public static AsyncOperation SceneManagerLoadSceneAsync(string sceneName)
-    {
-        // helper function for Application.LoadLevelAsync(), for backward compatibility
-
-        return UnityEngine.SceneManagement.SceneManager.LoadSceneAsync(sceneName);
-    }
-
-    public static string SceneManagerActiveSceneName()
-    {
-        // helper function for Application.loadedLevelName, for backward compatibility
-
-        return UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
-    }
+    /// <summary>Backward-compatibility wrapper. Use UnityEngine.SceneManagement.SceneManager.GetActiveScene().name directly.</summary>
+    public static string SceneManagerActiveSceneName() => UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
 
 #if UNITY_EDITOR
-    public static string EditorSceneManagerActiveSceneName()
-    {
-        // helper function for EditorApplication.currentScene, for backward compatibility
-
-        return UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene().name;
-    }
+    /// <summary>Backward-compatibility wrapper. Use UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene().name directly.</summary>
+    public static string EditorSceneManagerActiveSceneName() => UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene().name;
 #endif
 
 
@@ -510,9 +383,8 @@ public static class VHUtils
         //string argDash = "--" + arg;
         string[] split = arg.Split('=');
         if (split.Length == 2)
-        {
             return split[1];
-        }
+
         return split[0];
     }
 
@@ -524,7 +396,7 @@ public static class VHUtils
     public static bool HasCommandLineArgument(string arg)
     {
         string argDash = "-" + arg;
-        return Array.Exists<string>(GetCommandLineArgs(), s => s == argDash);
+        return Array.Exists(GetCommandLineArgs(), s => s == argDash);
     }
 
 
@@ -539,18 +411,11 @@ public static class VHUtils
         else
         {
 #if !UNITY_WSA
-            return System.Environment.GetCommandLineArgs();
+            return Environment.GetCommandLineArgs();
 #else
             return new string[0];
 #endif
         }
-    }
-
-
-    public static bool IsUnity5OrGreater()
-    {
-        // this could probably be expanded to return a specific version number, etc.  but this fits our needs right now, since so many changes were done in unity 5
-        return true;
     }
 
 
@@ -564,17 +429,7 @@ public static class VHUtils
     }
 
 
-    public static bool IsEditor()
-    {
-        return Application.isEditor;
-    }
-
-
-    [Obsolete("Web Player is deprecated as of Unity 5.3.  Please move away from Web Player specific code")]
-    public static bool IsWebPlayer()
-    {
-        return false;
-    }
+    public static bool IsEditor() => Application.isEditor;
 
 
     public static bool IsWindows()
@@ -592,7 +447,7 @@ public static class VHUtils
     }
 
 
-    public static bool IsWindows8OrGreater()
+    public static bool IsWindows10OrGreater()
     {
         // win10 has the same version number unless the app has been 'manifested for Win10'
         // links, in case we ever care:
@@ -601,18 +456,6 @@ public static class VHUtils
         // https://msdn.microsoft.com/library/windows/desktop/ms724451(v=vs.85).aspx
 
         // we use this for deciding which TTS voice to use.  This could be enhanced to return a version class, and then you could compare it against const's for different windows versions, etc.
-#if !UNITY_WSA
-        System.Version win8version = new System.Version(6, 2, 9200, 0);
-        return Environment.OSVersion.Platform == PlatformID.Win32NT && Environment.OSVersion.Version >= win8version;
-#else
-        return false;
-#endif
-    }
-
-
-    public static bool IsWindows10OrGreater()
-    {
-        // see notes above for IsWindows8OrGreater()
 #if !UNITY_WSA
         System.Version win10version = new System.Version(10, 0, 0, 0);
         return Environment.OSVersion.Platform == PlatformID.Win32NT && Environment.OSVersion.Version >= win10version;
@@ -692,10 +535,7 @@ public static class VHUtils
     }
 
 
-    public static bool IsHeadless()
-    {
-        return SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.Null;
-    }
+    public static bool IsHeadless() => SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.Null;
 
 
     public static bool IsDedicatedServer()
@@ -869,18 +709,12 @@ public static class VHUtils
         return unityCloudBuildManifest;
     }
 
-    public static bool IsSmartbodyAvailable()
-    {
-        return Type.GetType("SmartbodyExternals") != null;
-    }
-
     public static bool IsIndexInRange(int index, int arraySize)
     {
         bool isInRange = index >= 0 && index < arraySize;
         if (!isInRange)
-        {
-            Debug.LogErrorFormat("Error: Index not in range. Index {0} is out of range 0-{1}", index, arraySize);
-        }
+            Debug.LogError($"Error: Index not in range. Index {index} is out of range 0-{arraySize}");
+
         return isInRange;
     }
 

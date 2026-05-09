@@ -1,7 +1,6 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -10,14 +9,22 @@ using Ride.IO;
 
 namespace Ride.UI
 {
-    public class ExitPromptMenu : MenuMono, IExitPromptMenu
+    /// <summary>
+    /// Displays a confirmation prompt for leaving the current scenario and coordinates the related
+    /// pause, input-layer, cursor, and scene-transition behavior.
+    /// </summary>
+    public class ExitPromptMenu : MenuUnity, IExitPromptMenu
     {
+        [Tooltip("Button that closes the prompt and keeps the current scenario running.")]
         [SerializeField]
         protected RideButton noButton = null;       // The button that cancels exiting the scenario.
+        [Tooltip("Button that confirms the exit action and quits or loads the configured level.")]
         [SerializeField]
         protected RideButton yesButton = null;      // The button that exits the scenario.
+        [Tooltip("Button that opens the exit prompt, primarily for touch-based interfaces.")]
         [SerializeField]
         protected RideButton exitButton = null;     // The button that opens the prompt. Intended for touch users.
+        [Tooltip("Panel GameObject that contains the exit confirmation UI and is shown or hidden when the prompt opens or closes.")]
         [SerializeField]
         protected GameObject promptPanel = null;    // This reference is for toggling the prompt on and off.
 
@@ -32,6 +39,9 @@ namespace Ride.UI
         public event EventHandler onClosePrompt;
 
 
+        /// <summary>
+        /// Initializes button listeners, locates dependent systems, and configures the initial prompt visibility.
+        /// </summary>
         protected override void Start()
         {
             base.Start();
@@ -40,42 +50,43 @@ namespace Ride.UI
             yesButton.GetComponent<Button>().onClick.AddListener(() => { OnYes(); });
             exitButton.GetComponent<Button>().onClick.AddListener(() => { OpenPrompt(); });
 
-            // TODO - Ride Refactor - add a GetSystem() variant that doesn't fail with an error. Alternatively, HasSystem().
-            //pauseSystem = Globals.api.GetSystem<IPauseSystem>();
-            pauseSystem = FindObjectsByType<MonoBehaviour>(FindObjectsInactive.Include, FindObjectsSortMode.None)
-            .OfType<IPauseSystem>().FirstOrDefault();
+            pauseSystem = Systems.Get<IPauseSystem>();
 
             StartCoroutine(SetupListeners());
 
             promptPanel.SetActive(false);
 
-            #if UNITY_IOS || UNITY_ANDROID
+#if UNITY_IOS || UNITY_ANDROID
             // LevelSelect.unity's main script derives off ExampleBase.cs, so this is to hide the exit button.
-            if (UnityEngine.SceneManagement.SceneManager.GetSceneByName(m_levelToLoad).isLoaded) {
+            if (UnityEngine.SceneManagement.SceneManager.GetSceneByName(m_levelToLoad).isLoaded)
+            {
                 exitButton.gameObject.SetActive(false);
             }
-            else{
+            else
+            {
                 exitButton.gameObject.SetActive(true);
             }
-            #else
+#else
             exitButton.gameObject.SetActive(false);
-            #endif
+#endif
         }
 
-        public void SetPausable(bool pausable)
-        {
-            simulationPausable = pausable;
-        }
+        /// <summary>
+        /// Sets whether the simulation should pause while the exit prompt is visible.
+        /// </summary>
+        /// <param name="pausable">True to pause the simulation while the prompt is open; otherwise, false.</param>
+        public void SetPausable(bool pausable) => simulationPausable = pausable;
 
+        /// <summary>
+        /// Opens the prompt, pauses simulation if configured, and disables gameplay input while the prompt is active.
+        /// </summary>
         public virtual void OpenPrompt()
         {
             if (!promptPanel.activeSelf)
             {
                 promptPanel.SetActive(true);
                 if (simulationPausable)
-                {
                     pauseSystem?.PauseSimulation(yesButton.id, null);
-                }
 
                 if (Cursor.lockState == CursorLockMode.Locked)
                 {
@@ -93,13 +104,14 @@ namespace Ride.UI
             }
         }
 
+        /// <summary>
+        /// Closes the prompt, restores simulation and input state, and raises the close notification event.
+        /// </summary>
         protected virtual void ClosePrompt()
         {
             promptPanel.SetActive(false);
             if (simulationPausable)
-            {
                 pauseSystem?.ResumeSimulation(null);
-            }
 
             if (cursorWasLocked)
             {
@@ -114,21 +126,26 @@ namespace Ride.UI
             onClosePrompt?.Invoke(this,null);
         }
 
-        public bool IsPromptOpen()
-        {
-            return promptPanel.activeSelf;
-        }
+        /// <summary>
+        /// Determines whether the prompt panel is currently active.
+        /// </summary>
+        /// <returns>True if the prompt is open; otherwise, false.</returns>
+        public bool IsPromptOpen() => promptPanel.activeSelf;
 
-        public void SetLevelToLoad(string levelToLoad)
-        {
-            this.m_levelToLoad = levelToLoad;
-        }
+        /// <summary>
+        /// Sets the level to load when the user confirms the exit action.
+        /// </summary>
+        /// <param name="levelToLoad">The level name to load, or an empty value to quit the application instead.</param>
+        public void SetLevelToLoad(string levelToLoad) => m_levelToLoad = levelToLoad;
 
-        public void OnNo()
-        {
-            ClosePrompt();
-        }
+        /// <summary>
+        /// Handles the negative response to the prompt by closing it and leaving the current scenario running.
+        /// </summary>
+        public void OnNo() => ClosePrompt();
 
+        /// <summary>
+        /// Handles the affirmative response to the prompt by closing it and then quitting or loading the configured level.
+        /// </summary>
         public void OnYes()
         {
             ClosePrompt();
@@ -138,10 +155,14 @@ namespace Ride.UI
                 RideUtils.LoadScene(m_levelToLoad);
         }
 
+        /// <summary>
+        /// Waits for the Ride API to become available and then caches the input system reference used by the prompt.
+        /// </summary>
+        /// <returns>An enumerator for the delayed setup coroutine.</returns>
         protected IEnumerator SetupListeners()
         {
-            yield return new WaitUntil(() => Globals.api != null && Globals.api.worldStateSystem != null);
-            inputSystem = Globals.api.inputSystem;
+            yield return new WaitUntil(() => Systems.WorldState != null);
+            inputSystem = Systems.Input;
             //Globals.api.worldStateSystem.AddListener<AgentAddedEvent>(WorldEvent.agentCreated, HandleAgentCreation);
         }
     }

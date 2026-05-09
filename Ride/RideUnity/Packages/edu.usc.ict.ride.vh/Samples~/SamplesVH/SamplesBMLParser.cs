@@ -27,25 +27,25 @@ namespace Ride.Samples
             ( "nod4", @"<head type=""NOD"" amount="".8""/>" ),
             ( "shake1", @"<head type=""SHAKE"" start=""0"" end=""3""/>" ),
             // Gaze
-            ( "gaze1", @"<gaze target=""Main Camera""/>" ),
+            ( "gaze1", @"<gaze target=""Camera""/>" ),
             //@"<gaze target=""Main Camera:Offset""/>" ),
-            ( "gaze2", @"<gaze target=""Main Camera"" sbm:joint-range=""NECK EYES""/>" ),
-            ( "gaze3", @"<gaze target=""Main Camera"" sbm:joint-range=""CHEST BACK""/>" ),
-            ( "gaze4", @"<gaze target=""Main Camera"" sbm:joint-speed=""500""/>" ),
-            ( "gaze5", @"<gaze target=""Main Camera"" sbm:joint-speed=""800 1500""/>" ),
-            ( "gaze6", @"<gaze target=""Main Camera"" start=""2""/>" ),
+            //( "gaze2", @"<gaze target=""Camera"" sbm:joint-range=""NECK EYES""/>" ),
+            //( "gaze3", @"<gaze target=""Camera"" sbm:joint-range=""CHEST BACK""/>" ),
+            //( "gaze4", @"<gaze target=""Camera"" sbm:joint-speed=""500""/>" ),
+            //( "gaze5", @"<gaze target=""Camera"" sbm:joint-speed=""800 1500""/>" ),
+            //( "gaze6", @"<gaze target=""Camera"" start=""2""/>" ),
             // ID examples
-            ( "animid", @"<animation id=anim1 name=""IdleStandingUpright01_ChopLf01"" stroke=""1""/><animation id=anim2 name=""IdleStandingUpright01_MeLf01"" start=""anim1:relax""/>" ),
+            //( "animid", @"<animation id=anim1 name=""IdleStandingUpright01_ChopLf01"" stroke=""1""/><animation id=anim2 name=""IdleStandingUpright01_MeLf01"" start=""anim1:relax""/>" ),
             // Math
-            ( "math", @"<animation id=anim1 name=""IdleStandingUpright01_ChopLf01"" stroke=""1""/><animation id=anim2 name=""IdleStandingUpright01_MeLf01"" start=""anim1:relax+2""/>" ),
+            //( "math", @"<animation id=anim1 name=""IdleStandingUpright01_ChopLf01"" stroke=""1""/><animation id=anim2 name=""IdleStandingUpright01_MeLf01"" start=""anim1:relax+2""/>" ),
             // Gesture
-            /// <gesture id="a" lexeme="DEICTIC" type="LEFT" stroke="2" relax="4">
-            /// <gesture id="b" lexeme="DEICTIC" type="MID" start="a:relax" ready="a:relax" stroke_start="a:relax" stroke="6" relax="8"/>
-            /// <gesture id="c" lexeme="DEICTIC" type="RIGHT" start="b:relax" ready="b:relax" stroke_start="b:relax" stroke="10"/>
-            /// <gesture id="a" lexeme="DEICTIC" type="LEFT" stroke="2" relax="4">
-            /// <gesture id="b" lexeme="DEICTIC" type="MID" stroke="a:relax" relax="6"/>
-            /// <gesture id="c" lexeme="DEICTIC" type="RIGHT" stroke="b:relax" relax="8"/>
-            /// <gesture id="a" lexeme="DEICTIC" type="LEFT" stroke="2" relax="4" sbm:joint-range="l_shoulder" sbm:frequency="0.03" sbm:scale="0.02"/>
+            //<gesture id="a" lexeme="DEICTIC" type="LEFT" stroke="2" relax="4">
+            //<gesture id="b" lexeme="DEICTIC" type="MID" start="a:relax" ready="a:relax" stroke_start="a:relax" stroke="6" relax="8"/>
+            //<gesture id="c" lexeme="DEICTIC" type="RIGHT" start="b:relax" ready="b:relax" stroke_start="b:relax" stroke="10"/>
+            //<gesture id="a" lexeme="DEICTIC" type="LEFT" stroke="2" relax="4">
+            //<gesture id="b" lexeme="DEICTIC" type="MID" stroke="a:relax" relax="6"/>
+            //<gesture id="c" lexeme="DEICTIC" type="RIGHT" stroke="b:relax" relax="8"/>
+            //<gesture id="a" lexeme="DEICTIC" type="LEFT" stroke="2" relax="4" sbm:joint-range="l_shoulder" sbm:frequency="0.03" sbm:scale="0.02"/>
         };
 
         protected override void Start()

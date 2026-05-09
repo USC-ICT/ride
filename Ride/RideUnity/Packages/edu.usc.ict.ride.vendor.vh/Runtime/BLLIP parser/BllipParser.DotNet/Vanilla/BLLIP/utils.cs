@@ -1,4 +1,8 @@
+
+//#define BLLIP_ENABLE_ASSERTS
+
 using System;
+using System.Diagnostics;
 
 using ECStrings = BllipParser.DotNet.Vanilla.vector<BllipParser.DotNet.Vanilla.ECString>;  //typedef vector<ECString> ECStrings;
 using size_t = System.UInt64;
@@ -28,6 +32,10 @@ namespace BllipParser.DotNet.Vanilla
         //void error(const char *filename, int filelinenum, const char *msg);
         //void error(const char *filename, int filelinenum, string str);
         public static void error(string s) { ERROR(s); }  // backwards compatibility
+
+
+        [Conditional("BLLIP_ENABLE_ASSERTS")]
+        public static void AssertInternal(bool condition) { Debug.Assert(condition); }
 
 
         public static ECString langAwareToLower(ECString str)

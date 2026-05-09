@@ -9,10 +9,8 @@ public class RideTimelineDebugMenu : RideBaseMinimal
 {
     [SerializeField] private List<PlayableDirector> DirectorList;
 
-    //private PlayableDirector currentDirector;
     private bool isPaused = false;
-    //private bool isFirstStart = true;
-
+    
     protected override void Start()
     {
         base.Start();
@@ -29,16 +27,7 @@ public class RideTimelineDebugMenu : RideBaseMinimal
         using (m_debugMenu.Horizontal())
         {
             if(DrawGUIButton("Start"))
-            {
-                //if(currentDirector == null)
-                //{
-                //    Debug.LogWarning("RideTimelineDebugMenu.cs: Timeline director has not been selected.");
-                //}
-                //else if(isFirstStart)
-                //{
-                //    currentDirector.Play();
-                //    isFirstStart = false;
-                //}
+            {                
                 if(isPaused == false)
                 {
                     DirectorList[0].Play();
@@ -64,21 +53,5 @@ public class RideTimelineDebugMenu : RideBaseMinimal
                 }
             }
         }
-
-        //using(new GUILayout.HorizontalScope())
-        //{
-        //    for(int i =0; i<DirectorList.Count; ++i)
-        //    {
-        //        if(DrawGUIButton(DirectorList[i].name, 100f))
-        //        {
-        //            DirectorList[i].Play();
-        //            currentDirector = DirectorList[i];
-        //        }
-        //        //BeginHorizontal();
-        //    }
-        //}
-
-    }   //--OnGUITimeline()
-
-
+    }   
 }

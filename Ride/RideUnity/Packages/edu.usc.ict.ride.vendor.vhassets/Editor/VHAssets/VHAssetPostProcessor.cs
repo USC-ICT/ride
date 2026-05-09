@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
@@ -15,6 +15,22 @@ public class VHAssetPostProcessor : AssetPostprocessor
 {
     static List<string> m_matDirs = new List<string>();
     static List<string> m_filesToDelete = new List<string>();
+
+    struct SyncPointImportDebugData
+    {
+        public int AuthoredFrame;
+        public float LocalFrame;
+        public float ComputedTime;
+        public float FirstFrame;
+        public float LastFrame;
+    }
+
+    // Sync-point user properties are authored in source-take frame numbers. This importer callback
+    // does not expose a reliable imported sample rate, so use the authored animation frame rate here.
+    // Default to 30 fps because that is the current convention for our authored body clips.
+    // If that convention changes in the future, update this value or move the conversion to a later
+    // import phase that has access to exact clip timing data.
+    const float AuthoredAnimationFrameRate = 30f;
 
     bool m_customMaterialGeneration = false;
 
@@ -89,7 +105,9 @@ public class VHAssetPostProcessor : AssetPostprocessor
         try
         {
             var modelImporter = assetImporter as ModelImporter;
-            var eventsAdded = new Dictionary<string, int>();
+            var eventsAdded = new Dictionary<string, SyncPointImportDebugData>();
+            int syncPointPropertyCount = 0;
+            int zeroValuedSyncPointCount = 0;
 
             // Go through the properties one by one
             for (i = 0; i < propNames.Length; i++)
@@ -109,17 +127,23 @@ public class VHAssetPostProcessor : AssetPostprocessor
                         }
 
                         string syncPointName = propNames[i];
-                        int syncPointFrame = (int)values[i];
+                        object rawValue = values[i];
+                        int syncPointFrame = (int)rawValue;
+
+                        syncPointPropertyCount++;
+                        if (syncPointFrame == 0)
+                            zeroValuedSyncPointCount++;
 
                         ModelImporterClipAnimation[] anims = modelImporter.clipAnimations;
 
                         // check to see if the sync point event already exists
                         ModelImporterClipAnimation modelClip = anims[0];
 
-                        bool foundEvent = true;
+                        int existingEventIndex = Array.FindIndex(modelClip.events, e => e.functionName == syncPointName);
+                        bool foundEvent = existingEventIndex >= 0;
                         AnimationEvent[] events = null;
-                        AnimationEvent syncPointEvent = Array.Find<AnimationEvent>(modelClip.events, e => e.functionName == syncPointName);
-                        if (syncPointEvent == null)
+                        AnimationEvent syncPointEvent = foundEvent ? modelClip.events[existingEventIndex] : null;
+                        if (!foundEvent)
                         {
                             // this event doesn't exist, add a new one
                             // create a deep copy of the events 
@@ -138,12 +162,26 @@ public class VHAssetPostProcessor : AssetPostprocessor
                             events = modelClip.events;
                         }
 
-                        // setup the event data
-                        // the time needs to be normalized at this point in the pipeline.  
-                        syncPointEvent.time = ((float)syncPointFrame / (float)modelClip.lastFrame);// * clip.length;
-                        //Debug.LogFormat("{0} --- {1} ---- {2} ",
-                        //    (float)syncPointFrame, (float)modelClip.lastFrame, syncPointEvent.time);
+                        // FBX sync-point metadata is authored as frame numbers on the source take. Example:
+                        // if the imported clip is frames 2..57 and the authored sync point is frame 15, the
+                        // local frame offset is 13 frames from the imported clip start. Convert that local
+                        // frame offset into clip-local seconds using the authored animation frame rate
+                        // (currently 30 fps for these assets), so the event fires at 13 / 30 = 0.433s.
+                        float localFrame = Mathf.Max(0f, syncPointFrame - modelClip.firstFrame);
+                        syncPointEvent.time = localFrame / AuthoredAnimationFrameRate;
+
+                        //Debug.Log(
+                        //    $"VHAssetPostProcessor.ParseSyncPoints() - Normalized sync event " +
+                        //    $"clip='{modelClip.name}' name='{syncPointName}' frame={syncPointFrame} localFrame={localFrame:F3} " +
+                        //    $"timeSeconds={syncPointEvent.time:F6} sampleRate={sampleRate:F3} firstFrame={modelClip.firstFrame} lastFrame={modelClip.lastFrame}",
+                        //    assetImporter);
+
+                        // Mirror the key sync metadata into the event parameters so the Unity inspector shows
+                        // something useful when the event is selected. Runtime sync lookup still uses the event's
+                        // function name and time; these extra parameter values are informational only.
+                        syncPointEvent.floatParameter = syncPointEvent.time;
                         syncPointEvent.intParameter = syncPointFrame;
+                        syncPointEvent.stringParameter = $"frame={syncPointFrame}, localFrame={localFrame:0.###}, time={syncPointEvent.time:0.###}s";
                         syncPointEvent.functionName = propNames[i];
                         syncPointEvent.messageOptions = SendMessageOptions.DontRequireReceiver;
                         
@@ -151,21 +189,42 @@ public class VHAssetPostProcessor : AssetPostprocessor
                         {
                             events[events.Length - 1] = syncPointEvent;
                         }
+                        else
+                        {
+                            // Replace the existing slot explicitly so reimports do not rely on mutating a found
+                            // reference in place. This keeps sync-point event updates deterministic.
+                            events[existingEventIndex] = syncPointEvent;
+                        }
 
                         // deep copy back
                         modelClip.events = events;
                         modelImporter.clipAnimations = anims;
 
-                        eventsAdded.Add(propNames[i], syncPointFrame);
+                        eventsAdded.Add(propNames[i], new SyncPointImportDebugData
+                        {
+                            AuthoredFrame = syncPointFrame,
+                            LocalFrame = localFrame,
+                            ComputedTime = syncPointEvent.time,
+                            FirstFrame = modelClip.firstFrame,
+                            LastFrame = modelClip.lastFrame,
+                        });
                     }
                 }
             }
 
             if (eventsAdded.Count > 0)
             {
-                string added = string.Join("\n", eventsAdded.Select(kvp => $"Event: {kvp.Key} - Frame: {kvp.Value}"));
-                Debug.Log($"VHAssetPostProcessor.ParseSyncPoints() - Animation '{modelImporter.assetPath}' sync points added:\n{added}", assetImporter);
+                var firstSyncPoint = eventsAdded.Values.First();
+                string added = string.Join("\n", eventsAdded.Select(kvp =>
+                    $"Event: {kvp.Key} - Frame: {kvp.Value.AuthoredFrame} - LocalFrame: {kvp.Value.LocalFrame:0.###} - Time: {kvp.Value.ComputedTime:0.###}s"));
+                Debug.Log(
+                    $"VHAssetPostProcessor.ParseSyncPoints() - Animation '{modelImporter.assetPath}' sync points added " +
+                    $"(firstFrame={firstSyncPoint.FirstFrame:0.###}, lastFrame={firstSyncPoint.LastFrame:0.###}, authoredFps={AuthoredAnimationFrameRate:0.###}):\n{added}",
+                    assetImporter);
             }
+
+            if (syncPointPropertyCount > 0 && zeroValuedSyncPointCount == syncPointPropertyCount)
+                Debug.LogWarning($"VHAssetPostProcessor.ParseSyncPoints() - Animation '{modelImporter.assetPath}' imported {syncPointPropertyCount} sync-point properties and all resolved to frame 0. This usually indicates missing or invalid source metadata.", assetImporter);
         }
         catch (Exception e)
         {

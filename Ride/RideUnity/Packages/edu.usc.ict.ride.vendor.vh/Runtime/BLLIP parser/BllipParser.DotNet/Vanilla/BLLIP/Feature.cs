@@ -6,6 +6,7 @@ using System.IO;
 
 using static BllipParser.DotNet.Vanilla.Feature_global;
 using static BllipParser.DotNet.Vanilla.FeatureTree_global;
+using static BllipParser.DotNet.Vanilla.utils;
 
 
 namespace BllipParser.DotNet.Vanilla
@@ -152,7 +153,7 @@ namespace BllipParser.DotNet.Vanilla
 
         public static Feature fromInt(int i, int which)
         {
-            Debug.Assert(i > 0);
+            AssertInternal(i > 0);
             return array_[which, i - 1];
         }
 
@@ -175,7 +176,7 @@ namespace BllipParser.DotNet.Vanilla
             else if (conditioned == "ww") whichInt = WWCALC;
             else
             {
-                Debug.Assert(conditioned == "m");
+                AssertInternal(conditioned == "m");
                 whichInt = MCALC;
             }
         }
@@ -251,7 +252,7 @@ namespace BllipParser.DotNet.Vanilla
                 {
                     cpr = Convert.ToInt32(tmp);
                     tmp = dataStrmSplit[dataStrmIdx++];  //dataStrm >> tmp;
-                    Debug.Assert(tmp == "|");
+                    AssertInternal(tmp == "|");
                 }
 
                 array_[whichInt, n - 1] = new Feature(n, nm, subf, pos, cpr);
@@ -286,7 +287,7 @@ namespace BllipParser.DotNet.Vanilla
                 }
 
                 SubFeature.fromInt(n, whichInt) = new SubFeature(n, nm, fn, featList);
-                Debug.Assert(SubFeature.fromInt(n, whichInt) != null);
+                AssertInternal(SubFeature.fromInt(n, whichInt) != null);
             }
 
             SubFeature.total[whichInt] = num;
@@ -384,7 +385,7 @@ namespace BllipParser.DotNet.Vanilla
 
         static void createFTypeTree(Pointer<FTypeTree> posftTree, int n, int which)
         {
-            Debug.Assert(posftTree.op != null);
+            AssertInternal(posftTree.op != null);
             if (posftTree.op.left == null)
             {
                 posftTree.op.left = new Pointer<FTypeTree>(new FTypeTree[] { new FTypeTree(n) });

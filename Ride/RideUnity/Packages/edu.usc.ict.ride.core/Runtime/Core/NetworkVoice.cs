@@ -1,9 +1,16 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
 namespace Ride.Networking
 {
+    /// <summary>
+    /// Unity-facing abstract base class for Ride voice-chat components.
+    /// </summary>
+    /// <remarks>
+    /// This class exists so Ride code can depend on a backend-agnostic <see cref="INetworkVoice"/> component while concrete networking
+    /// packages provide the actual recorder implementation. In the current codebase, <see cref="PhotonNetworkVoice"/> is the only concrete implementation.
+    /// </remarks>
     abstract public class NetworkVoice : MonoBehaviour, INetworkVoice
     {
         public abstract bool isRecording { get; set; }

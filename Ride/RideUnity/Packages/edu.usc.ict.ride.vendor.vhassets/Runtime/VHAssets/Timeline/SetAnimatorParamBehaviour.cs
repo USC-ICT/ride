@@ -20,7 +20,17 @@ public class SetAnimatorParamBehaviour : PlayableBehaviour
     // Called when the owning graph starts playing
     public override void OnGraphStart(Playable playable)
     {
-        m_Animtor = VHUtils.FindGameObjectAndGetComponent<Animator>(m_Character, GetType().ToString());
+        var go = GameObject.Find(m_Character);
+        if (go != null)
+        {
+            m_Animtor = go.GetComponent<Animator>();
+            if (m_Animtor == null)
+                Debug.LogError($"{GetType()} failed to find component {typeof(Animator)} on gameobject {m_Character}");
+        }
+        else
+        {
+            Debug.LogError($"{GetType()} failed to find gameobject with name {m_Character}");
+        }
     }
 
     // Called when the owning graph stops playing

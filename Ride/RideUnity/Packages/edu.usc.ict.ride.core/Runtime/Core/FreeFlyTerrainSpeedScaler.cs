@@ -1,7 +1,4 @@
-﻿// Part of the Ride API
-// Copyright - USC Institute for Creative Technologies (https://ict.usc.edu)
-
-using UnityEngine;
+﻿using UnityEngine;
 
 namespace Ride
 {

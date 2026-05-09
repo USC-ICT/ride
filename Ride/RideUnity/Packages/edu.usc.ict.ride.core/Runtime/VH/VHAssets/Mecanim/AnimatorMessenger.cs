@@ -2,31 +2,18 @@
 
 namespace VHAssets
 {
-public class AnimatorMessenger : MonoBehaviour
-{
-    #region Variables
-    MecanimCharacter m_Character;
-    #endregion
-
-    #region Functions
-    public void SetMessengerTarget(MecanimCharacter character)
+    public class AnimatorMessenger : MonoBehaviour
     {
-        m_Character = character;
-    }
+        private MecanimCharacter m_Character;
 
-    void OnStateIK()
-    {
-        //SendMessageUpwards("OnStateIK");
-    }
+        #region Functions
+        public void SetMessengerTarget(MecanimCharacter character) => m_Character = character;
 
-    void OnAnimatorIK(int layer)
-    {
-        //SendMessageUpwards("OnAnimatorIK");
-        if (m_Character != null)
+        void OnAnimatorIK(int layer)
         {
-            m_Character.UpdateGaze();
+            if (m_Character != null)
+                m_Character.UpdateGaze();
         }
+        #endregion
     }
-    #endregion
-}
 }

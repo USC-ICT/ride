@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Threading.Tasks;
+using UnityEngine;
 using UnityEngine.Networking;
 
 namespace Ride.NLP
@@ -13,24 +14,6 @@ namespace Ride.NLP
     {
         private string m_model = "claude-haiku-4-5"; //claude-sonnet-4-5
 
-
-        /// <summary>
-        /// Initializes the system by configuring the Anthropic endpoint, setting up authorization, 
-        /// defining the initial prompt, and performing base initialization.
-        /// 
-        /// This method connects with the configuration system to retrieve and apply necessary 
-        /// settings such as the AI endpoint URL and the authorization key. It also sets up the 
-        /// initial prompt that guides the AI's responses. Finally, it performs any essential 
-        /// base initialization required for the system to function correctly.        
-        /// </summary>
-        public override void SystemInit()
-        {
-            var configSystem = Globals.api.GetSystem<ConfigurationSystemUnity>();
-            m_uri = configSystem.config.anthropic.endpoint;
-            m_authorizationKey = configSystem.config.anthropic.endpointKey;
-
-            base.SystemInit();
-        }
 
         /// <summary>
         /// Requests response based on provided user input for Anthropic. 
@@ -50,12 +33,20 @@ namespace Ride.NLP
                 system = m_initialPrompt,
                 messages = messagesList.ToArray(),
                 max_tokens = 1024
-            }
-             , RideIO.GetJsonConfigNoNameHandling());
+            },
+            RideIO.GetJsonConfigNoNameHandling());
 
-            //Call web service
+            var configSystem = Systems.Get<ConfigurationSystemUnity>();
+            m_uri = configSystem.config.anthropic.endpoint;
+            m_authorizationKey = configSystem.config.anthropic.endpointKey;
+
+#if UNITY_WEBGL && !UNITY_EDITOR
+            m_uri = ConfigurationSystemUnity.GetAnthropicProxyEndpoint();
+#endif
+
+            // Call web service
             using var webRequest = new UnityWebRequest(m_uri, "POST");
-            byte[] bodyRaw = Encoding.UTF8.GetBytes(data);
+            byte [] bodyRaw = Encoding.UTF8.GetBytes(data);
             webRequest.uploadHandler = new UploadHandlerRaw(bodyRaw);
             webRequest.downloadHandler = new DownloadHandlerBuffer();
             webRequest.SetRequestHeader("Content-Type", "application/json");
@@ -65,25 +56,24 @@ namespace Ride.NLP
             DateTime startTime = DateTime.Now;
             var operation = webRequest.SendWebRequest();
             while (!operation.isDone)
-            {
                 await Task.Yield();
-            }
             DateTime endTime = DateTime.Now;
+
             m_responseTime = (endTime - startTime).TotalMilliseconds + " ms";
 
             if (webRequest.result == UnityWebRequest.Result.ConnectionError     ||
                 webRequest.result == UnityWebRequest.Result.DataProcessingError ||
                 webRequest.result == UnityWebRequest.Result.ProtocolError)
             {
-                UnityEngine.Debug.LogWarning($"AnthropicSystem.cs::Request() - Failed: {webRequest.result}");
+                Debug.LogWarning($"AnthropicSystem.cs::Request() - Failed: {webRequest.result}");
                 return;
             }
 
-            //Deserialize reponse
+            // Deserialize reponse
             var result = webRequest.downloadHandler.text;
             var res = RideIO.JsonDeserialize<AnthropicResponse>(result);
 
-            //Update conversation history
+            // Update conversation history
             NlpInteraction interaction = new NlpInteraction();
             interaction.input = request.content;
             interaction.response = res.content[0].text;
@@ -91,7 +81,7 @@ namespace Ride.NLP
             interaction.responseTimestamp = endTime;
             m_interactionHistory.Add(interaction);
 
-            //Invoke callback on complete
+            // Invoke callback on complete
             onComplete?.Invoke(new NlpResponse(/*result, */res.content[0].text));
         }
 
@@ -120,14 +110,12 @@ namespace Ride.NLP
             foreach (var interaction in m_interactionHistory)
             {
                 if (interaction.input != null)
-                {
                     history.Add(new AnthropicMessage("user", interaction.input));
-                }
+
                 if (interaction.response != null) 
-                {
-                    history.Add(new AnthropicMessage("assistant", interaction.input));
-                }
+                    history.Add(new AnthropicMessage("assistant", interaction.response));
             }
+
             return history;
         }
 
@@ -160,8 +148,6 @@ namespace Ride.NLP
             public string stop_sequence { get; set; }   
             public string type { get; set; }    
             public AnthropicUsage usage { get; set; }   
-     
-        
         }
 
         private class AnthropicContent
@@ -176,6 +162,5 @@ namespace Ride.NLP
             public int output_tokens { get; set; }
         }
         #endregion
-
     }
 }

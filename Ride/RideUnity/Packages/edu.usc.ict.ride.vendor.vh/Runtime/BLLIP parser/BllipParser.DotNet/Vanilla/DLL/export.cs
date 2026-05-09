@@ -114,9 +114,23 @@ namespace BllipParser.DotNet.Vanilla
         }
 
 
+        private static readonly MeChart[] s_meCharts = new MeChart[MAXNUMTHREADS];
+
         static bool parse(in int threadId, SentRep sentence, ExtPos extPos, SentenceParseResult parseResult, in bool useExtPos)
         {
-            var pChart = useExtPos ? new MeChart(sentence, extPos, threadId) : new MeChart(sentence, threadId);//too large, put on heap
+            //var pChart = useExtPos ? new MeChart(sentence, extPos, threadId) : new MeChart(sentence, threadId);//too large, put on heap
+            var pChart = s_meCharts[threadId];
+            if (pChart == null)
+            {
+                // Create once. We'll reset it per sentence.
+                pChart = useExtPos ? new MeChart(sentence, extPos, threadId) : new MeChart(sentence, threadId);
+                s_meCharts[threadId] = pChart;
+            }
+            else
+            {
+                pChart.ResetForSentence(sentence, useExtPos ? extPos : null);
+            }
+
             var chart = pChart;  //auto& chart = *pChart;
 
             chart.parse();

@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -33,10 +34,14 @@ namespace Ride
         [Serializable] public class StreamInfo
         {
             [HideInInspector][SerializeField] public string fileName;
+            [Tooltip("Assign either the raw file (as a TextAsset) or a .zip (also imported as a TextAsset).")]
             public TextAsset textAsset;
+            [Tooltip("If true, TextAsset.bytes is treated as a .zip, and ZipEntryName is opened from it.")]
+            public bool isZip;
+
             public override string ToString() => fileName;
 
-            public StreamInfo(string _filename) { fileName = _filename; textAsset = null; }
+            public StreamInfo(string _filename, bool _isZip = false) { fileName = _filename; textAsset = null; isZip = _isZip; }
         }
 
         public List<StreamInfo> m_streams = new()
@@ -47,7 +52,7 @@ namespace Ride
             new("rule_input_ChrKevin.xml"),
             new("saliency_map_init_kevin.xml"),
             // ParserModelEN folder
-            new("endings.txt"),
+            new("endings.txt", _isZip : true),
             new("featInfo.h"),
             new("featInfo.l"),
             new("featInfo.lm"),
@@ -59,28 +64,28 @@ namespace Ride
             new("featInfo.t"),
             new("featInfo.tt"),
             new("featInfo.u"),
-            new("h.g"),
+            new("h.g", _isZip: true),
             new("h.lambdas"),
             new("headInfo.txt"),
-            new("l.g"),
+            new("l.g", _isZip: true),
             new("l.lambdas"),
-            new("lm.g"),
+            new("lm.g", _isZip : true),
             new("lm.lambdas"),
-            new("m.g"),
+            new("m.g", _isZip : true),
             new("m.lambdas"),
             new("nttCounts.txt"),
-            new("pSgT.txt"),
+            new("pSgT.txt", _isZip : true),
             new("pUgT.txt"),
-            new("r.g"),
+            new("r.g", _isZip : true),
             new("r.lambdas"),
-            new("rm.g"),
+            new("rm.g", _isZip : true),
             new("rm.lambdas"),
-            new("ru.g"),
+            new("ru.g", _isZip : true),
             new("ru.lambdas"),
             new("terms.txt"),
-            new("tt.g"),
+            new("tt.g", _isZip : true),
             new("tt.lambdas"),
-            new("u.g"),
+            new("u.g", _isZip : true),
             new("u.lambdas"),
             new("unitRules.txt"),
         };
@@ -232,8 +237,17 @@ namespace Ride
             var streams = new Dictionary<string, Stream>();
             foreach (var stream in m_streams)
             {
-                if (!string.IsNullOrEmpty(stream.fileName) && stream.textAsset != null)
-                    streams.Add($"{parserModelDirectory}/{stream.fileName}", new MemoryStream(Encoding.UTF8.GetBytes(stream.textAsset.text)));
+                if (string.IsNullOrEmpty(stream.fileName) || stream.textAsset == null)
+                    continue;
+
+                Stream s = OpenStream(stream);
+                if (s == Stream.Null)
+                {
+                    Debug.LogError($"NVBG/BLLIP: missing or unreadable asset for '{stream.fileName}'.");
+                    continue;
+                }
+
+                streams.Add($"{parserModelDirectory}/{stream.fileName}", s);
             }
 
             string transformXsl = m_streams.Find(s => s.fileName == "NVBG_transform.xsl").textAsset.text;
@@ -372,6 +386,8 @@ namespace Ride
             xmlText = xmlText.Replace("'", "&apos;");
 
             Debug.Log($"NVBG Response - xmlText (Truncated): {xmlText[..Mathf.Min(500, xmlText.Length)]}");
+            Debug.Log(BuildNvbgUtteranceTimeline(xmlText));
+            Debug.Log(BuildNvbgScheduleSummary(xmlText));
 
             resultCallback(xmlText);
         }
@@ -440,5 +456,346 @@ namespace Ride
             }
         }
         #endregion
+
+        private sealed class ZipEntryOwnedStream : Stream
+        {
+            private readonly Stream m_inner;
+            private readonly ZipArchive m_archive;
+
+            public ZipEntryOwnedStream(Stream inner, ZipArchive archive)
+            {
+                m_inner = inner ?? throw new ArgumentNullException(nameof(inner));
+                m_archive = archive ?? throw new ArgumentNullException(nameof(archive));
+            }
+
+            public override bool CanRead => m_inner.CanRead;
+            public override bool CanSeek => m_inner.CanSeek;
+            public override bool CanWrite => false;
+            public override long Length => m_inner.Length;
+
+            public override long Position
+            {
+                get => m_inner.Position;
+                set => m_inner.Position = value;
+            }
+
+            public override void Flush() { }
+            public override int Read(byte[] buffer, int offset, int count) => m_inner.Read(buffer, offset, count);
+            public override long Seek(long offset, SeekOrigin origin) => m_inner.Seek(offset, origin);
+            public override void SetLength(long value) => throw new NotSupportedException();
+            public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+            protected override void Dispose(bool disposing)
+            {
+                if (disposing)
+                {
+                    try { m_inner.Dispose(); } catch { }
+                    try { m_archive.Dispose(); } catch { }
+                }
+                base.Dispose(disposing);
+            }
+        }
+
+        private static Stream OpenStream(StreamInfo info)
+        {
+            if (info == null || info.textAsset == null)
+                return Stream.Null;
+
+            byte[] bytes = info.textAsset.bytes;
+            if (bytes == null || bytes.Length == 0)
+                return Stream.Null;
+
+            if (!info.isZip)
+            {
+                // IMPORTANT: Do not go through textAsset.text; it forces a giant string allocation.
+                return new MemoryStream(bytes, writable: false);
+            }
+
+            string entryName = info.fileName;
+
+            // ZipArchive needs an owning stream. We keep it alive via a wrapper stream.
+            var zipBytesStream = new MemoryStream(bytes, writable: false);
+            ZipArchive archive = null;
+            Stream entryStream = null;
+
+            try
+            {
+                archive = new ZipArchive(zipBytesStream, ZipArchiveMode.Read, leaveOpen: false);
+                ZipArchiveEntry entry = archive.GetEntry(entryName);
+
+                if (entry == null)
+                {
+                    // Some zips store entries with folder prefixes; you can loosen this later if needed.
+                    Debug.LogError($"NVBG/BLLIP: zip for '{info.fileName}' does not contain entry '{entryName}'.");
+                    archive.Dispose();
+                    return Stream.Null;
+                }
+
+                entryStream = entry.Open();
+                return new ZipEntryOwnedStream(entryStream, archive);
+            }
+            catch (Exception e)
+            {
+                entryStream?.Dispose();
+                archive?.Dispose();
+                Debug.LogError($"NVBG/BLLIP: failed to open zip stream for '{info.fileName}'. {e}");
+                return Stream.Null;
+            }
+        }
+
+        private static string BuildNvbgUtteranceTimeline(string xmlText, string speechId = "sp1")
+        {
+            if (string.IsNullOrEmpty(xmlText))
+                return "NVBG Utterance Timeline: <empty xmlText>";
+
+            // xmlText is InnerXml, so wrap it.
+            string wrapped = $"<root>{xmlText}</root>";
+
+            var doc = new XmlDocument();
+            try
+            {
+                doc.LoadXml(wrapped);
+            }
+            catch (Exception e)
+            {
+                return $"NVBG Utterance Timeline: failed to parse xmlText. {e.GetType().Name}: {e.Message}";
+            }
+
+            // Prefer the requested speech id, otherwise fall back to first <speech>
+            XmlElement speech =
+                doc.SelectSingleNode($"//speech[@id='{speechId}']") as XmlElement ??
+                doc.SelectSingleNode("//speech") as XmlElement;
+
+            if (speech == null)
+                return "NVBG Utterance Timeline: no <speech> node found.";
+
+            var sb = new StringBuilder(1024);
+            sb.Append("NVBG Utterance Timeline (speech marks):\n");
+
+            foreach (XmlNode child in speech.ChildNodes)
+            {
+                if (child.NodeType == XmlNodeType.Element)
+                {
+                    XmlElement e = (XmlElement)child;
+
+                    // In your sample: <mark name="T0" />
+                    if (e.Name == "mark")
+                    {
+                        string name = e.GetAttribute("name"); // e.g. "T0"
+                        if (!string.IsNullOrEmpty(name))
+                            sb.Append($"[{name}] ");
+                    }
+
+                    continue;
+                }
+
+                if (child.NodeType == XmlNodeType.Text || child.NodeType == XmlNodeType.CDATA)
+                {
+                    // XmlDocument already decodes &apos; etc for us in Value.
+                    string text = child.Value;
+
+                    if (!string.IsNullOrEmpty(text))
+                    {
+                        // Keep it readable but don't destroy punctuation.
+                        // Collapse newlines/tabs; preserve ordinary spaces.
+                        text = text.Replace("\r", " ").Replace("\n", " ").Replace("\t", " ");
+
+                        sb.Append(text);
+                    }
+                }
+            }
+
+            // Normalize any crazy spacing a bit (optional, but tends to help)
+            string result = sb.ToString();
+            result = NormalizeSpaces(result);
+
+            return result.TrimEnd();
+        }
+
+        private static string NormalizeSpaces(string s)
+        {
+            if (string.IsNullOrEmpty(s))
+                return s;
+
+            // Collapse repeated spaces, but keep single spaces.
+            var sb = new StringBuilder(s.Length);
+            bool lastWasSpace = false;
+
+            for (int i = 0; i < s.Length; i++)
+            {
+                char c = s[i];
+                bool isSpace = (c == ' ');
+
+                if (isSpace)
+                {
+                    if (!lastWasSpace)
+                        sb.Append(c);
+
+                    lastWasSpace = true;
+                }
+                else
+                {
+                    sb.Append(c);
+                    lastWasSpace = false;
+                }
+            }
+
+            return sb.ToString();
+        }
+
+        private static string BuildNvbgScheduleSummary(string xmlText, int maxBehaviorsToPrint = 64)
+        {
+            if (string.IsNullOrEmpty(xmlText))
+                return "NVBG Schedule: <empty xmlText>";
+
+            // xmlText is InnerXml, so it may contain multiple top-level nodes.
+            // Wrap it so XmlDocument can load it reliably.
+            string wrapped = "<root>" + xmlText + "</root>";
+
+            var doc = new XmlDocument();
+            try
+            {
+                doc.LoadXml(wrapped);
+            }
+            catch (Exception e)
+            {
+                return $"NVBG Schedule: failed to parse xmlText. {e.GetType().Name}: {e.Message}";
+            }
+
+            var root = doc.DocumentElement;
+            if (root == null)
+                return "NVBG Schedule: <no root>";
+
+            // Flatten behaviors: consider direct children under <bml> if present, otherwise under <root>.
+            var container = root.SelectSingleNode("//bml") ?? root;
+
+            var lines = new List<string>(64);
+            int behaviorCount = 0;
+
+            foreach (XmlNode node in container.ChildNodes)
+            {
+                if (node.NodeType != XmlNodeType.Element)
+                    continue;
+
+                string name = node.Name;
+
+                // Skip common non-behavior / noise.
+                if (name == "speech" || name == "mark" || name == "text" || name == "sbm:event" || name == "event")
+                    continue;
+
+                string line = SummarizeBehaviorNode((XmlElement)node);
+                if (!string.IsNullOrEmpty(line))
+                {
+                    lines.Add($"  {line}");
+                    behaviorCount++;
+
+                    if (behaviorCount >= maxBehaviorsToPrint)
+                    {
+                        lines.Add($"  ... (truncated after {maxBehaviorsToPrint} behaviors)");
+                        break;
+                    }
+                }
+            }
+
+            if (behaviorCount == 0)
+                return "NVBG Schedule: no behaviors found (after filtering speech/events).";
+
+            // Optional: stable ordering can be helpful. Many BML streams are already in time-ish order,
+            // but if yours isn't, you can sort by ready/start token; I left it as-is for minimal changes.
+
+            var sb = new StringBuilder(2048);
+            sb.AppendLine($"NVBG Schedule - behaviors={behaviorCount}");
+            for (int i = 0; i < lines.Count; i++)
+                sb.AppendLine(lines[i]);
+
+            return sb.ToString();
+        }
+
+        private static string SummarizeBehaviorNode(XmlElement e)
+        {
+            // Common timing attribute names (not all tags use these).
+            string start    = Attr(e, "start");
+            string ready    = Attr(e, "ready");
+            string stroke0  = Attr(e, "strokeStart");
+            string stroke   = Attr(e, "stroke");
+            string emphasis = Attr(e, "emphasis");
+            string relax    = Attr(e, "relax");
+            string end      = Attr(e, "end");
+
+            string timing = BuildTiming(start, ready, stroke0, stroke, emphasis, relax, end);
+
+            // Common meta
+            string priority = Attr(e, "priority");
+
+            switch (e.Name)
+            {
+                case "gaze":
+                {
+                    string participant = Attr(e, "participant");
+                    string target      = Attr(e, "target");
+                    string direction   = Attr(e, "direction");
+                    string angle       = Attr(e, "angle");
+                    string jointRange  = Attr(e, "joint-range");
+                    return $"[gaze] {Kvp("participant", participant)}{Kvp("target", target)}{Kvp("direction", direction)}{Kvp("angle", angle)}{Kvp("jointRange", jointRange)}{Kvp("priority", priority)}{timing}".TrimEnd();
+                }
+
+                case "head":
+                {
+                    string type    = Attr(e, "type");
+                    string amount  = Attr(e, "amount");
+                    string repeats = Attr(e, "repeats");
+                    return $"[head] {Kvp("type", type)}{Kvp("amount", amount)}{Kvp("repeats", repeats)}{Kvp("priority", priority)}{timing}".TrimEnd();
+                }
+
+                case "animation":
+                {
+                    string name  = Attr(e, "name");
+                    string layer = Attr(e, "layer");
+                    string speed = Attr(e, "speed");
+                    return $"[animation] {Kvp("name", name)}{Kvp("layer", layer)}{Kvp("speed", speed)}{Kvp("priority", priority)}{timing}".TrimEnd();
+                }
+
+                default:
+                {
+                    // Generic fallback
+                    string id     = Attr(e, "id");
+                    string type   = Attr(e, "type");
+                    string target = Attr(e, "target");
+                    return $"[{e.Name}] {Kvp("id", id)}{Kvp("type", type)}{Kvp("target", target)}{Kvp("priority", priority)}{timing}".TrimEnd();
+                }
+            }
+        }
+
+        private static string BuildTiming(string start, string ready, string strokeStart, string stroke, string emphasis, string relax, string end)
+        {
+            var sb = new StringBuilder(128);
+
+            // Use leading space so callers can just append.
+            AppendTime(sb, "start", start);
+            AppendTime(sb, "ready", ready);
+            AppendTime(sb, "strokeStart", strokeStart);
+            AppendTime(sb, "stroke", stroke);
+            AppendTime(sb, "emphasis", emphasis);
+            AppendTime(sb, "relax", relax);
+            AppendTime(sb, "end", end);
+
+            return sb.Length > 0 ? sb.ToString() : "";
+        }
+
+        private static void AppendTime(StringBuilder sb, string name, string value)
+        {
+            if (string.IsNullOrEmpty(value))
+                return;
+
+            if (sb.Length == 0)
+                sb.Append(" ");
+
+            sb.Append(name);
+            sb.Append("=");
+            sb.Append(value);
+        }
+
+        private static string Attr(XmlElement e, string name) => e.HasAttribute(name) ? e.GetAttribute(name) : "";
+        private static string Kvp(string key, string value) => string.IsNullOrEmpty(value) ? "" : $"{key}={value} ";
     }
 }

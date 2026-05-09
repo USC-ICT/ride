@@ -154,23 +154,23 @@ namespace BllipParser.DotNet.Vanilla
                 array_[n] = nextTerm;
                 if (ind == 0 && !seenNTs)
                 {
-                    Debug.Assert(n > 0);
+                    AssertInternal(n > 0);
                     lastTagInt_ = n-1;
                     seenNTs = true;
                 }
 
                 n++;
-                Debug.Assert(n < 400);
+                AssertInternal(n < 400);
             }
 
-            Debug.Assert(ind == 0);
+            AssertInternal(ind == 0);
             lastNTInt_ = n - 1;
             //lastNTInt_ = n-4;  //??? hack to ignore G1 and G2 and G3;
             //stream.close();
         }
 
 
-        public static Term fromInt(int i) { Debug.Assert(i < MAXNUMNTTS); return array_[i]; }
+        public static Term fromInt(int i) { AssertInternal(i < MAXNUMNTTS); return array_[i]; }
         public static int lastTagInt() { return lastTagInt_; }
         public static int lastNTInt() { return lastNTInt_; }
 

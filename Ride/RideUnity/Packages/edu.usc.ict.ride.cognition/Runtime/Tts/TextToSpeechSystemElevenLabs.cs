@@ -2,55 +2,43 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.Networking;
 
 namespace Ride.TextToSpeech
 {
-    /*
-     * TextToSpeechSystemElevenLabs (RIDE system)
-     * ------------------------------------------
-     * Purpose
-     *   RIDE-facing TTS system that mirrors the Polly/Azure pattern while delegating actual ElevenLabs
-     *   REST calls to the embedded ElevenLabsTextToSpeech MonoBehaviour (non-WebGL) or to a Lambda
-     *   Function URL proxy (WebGL). Lip-sync is handled by TextToSpeechSystemProxyLipsynced using a
-     *   different provider (e.g., Polly speech marks); this class does NOT fetch visemes.
-     *
-     * Behavior
-     *   - GetAvailableVoices(): returns the cached voice names exposed by ElevenLabsTextToSpeech.
-     *   - StartTextToSpeechGeneration(voice, text):
-     *       * Non-WebGL: waits for voices, sets SelectedVoiceIndex on the MB, runs ConvertTextToSpeechCoroutine(),
-     *                    then calls CompleteTextToSpeechGeneration(filePath, seconds).
-     *       * WebGL: waits for voices, POSTs {text, voice} to Lambda /audio, expects {url}, then completes with that URL.
-     *
-     * WebGL Lambda contract (audio only)
-     *   - POST /audio
-     *       Body: { "text": "...", "voice": "Name" }
-     *       Reply: { "url": "https://<bucket>.s3.amazonaws.com/<prefix>/<uuid>.mp3" }
-     *   - No /visemes endpoint (lip-sync is provided by other systems in the proxy pipeline).
-     *
-     * Configuration
-     *   - ElevenLabsTextToSpeech must exist on the same GameObject (or be attached in SystemInit()).
-     *   - For WebGL, configure the Lambda Function URL (either via serialized fields or your config system).
-     *
-     * Notes / Gotchas
-     *   - Ensure you call/await the MB's WaitForVoices() before generating audio (this class does it internally).
-     *   - Avoid hard-coding Lambda IDs; prefer serialized fields or config so you can swap environments easily.
-     *   - Consider adding UnityWebRequest.timeout in WebGL to prevent UI hangs.
-     */
-    public class TextToSpeechSystemElevenLabs : TextToSpeechSystemProxyLipsynced
+    /// <summary>
+    /// Provides an ElevenLabs-backed implementation of <see cref="TextToSpeechSystemLipsynced"/>
+    /// that generates synthesized speech audio and provider-compatible lipsync data for the
+    /// RIDE speech playback pipeline.
+    /// </summary>
+    /// <remarks>
+    /// This system acts as the RIDE-facing adapter for ElevenLabs text-to-speech generation.
+    /// Provider-specific communication and timestamp extraction are performed by the associated
+    /// <see cref="ElevenLabsTextToSpeech"/> MonoBehaviour, while this class coordinates the
+    /// higher-level speech workflow expected by <see cref="TextToSpeechSystemLipsynced"/>.
+    ///
+    /// <para>
+    /// For non-WebGL platforms, this implementation generates audio through ElevenLabs and
+    /// builds lipsync XML by converting precomputed word and phone timing data into the
+    /// existing RIDE speech format. The resulting XML intentionally mirrors the structure
+    /// used by the Azure implementation so that downstream playback and animation systems
+    /// can remain provider-agnostic.
+    /// </para>
+    ///
+    /// <para>
+    /// For WebGL, this implementation uses the ElevenLabs Lambda proxy for voice
+    /// enumeration, audio generation, and timestamp alignment retrieval so it can
+    /// produce the same word/phone-driven lipsync data as the native path.
+    /// </para>
+    ///
+    /// <para>
+    /// This class depends on <see cref="ElevenLabsTextToSpeech"/> for provider operations
+    /// such as voice enumeration, request submission, audio decoding, and extraction of
+    /// timestamp-derived word and phone segments.
+    /// </para>
+    /// </remarks>
+    public class TextToSpeechSystemElevenLabs : TextToSpeechSystemLipsynced  //TextToSpeechSystemProxyLipsynced
     {
-#if UNITY_WEBGL
-        [Serializable]
-        private class WebGlTtsRequest { public string text; public string voice; }
-
-        [Serializable]
-        private class WebGlTtsReply { public string url; }
-#endif
-
-        [SerializeField]
-        private ElevenLabsTextToSpeech textToSpeech;
-
-        public ElevenLabsTextToSpeech TextToSpeech => textToSpeech;
+        [SerializeField] private ElevenLabsTextToSpeech textToSpeech;
 
         public int SelectedVoiceIndex
         {
@@ -60,11 +48,8 @@ namespace Ride.TextToSpeech
 
         public List<string> Voices => textToSpeech.Voices;
 
-        /// <summary>
-        /// Indicates whether the list of available voices has been loaded from AWS.
-        /// </summary>
+        /// <summary>Indicates whether the list of available voices has been loaded.</summary>
         public bool VoicesReady => textToSpeech.VoicesReady;
-
 
         /// <inheritdoc/>
         public override string[] GetAvailableVoices() => textToSpeech.Voices.ToArray();
@@ -73,7 +58,16 @@ namespace Ride.TextToSpeech
         /// <inheritdoc/>
         protected override void StartTextToSpeechGeneration(string voice, string text)
         {
-            StartCoroutine(StartTextToSpeechGenerationCoroutine(voice, text));
+            textToSpeech.SetDebugOutputEnabled(lipsyncDebugOutput);
+            int requestVersion = textToSpeech.BeginTimingRequest();
+            StartCoroutine(StartTextToSpeechGenerationCoroutine(voice, text, requestVersion));
+        }
+
+        /// <inheritdoc/>
+        protected override void StartLipsyncGeneration(string voice, string text)
+        {
+            textToSpeech.SetDebugOutputEnabled(lipsyncDebugOutput);
+            StartCoroutine(StartLipsyncGenerationCoroutine(voice, text));
         }
 
         /// <summary>
@@ -81,64 +75,274 @@ namespace Ride.TextToSpeech
         /// </summary>
         /// <param name="text">The input text for speech generation.</param>
         /// <returns>Coroutine enumerator.</returns>
-        private IEnumerator StartTextToSpeechGenerationCoroutine(string voice, string text)
+        private IEnumerator StartTextToSpeechGenerationCoroutine(string voice, string text, int requestVersion)
         {
             yield return StartCoroutine(textToSpeech.WaitForVoices());
+            voice = ResolveVoiceOrDefault(voice);
 
-            if (string.IsNullOrEmpty(voice))
-                voice = GetAvailableVoices().Length > 0 ? GetAvailableVoices()[0] : "Aria";
+            bool success = false;
+            yield return StartCoroutine(textToSpeech.RequestSpeechGenerationCoroutine(text, voice, requestVersion, requestSucceeded => success = requestSucceeded));
 
-#if !UNITY_WEBGL
-            SelectedVoiceIndex = textToSpeech.Voices.IndexOf(voice);
-            yield return StartCoroutine(textToSpeech.ConvertTextToSpeechCoroutine(text));
-
-            // Assuming SaveAudioClipToFile method exists that saves the AudioClip to a file and returns the path.
-            string audioFilePath = textToSpeech.savedFilePath;
-
-            CompleteTextToSpeechGeneration(audioFilePath, textToSpeech.clipTime);
-#else
-            string lambda = "zmxqrfujpmzuoaobpa57aattpm0omenq";
-            string url = $"https://{lambda}.lambda-url.us-west-2.on.aws/audio";
-            var body = JsonUtility.ToJson(new WebGlTtsRequest { text = text, voice = voice });
-
-            using (var req = UnityWebRequest.Put(url, body))
+            if (!success || string.IsNullOrEmpty(textToSpeech.LastGeneratedAudioPathOrUrl))
             {
-                req.method = UnityWebRequest.kHttpVerbPOST;
-                req.SetRequestHeader("Content-Type", "application/json");
-                yield return req.SendWebRequest();
-
-                if (req.result != UnityWebRequest.Result.Success)
-                {
-                    Debug.LogError($"TextToSpeechSystemElevenLabs(WebGL): request failed: {req.error}");
-                    CompleteTextToSpeechGeneration(null);
-                    yield break;
-                }
-
-                WebGlTtsReply reply = null;
-                try
-                {
-                    reply = JsonUtility.FromJson<WebGlTtsReply>(req.downloadHandler.text);
-                }
-                catch (Exception ex)
-                {
-                    Debug.LogError($"TextToSpeechSystemElevenLabs(WebGL): JSON parse error: {ex.Message}");
-                    CompleteTextToSpeechGeneration(null);
-                    yield break;
-                }
-
-                if (reply == null || string.IsNullOrEmpty(reply.url))
-                {
-                    Debug.LogError("TextToSpeechSystemElevenLabs(WebGL): Missing URL in Lambda reply.");
-                    CompleteTextToSpeechGeneration(null);
-                    yield break;
-                }
-
-                Debug.Log($"[WebGL] MP3 available at: {reply.url}");
-
-                // For WebGL, return the URL for the client to download/use later.
-                CompleteTextToSpeechGeneration(reply.url);
+                CompleteTextToSpeechGeneration(null);
+                yield break;
             }
-#endif
+
+            CompleteTextToSpeechGeneration(textToSpeech.LastGeneratedAudioPathOrUrl, textToSpeech.clipTime);
+        }
+
+        /// <summary>
+        /// Begins asynchronous generation of ElevenLabs speech audio and corresponding
+        /// lipsync metadata.
+        /// </summary>
+        /// <param name="text">
+        /// The text that should be synthesized by the ElevenLabs TTS service.
+        /// </param>
+        /// <param name="generatedAudioFilePath">
+        /// The local path where the decoded audio file will be written after generation.
+        /// </param>
+        /// <param name="requestId">
+        /// An identifier associated with this request, used by the base lipsync system
+        /// to correlate generation completion with the originating call.
+        /// </param>
+        /// <returns>
+        /// A coroutine enumerator that performs the asynchronous HTTP request and
+        /// completes the lipsync generation once the response has been processed.
+        /// </returns>
+        /// <remarks>
+        /// This coroutine performs the following steps:
+        /// <list type="number">
+        /// <item>
+        /// Sends a POST request to the ElevenLabs TTS endpoint requesting both audio
+        /// and character-level timestamp alignment.
+        /// </item>
+        /// <item>
+        /// Parses the returned JSON into <see cref="ElevenLabsTextToSpeech.ElevenLabsTimestampsResult"/>.
+        /// </item>
+        /// <item>
+        /// Decodes the <c>audio_base64</c> payload and writes the resulting audio file
+        /// to <paramref name="generatedAudioFilePath"/>.
+        /// </item>
+        /// <item>
+        /// Uses the precomputed timing data stored on the
+        /// <see cref="ElevenLabsTextToSpeech"/> component
+        /// (<c>LastWordSegments</c>, <c>LastPhoneSegments</c>, etc.) to construct
+        /// an Azure-compatible lipsync XML payload.
+        /// </item>
+        /// <item>
+        /// Signals completion to the base lipsync system by invoking the appropriate
+        /// completion callback.
+        /// </item>
+        /// </list>
+        /// <para>
+        /// This coroutine is intentionally structured to match the execution model used
+        /// by other <see cref="TextToSpeechSystemLipsynced"/> implementations so that
+        /// ElevenLabs can be used interchangeably with providers such as Azure.
+        /// </para>
+        /// </remarks>
+        private IEnumerator StartLipsyncGenerationCoroutine(string voice, string text)
+        {
+            yield return StartCoroutine(textToSpeech.WaitForVoices());
+            voice = ResolveVoiceOrDefault(voice);
+
+            int expectedRequestVersion;
+            if (textToSpeech.ActiveTimingRequestVersion > textToSpeech.CompletedTimingRequestVersion &&
+                textToSpeech.ActiveTimingRequestVersion > textToSpeech.FailedTimingRequestVersion)
+            {
+                expectedRequestVersion = textToSpeech.ActiveTimingRequestVersion;
+            }
+            else
+            {
+                expectedRequestVersion = textToSpeech.BeginTimingRequest();
+
+                bool success = false;
+                yield return StartCoroutine(textToSpeech.RequestSpeechGenerationCoroutine(text, voice, expectedRequestVersion, requestSucceeded => success = requestSucceeded));
+                if (!success)
+                {
+                    CompleteLipsyncGeneration(string.Empty);
+                    yield break;
+                }
+            }
+
+            yield return StartCoroutine(WaitForTimingRequestVersion(expectedRequestVersion));
+
+            if (textToSpeech.FailedTimingRequestVersion == expectedRequestVersion ||
+                textToSpeech.CompletedTimingRequestVersion != expectedRequestVersion)
+            {
+                CompleteLipsyncGeneration(string.Empty);
+                yield break;
+            }
+
+            CompleteLipsyncFromLatestTimings(textToSpeech.LastGeneratedAudioPathOrUrl);
+        }
+
+        private string ResolveVoiceOrDefault(string voice)
+        {
+            if (!string.IsNullOrEmpty(voice))
+                return voice;
+
+            string[] availableVoices = GetAvailableVoices();
+            return availableVoices.Length > 0 ? availableVoices[0] : "Aria";
+        }
+
+        private IEnumerator WaitForTimingRequestVersion(int expectedRequestVersion)
+        {
+            float timer = 0f;
+            while (textToSpeech.CompletedTimingRequestVersion != expectedRequestVersion &&
+                   textToSpeech.FailedTimingRequestVersion != expectedRequestVersion &&
+                   timer < timeout)
+            {
+                timer += Time.deltaTime;
+                yield return null;
+            }
+        }
+
+        private void CompleteLipsyncFromLatestTimings(string soundFilePathOrUrl)
+        {
+            AudioSpeechMap map = BuildElevenLabsAudioSpeechMap(textToSpeech.LastWordSegments, textToSpeech.LastPhoneSegments, soundFilePathOrUrl);
+            string xml = map != null ? TextToSpeechXMLBuilder.BuildSpeechXML(map) : string.Empty;
+            if (lipsyncDebugOutput)
+                LogSpeechXmlDebug(map, xml, "ElevenLabs");
+            CompleteLipsyncGeneration(xml);
+        }
+
+        /// <summary>
+        /// Converts precomputed ElevenLabs word and IPA token timing data into a
+        /// RIDE-compatible speech XML document containing viseme keyframes and word markers.
+        /// </summary>
+        /// <param name="words">
+        /// Word-level timing segments extracted from the ElevenLabs alignment stream.
+        /// Each entry provides the spoken word and its start/end time within the audio.
+        /// </param>
+        /// <param name="phones">
+        /// Time-stamped IPA token segments derived from dictionary pronunciation lookup
+        /// and IPA tokenization.
+        /// </param>
+        /// <param name="soundFilePathOrUrl">
+        /// The path or URL of the generated audio file that should be referenced by the
+        /// resulting speech XML.
+        /// </param>
+        /// <returns>
+        /// An XML string describing the speech playback event, including viseme animation
+        /// data, word timing markers, and the associated audio file.
+        /// </returns>
+        /// <remarks>
+        /// This method acts as the adapter between the ElevenLabs IPA timing pipeline and
+        /// the existing RIDE speech playback system.
+        ///
+        /// All linguistic processing (word extraction, IPA lookup, tokenization, and token
+        /// timing distribution) is performed earlier by <see cref="ElevenLabsTextToSpeech"/>.
+        /// This method only converts the prepared segments into the FaceFX-style viseme
+        /// schedule expected by the RIDE runtime.
+        ///
+        /// The conversion process performs the following steps:
+        ///
+        /// <list type="number">
+        /// <item>
+        /// Generates start/end markers for each word using <paramref name="words"/>,
+        /// populating the <see cref="AudioSpeechMap.MarkList"/> and
+        /// <see cref="AudioSpeechMap.WordTimingList"/>.
+        /// </item>
+        /// <item>
+        /// Converts each IPA token in <paramref name="phones"/> into a FaceFX pose using
+        /// <see cref="ElevenLabsTextToSpeech.TryGetPose(string, out ElevenLabsTextToSpeech.IPAtoFacefxMap)"/>.
+        /// </item>
+        /// <item>
+        /// Emits viseme keyframes at the start time of each phone segment.
+        /// </item>
+        /// <item>
+        /// Inserts a neutral pose when a sufficiently large gap exists between adjacent
+        /// phone segments so the mouth returns to a resting state during pauses.
+        /// </item>
+        /// <item>
+        /// Ensures the final pose returns to neutral at the end of the speech.
+        /// </item>
+        /// <item>
+        /// Packages the generated viseme list and word timing data into an
+        /// <see cref="AudioSpeechMap"/>, performs minor timing adjustments, and then
+        /// converts the structure into the final speech XML format using
+        /// <see cref="TextToSpeechXMLBuilder.BuildSpeechXML(AudioSpeechMap)"/>.
+        /// </item>
+        /// </list>
+        ///
+        /// The generated XML format intentionally mirrors the output produced by the
+        /// Azure TTS implementation so that downstream speech playback and animation
+        /// systems remain provider-agnostic.
+        /// </remarks>
+        private AudioSpeechMap BuildElevenLabsAudioSpeechMap(
+            IReadOnlyList<ElevenLabsTextToSpeech.WordSegment> words,
+            IReadOnlyList<ElevenLabsTextToSpeech.PhoneSegment> phones,
+            string soundFilePathOrUrl)
+        {
+            if (words == null || words.Count == 0)
+                return null;
+
+            var markList = new List<KeyValuePairS<string, double>>(words.Count * 2);
+            var wordTimingList = new List<WordTimingData>(words.Count);
+
+            int markIndex = 0;
+            foreach (var word in words)
+            {
+                markList.Add(new KeyValuePairS<string, double>($"T{markIndex++}", word.StartTimeSeconds));
+                wordTimingList.Add(new WordTimingData(word.Word, word.StartTimeSeconds, word.EndTimeSeconds));
+                markList.Add(new KeyValuePairS<string, double>($"T{markIndex++}", word.EndTimeSeconds));
+            }
+
+            var visemeList = new List<GenerateAudioReplyViseme>((phones != null ? phones.Count : 0) * 2);
+
+            var neutral = ElevenLabsTextToSpeech.GetNeutralPose();
+            const double gapToNeutralSeconds = 0.05;
+
+            double lastEnd = -1.0;
+
+            if (phones != null)
+            {
+                for (int i = 0; i < phones.Count; i++)
+                {
+                    var phone = phones[i];
+
+                    double startTime = phone.StartTimeSeconds;
+                    double endTime = phone.EndTimeSeconds;
+
+                    if (endTime < startTime)
+                        endTime = startTime;
+
+                    if (lastEnd >= 0.0 && (startTime - lastEnd) > gapToNeutralSeconds)
+                    {
+                        for (int j = 0; j < neutral.facefxVisemes.Length; j++)
+                            visemeList.Add(new GenerateAudioReplyViseme(neutral.facefxVisemes[j], lastEnd, neutral.amounts[j]));
+                    }
+
+                    if (!ElevenLabsTextToSpeech.TryGetPose(phone.IpaToken, out var pose) || pose == null)
+                        pose = neutral;
+
+                    for (int j = 0; j < pose.facefxVisemes.Length; j++)
+                        visemeList.Add(new GenerateAudioReplyViseme(pose.facefxVisemes[j], startTime, pose.amounts[j]));
+
+                    lastEnd = endTime;
+                }
+            }
+
+            if (lastEnd >= 0.0)
+            {
+                for (int j = 0; j < neutral.facefxVisemes.Length; j++)
+                    visemeList.Add(new GenerateAudioReplyViseme(neutral.facefxVisemes[j], lastEnd, neutral.amounts[j]));
+            }
+
+            AudioSpeechMap map = new()
+            {
+                soundFile = soundFilePathOrUrl ?? string.Empty,
+                VisemeList = visemeList,
+                MarkList = markList,
+                WordTimingList = wordTimingList
+            };
+
+            ApplyConfiguredVisemeTrimming(map, "ElevenLabs");
+
+            map.AdjustWordTimings();
+            map.AdjustEndMarkTimings();
+            return map;
         }
     }
 }

@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using System.Xml;
 using UnityEngine;
@@ -29,7 +29,7 @@ public class BMLEventHandler_Web: MonoBehaviour
     #region Functions
     void Start()
     {
-        m_BMLParser = new BMLParser(OnParsedBMLTiming, OnParsedVisemeTiming, OnParsedBMLEvent, OnFinishedReading, OnParsedCustomEvent);
+        m_BMLParser = new BMLParser(OnParsedBMLTiming, OnParsedWordTiming, OnParsedVisemeTiming, OnParsedBMLEvent, OnFinishedReading, OnParsedCustomEvent);
         if (m_CharacterController.GetCharacterControllerType() == "MecanimManager")
         {
             m_BMLParser.EventCategoryName = GenericEventNames.Mecanim;
@@ -42,6 +42,7 @@ public class BMLEventHandler_Web: MonoBehaviour
     }
 
     void OnParsedBMLTiming(BMLParser.BMLTiming bmlTiming) { }
+    void OnParsedWordTiming(BMLParser.WordTimingData wordTiming) { }
     void OnParsedVisemeTiming(BMLParser.LipData lipData) { }
     void OnParsedBMLEvent(XmlTextReader reader, string eventType, CutsceneEvent ce)
     {
