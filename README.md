@@ -6,7 +6,7 @@ RIDE combines a range of commonly used simulation features in a drag-and-drop de
 
 ## Documentation
 
-See the [Getting Started](https://ride.ict.usc.edu/getting-started) on the main RIDE website, as well as this GitHub's associated Wiki.
+See [Getting Started](https://ride.ict.usc.edu/getting-started) on the main RIDE website, as well as the GitHub [Wiki](https://github.com/USC-ICT/ride/wiki).
 
 ## Packages
 
@@ -20,7 +20,11 @@ The main packages are:
 
 ## License
 
-The public portion of RIDE is licensed under the [USC-RL v3.0 license](https://github.com/USC-ICT/ride?tab=License-1-ov-file#readme), a permissive license for academic and personal use. For commercial and government purpose use, please [contact us](https://ride.ict.usc.edu/support/contact).
+The public USC/RIDE-authored portion of RIDE is licensed under the [USC-RL v3.0 license](LICENSE.md), a permissive license for academic and personal use.
+
+Third-party software and separately licensed components redistributed with this repository remain subject to their original license terms. See [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) and package-level `Third Party Notices.md` files for details.
+
+For commercial or government-purpose use, please [contact us](https://ride.ict.usc.edu/support/contact).
 
 ## Citation
 
