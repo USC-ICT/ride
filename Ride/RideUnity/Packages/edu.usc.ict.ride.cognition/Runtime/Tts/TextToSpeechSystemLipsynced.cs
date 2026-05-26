@@ -962,6 +962,9 @@ namespace Ride.TextToSpeech
                 yield return null;
             }
 
+            if (string.IsNullOrWhiteSpace(generatedAudioFilePath))
+                Debug.LogWarning($"[{GetType().Name}] TTS completed without a generated audio file path.");
+
             resultCallback?.Invoke(lipsyncSchedule, generatedAudioFilePath);
         }
     }

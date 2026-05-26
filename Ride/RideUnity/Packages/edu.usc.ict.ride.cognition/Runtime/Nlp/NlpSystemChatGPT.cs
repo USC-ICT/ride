@@ -73,6 +73,20 @@ namespace Ride.NLP
         public int completion_tokens;
         public int total_tokens;
     }
+
+    public struct OpenAIErrorMessage
+    {
+        public OpenAIError error;
+    }
+
+    public struct OpenAIError
+    {
+        public string message;
+        public string type;
+        public string param;
+        public string code;
+    }
+
     #endregion
 
     /// <summary>
@@ -81,15 +95,15 @@ namespace Ride.NLP
     public class NlpSystemChatGPT : NlpSystemUnity
     {
         public double m_temperature = 0.3;
-        public int m_maxTokens = 200;       
+        public int m_maxTokens = 200;
         protected int m_answerSize = 1;
-                
-        ChatGPTModel m_model = ChatGPTModel.GPT4;        
+
+        ChatGPTModel m_model = ChatGPTModel.GPT4;
 
         private Dictionary<ChatGPTModel, string> m_modelDictionary = new Dictionary<ChatGPTModel, string>()
         {
             {ChatGPTModel.GPT4,   "gpt-4o"},
-            {ChatGPTModel.GPT5_2, "gpt-5.2-chat-latest"}            
+            {ChatGPTModel.GPT5_2, "gpt-5.2-chat-latest"}
         };
 
         /// <inheritdoc/>
@@ -131,7 +145,7 @@ namespace Ride.NLP
             history.Add(new OpenAIMessage { role = "user", content = request.content });
 
             //Serialize question to AI
-            string questionJSON = "";            
+            string questionJSON = "";
 
             switch (m_model)
             {
@@ -151,13 +165,13 @@ namespace Ride.NLP
                     {
                         model = m_modelDictionary[m_model],
                         messages = history.ToArray(),
-                        temperature = 1, 
+                        temperature = 1,
                         max_completion_tokens = m_maxTokens,
                         n = m_answerSize
                     };
                     questionJSON = RideIO.JsonSerializeNoObjRef(question5);
                     break;
-            }                       
+            }
 
 #if UNITY_WEBGL && !UNITY_EDITOR
             m_uri = ConfigurationSystemUnity.GetOpenAIProxyEndpoint();
@@ -190,13 +204,26 @@ namespace Ride.NLP
             //Debug.Log($"Web response: {response}");
 
             //Parse response
-            OpenAIAnswer oaiAnswer = RideIO.JsonDeserialize<OpenAIAnswer>(response);
-            NlpResponse qnaAnswer = new NlpResponse(/*response, */oaiAnswer.choices[0].message.content);  // Pick first answer for now
+            NlpResponse qnaAnswer;
+            if (webRequest.result == UnityWebRequest.Result.ProtocolError ||
+                webRequest.result == UnityWebRequest.Result.ConnectionError ||
+                webRequest.result == UnityWebRequest.Result.DataProcessingError)
+            {
+                OpenAIErrorMessage openAIErrorMessage = RideIO.JsonDeserialize<OpenAIErrorMessage>(response);
+                qnaAnswer = new NlpResponse($"I'm sorry, something went wrong. I'm getting the error: " +
+                    $"'{openAIErrorMessage.error.message}', of type '{openAIErrorMessage.error.type}'");
+                Debug.LogError($"Error: {openAIErrorMessage.error.message}, type: {openAIErrorMessage.error.type}");
+            }
+            else
+            {
+                OpenAIAnswer oaiAnswer = RideIO.JsonDeserialize<OpenAIAnswer>(response);
+                qnaAnswer = new NlpResponse(oaiAnswer.choices[0].message.content);  // Pick first answer for now
+            }
 
             //Update conversation history
             NlpInteraction interaction = new();
             interaction.input = request.content;
-            interaction.response = oaiAnswer.choices[0].message.content;
+            interaction.response = qnaAnswer.content[0];
             interaction.inputTimestamp = startTime;
             interaction.responseTimestamp = endTime;
             m_interactionHistory.Add(interaction);
@@ -218,7 +245,7 @@ namespace Ride.NLP
 
             for (int i = 0; i < m_interactionHistory.Count; ++i)
             {
-                if(i == 0)
+                if (i == 0)
                 {
                     history.Add(new OpenAIMessage { role = "system", content = m_interactionHistory[i].input });
                     continue;

@@ -1894,6 +1894,23 @@ namespace Ride.TextToSpeech
         public static IPAtoFacefxMap GetNeutralPose() => m_FacefxPhonemeToPoseMap["SILENCE"];
 
         /// <summary>
+        /// Builds an approximate FaceFX keyframe schedule from externally supplied word timings.
+        /// </summary>
+        /// <param name="words">Word timings to convert into phoneme-weighted viseme keyframes.</param>
+        /// <param name="ipaDictionaries">Optional IPA dictionaries used for pronunciation lookup.</param>
+        /// <param name="gapToNeutralSeconds">Minimum pause duration before inserting a neutral keyframe.</param>
+        /// <returns>A FaceFX-style keyframe sequence suitable for proxy lipsync generation.</returns>
+        public static List<FacefxKeyframe> BuildApproximateFacefxSchedule(
+            IReadOnlyList<WordSegment> words,
+            IReadOnlyList<IpaDictionary> ipaDictionaries,
+            double gapToNeutralSeconds = 0.05)
+        {
+            var wordIpaSegments = BuildWordIpaSegments(words, ipaDictionaries);
+            var phoneSegments = BuildPhoneSegments(wordIpaSegments);
+            return BuildFacefxScheduleFromPhones(phoneSegments, gapToNeutralSeconds);
+        }
+
+        /// <summary>
         /// Builds a FaceFX keyframe schedule from a sequence of time-stamped IPA token segments.
         /// </summary>
         /// <param name="phones">The IPA token segments to convert.</param>

@@ -198,8 +198,8 @@
         "edu.usc.ict.ride.vendor.aws": "1.0.9659",
         "edu.usc.ict.ride.vendor.cognition": "1.0.9659",
         "edu.usc.ict.ride.vendor.vhassets": "1.0.9659",
-        "edu.usc.ict.ride.core": "1.0.9676",
-        "edu.usc.ict.ride.core.ui": "1.0.9676"
+        "edu.usc.ict.ride.core": "1.0.9798",
+        "edu.usc.ict.ride.core.ui": "1.0.9798"
       }
     },
     "edu.usc.ict.ride.core": {
@@ -213,7 +213,7 @@
         "edu.usc.ict.ride.vendor.crc32net": "1.0.9659",
         "edu.usc.ict.ride.vendor.milsymbol": "1.0.9659",
         "edu.usc.ict.ride.vendor.vhassets": "1.0.9659",
-        "edu.usc.ict.ride.abstract": "1.0.9659"
+        "edu.usc.ict.ride.abstract": "1.0.9798"
       }
     },
     "edu.usc.ict.ride.core.ui": {
@@ -221,7 +221,7 @@
       "depth": 0,
       "source": "embedded",
       "dependencies": {
-        "edu.usc.ict.ride.core": "1.0.9676"
+        "edu.usc.ict.ride.core": "1.0.9798"
       }
     },
     "edu.usc.ict.ride.vendor.aws": {
@@ -266,7 +266,7 @@
       "source": "embedded",
       "dependencies": {
         "edu.usc.ict.ride.vendor.vh": "1.0.9659",
-        "edu.usc.ict.ride.cognition": "1.0.9676"
+        "edu.usc.ict.ride.cognition": "1.0.9798"
       }
     },
     "com.unity.modules.accessibility": {

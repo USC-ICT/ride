@@ -12,7 +12,7 @@ namespace Ride.TextToSpeech
     /// </summary>
     public abstract class TextToSpeechSystemUnity : RideSystemMonoBehaviour, ITextToSpeechSystem
     {
-        [field: SerializeField] public float timeout { get; private set; } = 10.0f;
+        [field: SerializeField] public float timeout { get; protected set; } = 10.0f;
         [field: Header("Text To Speech Status")]
         [field: SerializeField] public string generatedAudioFilePath { get; private set; }
         [field: SerializeField] public float generatedAudioLength { get; private set; }

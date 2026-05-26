@@ -10,6 +10,7 @@ namespace Ride.TextToSpeech
     public abstract class TextToSpeechSystemProxyLipsynced : TextToSpeechSystemLipsynced
     {
         [SerializeField] private bool m_useProxy = false;
+        [SerializeField] private List<IpaDictionary> m_ipaDictionaries = new();
         ILipsyncMapper m_lipsyncMapper;
 
         public override void SystemAwake()
@@ -31,7 +32,12 @@ namespace Ride.TextToSpeech
                 m_lipsyncMapper.GenerateAudioSpeechMap(string.Empty, text, OnProxyAudioSpeechGeneration);
             else
                 StartCoroutine(WaitForTTSCompletion(() =>
-                    CompleteLipsyncGeneration(LipsyncAutoScheduler.CreateSchedule(text, generatedAudioLength))));
+                {
+                    AudioSpeechMap audioSpeechMap = LipsyncAutoScheduler.CreateProxySpeechMap(text, generatedAudioLength, ResolveIpaDictionaries());
+                    string xml = TextToSpeechXMLBuilder.BuildSpeechXML(audioSpeechMap);
+                    LogSpeechXmlDebug(audioSpeechMap, xml, "Auto");
+                    CompleteLipsyncGeneration(xml);
+                }));
         }
 
         protected virtual void OnProxyAudioSpeechGeneration(AudioSpeechMap audioSpeechMap)
@@ -50,6 +56,19 @@ namespace Ride.TextToSpeech
             while (textToSpeechProcessing) yield return null;
 
             callback?.Invoke();
+        }
+
+        private IReadOnlyList<IpaDictionary> ResolveIpaDictionaries()
+        {
+            if (m_ipaDictionaries != null && m_ipaDictionaries.Count > 0)
+                return m_ipaDictionaries;
+
+            Transform root = transform.root;
+            if (root == null)
+                return System.Array.Empty<IpaDictionary>();
+
+            IpaDictionary[] discovered = root.GetComponentsInChildren<IpaDictionary>(true);
+            return discovered ?? System.Array.Empty<IpaDictionary>();
         }
     }
 }

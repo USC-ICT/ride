@@ -5,8 +5,42 @@ namespace Ride.SpeechRecognition
 {
 #if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN
     /// <summary>
-    /// Windows-only Speech Recognition implementation using UnityEngine.Windows.Speech.DictationRecognizer
+    /// Windows-specific RIDE speech recognition implementation built on Unity's
+    /// <see href="https://docs.unity3d.com/ScriptReference/Windows.Speech.DictationRecognizer.html">DictationRecognizer</see>.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This implementation adapts the Windows dictation API into the shared
+    /// <see cref="SpeechRecognitionSystemUnity"/> contract used by the rest of the package.
+    /// It listens to <c>DictationHypothesis</c>, <c>DictationResult</c>, <c>DictationComplete</c>,
+    /// and <c>DictationError</c> callbacks, then forwards those events through the common RIDE speech
+    /// recognition pipeline.
+    /// </para>
+    /// <para>
+    /// Compared with the other provider implementations in this package, this class is the built-in
+    /// Windows option for local dictation.
+    /// </para>
+    /// <para>
+    /// Support still depends on the host OS and Unity's Windows speech subsystem being available at
+    /// runtime. Timeout values exposed by <see cref="SpeechRecognitionSystemUnity.AutoSilenceTimeoutSeconds"/>
+    /// and <see cref="SpeechRecognitionSystemUnity.InitialSilenceTimeoutSeconds"/> are forwarded directly
+    /// into the underlying recognizer after initialization and whenever they are changed.
+    /// </para>
+    /// <para>
+    /// On Windows 11, speech recognition also needs to be enabled in OS settings under
+    /// Privacy &amp; security -&gt; Speech by turning Online speech recognition on.
+    /// </para>
+    /// <para>
+    /// External references:
+    /// <see href="https://docs.unity3d.com/ScriptReference/Windows.Speech.DictationRecognizer.html">Unity Scripting API: DictationRecognizer</see>,
+    /// <see href="https://docs.unity3d.com/ScriptReference/Windows.Speech.DictationRecognizer.AutoSilenceTimeoutSeconds.html">AutoSilenceTimeoutSeconds</see>,
+    /// <see href="https://docs.unity3d.com/ScriptReference/Windows.Speech.DictationRecognizer.InitialSilenceTimeoutSeconds.html">InitialSilenceTimeoutSeconds</see>.
+    /// Related RIDE implementations:
+    /// <see cref="SpeechRecognitionSystemAzure"/>,
+    /// <see cref="SpeechRecognitionSystemAzureWebGL"/>,
+    /// <see cref="SpeechRecognitionSystemOpenAI"/>.
+    /// </para>
+    /// </remarks>
     public class SpeechRecognitionSystemWindows : SpeechRecognitionSystemUnity
     {
         UnityEngine.Windows.Speech.DictationRecognizer m_dictationRecognizer;
@@ -16,6 +50,7 @@ namespace Ride.SpeechRecognition
             m_dictationRecognizer != null && 
             m_dictationRecognizer.Status != UnityEngine.Windows.Speech.SpeechSystemStatus.Failed;
 
+        /// <inheritdoc cref="SpeechRecognitionSystemUnity.AutoSilenceTimeoutSeconds"/>
         public override float AutoSilenceTimeoutSeconds
         {
             get => base.AutoSilenceTimeoutSeconds;
@@ -27,6 +62,7 @@ namespace Ride.SpeechRecognition
             }
         }
 
+        /// <inheritdoc cref="SpeechRecognitionSystemUnity.InitialSilenceTimeoutSeconds"/>
         public override float InitialSilenceTimeoutSeconds
         {
             get => base.InitialSilenceTimeoutSeconds;
@@ -38,6 +74,7 @@ namespace Ride.SpeechRecognition
             }
         }
 
+        /// <inheritdoc cref="SpeechRecognitionSystemUnity.SupportsContinuousRecognition"/>
         public override bool SupportsContinuousRecognition => true;
 
         /// <inheritdoc/>
@@ -117,27 +154,28 @@ namespace Ride.SpeechRecognition
 
             m_dictationRecognizer?.Stop();
         }
-        /// <summary>
-        /// Indicates if Unity’s phrase recognition system is supported on this machine.
-        /// </summary>
+
+        /// <summary>Indicates if Unityâ€™s phrase recognition system is supported on this machine.</summary>
         public bool PhraseRecognitionSystemIsSupported =>
             VHUtils.IsWindows10OrGreater() && UnityEngine.Windows.Speech.PhraseRecognitionSystem.isSupported;
 
-        /// <summary>
-        /// Returns the current status of the phrase recognition system.
-        /// </summary>
+        /// <summary>Returns the current status of the phrase recognition system.</summary>
         public string PhraseRecognitionSystemStatus =>
             VHUtils.IsWindows10OrGreater()
                 ? UnityEngine.Windows.Speech.PhraseRecognitionSystem.Status.ToString()
                 : "Not Supported.";
 
-        /// <summary>
-        /// Generalized status string for external usage (e.g. UI/debug).
-        /// </summary>
+        /// <summary>Generalized status string for external usage (e.g. UI/debug).</summary>
         public string Status => PhraseRecognitionSystemStatus;
     }
 #else
-    // Non-Windows stub
+    /// <summary>
+    /// Non-Windows stub for the Windows speech recognition system.
+    /// </summary>
+    /// <remarks>
+    /// This placeholder keeps the shared type available on platforms where Unity's Windows dictation
+    /// APIs do not exist. It reports unsupported behavior and does not perform any real recognition.
+    /// </remarks>
     public class SpeechRecognitionSystemWindows : SpeechRecognitionSystemUnity
     {
         public override bool IsSupported => false;

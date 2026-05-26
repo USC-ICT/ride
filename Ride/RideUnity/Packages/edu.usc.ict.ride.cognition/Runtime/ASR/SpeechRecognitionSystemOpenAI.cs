@@ -38,7 +38,7 @@ namespace Ride.SpeechRecognition
 
         [Header("API Settings")]
 #pragma warning disable 0414  // (WebGL) The field '' is assigned but its value is never used
-        [SerializeField] private string model = "gpt-4o-realtime-preview-2025-06-03";
+        [SerializeField] private string model = "gpt-realtime-mini";
 #pragma warning restore 0414
 
         [Header("Audio Settings")]
@@ -388,8 +388,7 @@ namespace Ride.SpeechRecognition
 
             var headers = new Dictionary<string, string>
             {
-                { "Authorization", $"Bearer {m_apiKey}" },
-                { "OpenAI-Beta", "realtime=v1" }
+                { "Authorization", $"Bearer {m_apiKey}" }
             };
 
             websocket = new WebSocket(url, headers);
@@ -484,31 +483,88 @@ namespace Ride.SpeechRecognition
 
         private void SendSessionUpdate()
         {
-            var sessionConfig = new
+            SendEvent(transcriptOnly ? BuildTranscriptionSessionUpdate() : BuildRealtimeSessionUpdate());
+        }
+
+        private object BuildTranscriptionSessionUpdate()
+        {
+            return new
             {
                 type = "session.update",
                 session = new
                 {
-                    modalities = transcriptOnly ? new[] { "text" } : new[] { "text", "audio" },
-                    instructions = "You are a helpful assistant. Transcribe speech and respond naturally.",
-                    voice,
-                    input_audio_format = "pcm16",
-                    output_audio_format = "pcm16",
-                    input_audio_transcription = new
+                    type = "realtime",
+                    instructions = "You are a helpful assistant. Transcribe speech accurately and do not produce spoken responses.",
+                    output_modalities = new[] { "text" },
+                    audio = new
                     {
-                        model = "whisper-1"
-                    },
-                    turn_detection = new
-                    {
-                        type = "server_vad", // Server-side Voice Activity Detection
-                        threshold = vadThreshold,
-                        prefix_padding_ms = vadPrefixPaddingMs,
-                        silence_duration_ms = vadSilenceDurationMs
+                        input = new
+                        {
+                            format = new
+                            {
+                                type = "audio/pcm",
+                                rate = sampleRate
+                            },
+                            transcription = new
+                            {
+                                model = "whisper-1"
+                            },
+                            turn_detection = new
+                            {
+                                type = "server_vad",
+                                threshold = vadThreshold,
+                                prefix_padding_ms = vadPrefixPaddingMs,
+                                silence_duration_ms = vadSilenceDurationMs
+                            }
+                        }
                     }
                 }
             };
+        }
 
-            SendEvent(sessionConfig);
+        private object BuildRealtimeSessionUpdate()
+        {
+            return new
+            {
+                type = "session.update",
+                session = new
+                {
+                    type = "realtime",
+                    instructions = "You are a helpful assistant. Transcribe speech and respond naturally.",
+                    output_modalities = new[] { "audio" },
+                    audio = new
+                    {
+                        input = new
+                        {
+                            format = new
+                            {
+                                type = "audio/pcm",
+                                rate = sampleRate
+                            },
+                            transcription = new
+                            {
+                                model = "whisper-1"
+                            },
+                            turn_detection = new
+                            {
+                                type = "server_vad",
+                                threshold = vadThreshold,
+                                prefix_padding_ms = vadPrefixPaddingMs,
+                                silence_duration_ms = vadSilenceDurationMs
+                            }
+                        },
+                        output = new
+                        {
+                            format = new
+                            {
+                                type = "audio/pcm",
+                                rate = sampleRate
+                            },
+                            voice
+                        }
+                    }
+                }
+            };
         }
 
         private void OnWebSocketMessage(byte[] data)

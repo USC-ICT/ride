@@ -9,7 +9,7 @@ namespace Ride
     [Serializable]
     public struct RideConfig
     {
-        public static readonly Version DefaultVersion = new Version("1.0.5.7");
+        public static readonly Version DefaultVersion = new Version("1.0.5.8");
 
 
         /// <summary>Application specific settings for Anthropic</summary>
@@ -273,6 +273,27 @@ namespace Ride
             };
         }
 
+        /// <summary>Application specific settings for Google Gemini</summary>
+        [Serializable]
+        public struct GeminiSettings
+        {
+            /// <summary>Base URL for Gemini (model name is appended at runtime)</summary>
+            public string endpoint;
+
+            /// <summary>API key for Gemini</summary>
+            public string endpointKey;
+
+            /// <summary>Gemini model identifier</summary>
+            public string model;
+
+            public static GeminiSettings Default => new GeminiSettings
+            {
+                endpoint = "https://generativelanguage.googleapis.com/v1beta/models",
+                endpointKey = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+                model = "gemini-2.0-flash",
+            };
+        }
+
         /// <summary>Application specific settings for Google DialogFlow</summary>
         [Serializable]
         public struct GoogleDialogflowSettings
@@ -495,6 +516,7 @@ namespace Ride
         public AzureSpeechRecognitionSettings azureSpeech;
         public AzureTASettings azureTA;
         public ElevenLabsSettings elevenLabs;
+        public GeminiSettings gemini;
         public GoogleDialogflowSettings googleDflow;
         public HuggingFaceSettings huggingFace;
         public LRSSettings lrs;
@@ -528,6 +550,7 @@ namespace Ride
             azureSpeech = AzureSpeechRecognitionSettings.Default,
             azureTA = AzureTASettings.Default,
             elevenLabs = ElevenLabsSettings.Default,
+            gemini = GeminiSettings.Default,
             googleDflow = GoogleDialogflowSettings.Default,
             huggingFace = HuggingFaceSettings.Default,
             lrs = LRSSettings.Default,
