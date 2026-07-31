@@ -490,7 +490,7 @@ namespace Ride
             var results = new RideID[hits.Length];
             for (int i = 0; i < hits.Length; i++)
             {
-                results[i] = Globals.api.gameObjectSystem.GetObject(hits[i].gameObject.GetInstanceID());
+                results[i] = Globals.api.gameObjectSystem.GetObject(RideUtils.EntityIdToULong(hits[i].gameObject));
                 if (results[i] == RideID.Null)
                     RideLog.LogError($"OverlapSphere(): A collider's gameobject '{hits[i].name}' was not found in the game object system.");
             }

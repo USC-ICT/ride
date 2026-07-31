@@ -1,11 +1,25 @@
-﻿using System.Text;
+﻿using System;
+using System.Collections.Generic;
+using System.Text;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace VHAssets
 {
 public class AudioSpeechFile : MonoBehaviour
 {
+    public sealed class CreationOptions
+    {
+        public bool ParentInHierarchy = true;
+        public Transform Parent;
+        public string ParentName = DefaultParentName;
+        public string ExplicitName;
+    }
+
     #region Variables
+    const string DefaultParentName = "AudioSpeech";
+    static readonly Dictionary<Scene, Transform> s_DefaultParentsByScene = new Dictionary<Scene, Transform>();
+
     public TextAsset m_LipSyncInfo;
     public TextAsset m_UtteranceText;
     public TextAsset m_Xml;
@@ -116,13 +130,16 @@ public class AudioSpeechFile : MonoBehaviour
         return bml;
     }
 
-    public static AudioSpeechFile CreateAudioSpeechFile(string lipSyncInfo, string xml, AudioClip clip)
+    public static AudioSpeechFile CreateAudioSpeechFile(string lipSyncInfo, string xml, AudioClip clip, CreationOptions options = null)
     {
-        GameObject go = new GameObject(clip.name);
-        if (string.IsNullOrEmpty(go.name.Trim()))
-        {
-            go.name = "UnnamedAudioClip";
-        }
+        options ??= new CreationOptions();
+
+        string goName = ResolveName(clip, options);
+        GameObject go = new GameObject(goName);
+        Transform parent = ResolveParent(options);
+        if (parent != null)
+            go.transform.SetParent(parent, false);
+
         AudioSpeechFile audio = go.AddComponent<AudioSpeechFile>();
         audio.m_LipSyncInfoText = lipSyncInfo;
         audio.m_AudioClip = clip;
@@ -130,6 +147,58 @@ public class AudioSpeechFile : MonoBehaviour
         audio.ConvertedXml = xml;
         audio.ReadBmlData();
         return audio;
+    }
+
+    static string ResolveName(AudioClip clip, CreationOptions options)
+    {
+        if (!string.IsNullOrWhiteSpace(options.ExplicitName))
+            return options.ExplicitName.Trim();
+
+        if (clip != null && !string.IsNullOrWhiteSpace(clip.name))
+            return clip.name.Trim();
+
+        float clipLength = clip != null ? clip.length : 0f;
+        int clipLengthSeconds = Mathf.Max(0, Mathf.CeilToInt(clipLength));
+        return $"{DateTime.Now:yyyyMMdd-HHmmss}-audio-{clipLengthSeconds}s";
+    }
+
+    static Transform ResolveParent(CreationOptions options)
+    {
+        if (!options.ParentInHierarchy)
+            return null;
+
+        if (options.Parent != null)
+            return options.Parent;
+
+        Scene scene = SceneManager.GetActiveScene();
+        if (!scene.IsValid())
+            return null;
+
+        if (s_DefaultParentsByScene.TryGetValue(scene, out Transform cachedParent))
+        {
+            if (cachedParent != null && cachedParent.gameObject.scene == scene)
+                return cachedParent;
+
+            s_DefaultParentsByScene.Remove(scene);
+        }
+
+        string parentName = string.IsNullOrWhiteSpace(options.ParentName)
+            ? DefaultParentName
+            : options.ParentName.Trim();
+
+        foreach (var rootGameObject in scene.GetRootGameObjects())
+        {
+            if (rootGameObject.name != parentName)
+                continue;
+
+            s_DefaultParentsByScene[scene] = rootGameObject.transform;
+            return rootGameObject.transform;
+        }
+
+        GameObject parentObject = new GameObject(parentName);
+        SceneManager.MoveGameObjectToScene(parentObject, scene);
+        s_DefaultParentsByScene[scene] = parentObject.transform;
+        return parentObject.transform;
     }
     #endregion
 }

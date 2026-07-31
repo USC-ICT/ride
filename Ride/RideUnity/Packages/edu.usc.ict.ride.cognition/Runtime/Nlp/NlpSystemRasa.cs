@@ -18,9 +18,13 @@ namespace Ride.NLP
 
     #endregion
 
-    public class 
+    public class
         NlpSystemRasa : NlpSystemUnity
     {
+        // Intent-based scripted bot: responses are authored content, so there is no
+        // persona to jailbreak and nothing to screen. Bypass the conversation guard.
+        protected override bool GuardRequests => false;
+
         private string m_model = "default-rasa";
         public override void SetSystemPrompt(string prompt)
         {
@@ -32,7 +36,7 @@ namespace Ride.NLP
         /// </summary>
         /// <param name="request">User input, string question</param>
         /// <param name="onComplete">Delegate to execute on successful request, typically parses JSON response</param>
-        public override async void Request(NlpRequest request, Action<NlpResponse> onComplete)
+        protected override async void RequestInternal(NlpRequest request, Action<NlpResponse> onComplete)
         {
             m_model = (request.content != string.Empty) ? request.content : m_model;
 

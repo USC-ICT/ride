@@ -8,30 +8,27 @@ using UnityEngine.Networking;
 namespace Ride.TextToSpeech
 {
     /// <summary>
-    /// Local Coqui XTTS v2-backed text-to-speech system that generates audio through a small HTTP service
-    /// and relies on proxy lipsync generation based on the resulting clip duration.
+    /// Local Coqui XTTS v2-backed text-to-speech via a small HTTP service exposing GET /voices and
+    /// POST /synthesize (base64 WAV back). Proxy lipsync is generated from the clip duration.
+    ///
+    /// Connection config is code-authoritative (NOT [SerializeField]) so script changes take effect
+    /// without a prefab/scene edit; for per-deployment overrides, source from RideConfig.
+    /// NOTE: XTTS v2 weights are CPML (non-commercial); slated for replacement by Chatterbox (R1).
     /// </summary>
     public class TextToSpeechSystemXTTS : TextToSpeechSystemProxyLipsynced
     {
-        [Header("Endpoint")]
-        [SerializeField] private string m_endpoint = "http://127.0.0.1:9004";
-        [SerializeField] private bool m_sendAuthorizationHeader = false;
-        [SerializeField] private string m_authorizationToken = string.Empty;
-        [SerializeField, Min(1)] private int m_requestTimeoutSeconds = 45;
-
-        [Header("Voice")]
-        [SerializeField] private string m_fallbackVoice = "Ana Florence";
+        private string m_endpoint = "http://127.0.0.1:9004";
+        private bool m_sendAuthorizationHeader = false;
+        private string m_authorizationToken = string.Empty;
+        private int m_requestTimeoutSeconds = 20;
+        private string m_fallbackVoice = "Ana Florence";
 
         private string[] m_voices = Array.Empty<string>();
-        private bool m_voicesReady;
-
-        public bool VoicesReady => m_voicesReady;
-
         public override void SystemInit()
         {
             base.SystemInit();
-            timeout = Mathf.Max(timeout, m_requestTimeoutSeconds + 5f);
-            StartCoroutine(RequestAvailableVoicesCoroutine());
+            VoiceListStatus = VoiceListState.NotFetched;
+            RefreshVoices();
         }
 
         public override string[] GetAvailableVoices() => m_voices;
@@ -45,21 +42,15 @@ namespace Ride.TextToSpeech
         {
             yield return WaitForVoices();
 
-            SynthesizeRequest requestBody = new()
-            {
-                text = text,
-                voice = voice
-            };
-
+            SynthesizeRequest requestBody = new() { text = text, voice = voice };
             string requestJson = JsonUtility.ToJson(requestBody);
+
             using var webRequest = new UnityWebRequest($"{m_endpoint}/synthesize", UnityWebRequest.kHttpVerbPOST);
             webRequest.uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(requestJson));
             webRequest.downloadHandler = new DownloadHandlerBuffer();
-            webRequest.timeout = m_requestTimeoutSeconds;
+            webRequest.timeout = GetRequestTimeoutSeconds(m_requestTimeoutSeconds, text);
             webRequest.SetRequestHeader("Content-Type", "application/json");
-
-            if (m_sendAuthorizationHeader && !string.IsNullOrWhiteSpace(m_authorizationToken))
-                webRequest.SetRequestHeader("Authorization", $"Bearer {m_authorizationToken}");
+            AddAuthorizationHeader(webRequest);
 
             yield return webRequest.SendWebRequest();
 
@@ -107,8 +98,7 @@ namespace Ride.TextToSpeech
             }
 
             string filePath = Path.Combine(
-                Application.persistentDataPath,
-                $"xttsTTS_{DateTime.UtcNow.Ticks}.wav");
+                Application.persistentDataPath, $"xttsTTS_{DateTime.UtcNow.Ticks}.wav");
 
             try
             {
@@ -121,19 +111,15 @@ namespace Ride.TextToSpeech
                 yield break;
             }
 
-            Debug.Log(
-                $"[XTTS TTS] Wrote synthesized audio to '{filePath}' " +
-                $"({audioBytes.Length} bytes, {response.duration_seconds:0.00}s, voice '{response.voice}').");
             CompleteTextToSpeechGeneration(filePath, response.duration_seconds);
         }
 
-        private IEnumerator RequestAvailableVoicesCoroutine()
+        /// <inheritdoc/>
+        protected override IEnumerator FetchAvailableVoices()
         {
             using var webRequest = UnityWebRequest.Get($"{m_endpoint}/voices");
             webRequest.timeout = m_requestTimeoutSeconds;
-
-            if (m_sendAuthorizationHeader && !string.IsNullOrWhiteSpace(m_authorizationToken))
-                webRequest.SetRequestHeader("Authorization", $"Bearer {m_authorizationToken}");
+            AddAuthorizationHeader(webRequest);
 
             yield return webRequest.SendWebRequest();
 
@@ -153,23 +139,24 @@ namespace Ride.TextToSpeech
                 if (response != null && response.voices != null && response.voices.Length > 0)
                 {
                     m_voices = response.voices;
-                    m_voicesReady = true;
+                    CompleteVoiceFetch(true);
                     yield break;
                 }
             }
             else
             {
-                Debug.LogWarning($"[XTTS TTS] Failed to retrieve voices: {webRequest.result} - {webRequest.error}");
+                Debug.LogWarning($"[XTTS TTS] Failed to retrieve voices: {webRequest.result} - {webRequest.error}. " +
+                    "Using the fallback voice; selecting this provider again will retry.");
             }
 
             m_voices = new[] { m_fallbackVoice };
-            m_voicesReady = true;
+            CompleteVoiceFetch(false);
         }
 
-        private IEnumerator WaitForVoices()
+        private void AddAuthorizationHeader(UnityWebRequest webRequest)
         {
-            while (!m_voicesReady)
-                yield return null;
+            if (m_sendAuthorizationHeader && !string.IsNullOrWhiteSpace(m_authorizationToken))
+                webRequest.SetRequestHeader("Authorization", $"Bearer {m_authorizationToken}");
         }
 
         private string ResolveVoiceOrDefault(string voice)
@@ -183,18 +170,8 @@ namespace Ride.TextToSpeech
             return m_fallbackVoice;
         }
 
-        [Serializable]
-        private class VoicesResponse
-        {
-            public string[] voices;
-        }
-
-        [Serializable]
-        private class SynthesizeRequest
-        {
-            public string text;
-            public string voice;
-        }
+        [Serializable] private class VoicesResponse { public string[] voices; }
+        [Serializable] private class SynthesizeRequest { public string text; public string voice; }
 
         [Serializable]
         private class SynthesizeResponse

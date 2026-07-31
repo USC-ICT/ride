@@ -18,14 +18,14 @@ namespace Ride
         {
             base.SystemAwake();
 
-            var curves = FindObjectsByType<Curve>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            var curves = RideUtils.FindObjectsByType<Curve>(FindObjectsInactive.Include);
             foreach (var curve in curves)
             {
-                RideID id = Globals.api.gameObjectSystem.GetObject(curve.gameObject.GetInstanceID());
+                RideID id = Globals.api.gameObjectSystem.GetObject(RideUtils.EntityIdToULong(curve.gameObject));
                 if (id == RideID.Null)
                 {
                     // this curve isn't represented in the gameobject system
-                    id = Globals.api.gameObjectSystem.InsertObject(curve.gameObject.GetInstanceID());
+                    id = Globals.api.gameObjectSystem.InsertObject(RideUtils.EntityIdToULong(curve.gameObject));
                 }
 
                 if (!m_curves.ContainsKey(id))

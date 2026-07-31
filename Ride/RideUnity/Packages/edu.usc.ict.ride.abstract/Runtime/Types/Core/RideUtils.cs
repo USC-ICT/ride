@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -22,7 +22,7 @@ namespace Ride
         {
             // find all the colliders in the scene and see if there bounds are in the frustum
             var visibleObjects = new List<GameObject>();
-            var colliders = GameObject.FindObjectsByType<Collider>(FindObjectsSortMode.None);
+            var colliders = RideUtils.FindObjectsByType<Collider>();
             foreach (var collider in colliders)
             {
                 if (frustum.Contains(collider.bounds))
@@ -332,17 +332,35 @@ namespace Ride
                 && UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject();
         }
 
+        private static int s_imguiKeyboardControl;
+        private static string s_imguiFocusedControlName;
+        private static float s_lastImguiFocusUpdateTime = float.NegativeInfinity;
+
+        /// <summary>
+        /// Caches the current IMGUI keyboard focus state so it can be queried reliably from non-IMGUI update loops.
+        /// Call this from any active <c>OnGUI()</c> path that should contribute IMGUI focus information for systems such as
+        /// camera controllers or debug hotkey suppressors.
+        /// </summary>
+        public static void UpdateImguiFocus()
+        {
+            s_imguiKeyboardControl = GUIUtility.keyboardControl;
+            s_imguiFocusedControlName = GUI.GetNameOfFocusedControl();
+            s_lastImguiFocusUpdateTime = Time.unscaledTime;
+        }
+
         /// <summary>
         /// Determines whether any UI input field currently has focus, such as a text box or other selectable input element.
         /// This is useful to prevent player input (e.g., movement, debug hotkeys) from being triggered while the user is typing.
         /// </summary>
         /// <remarks>
-        /// This method checks both Unity UI (`Selectable`) elements selected by the current EventSystem, and IMGUI controls
-        /// using <see cref="GUI.GetNameOfFocusedControl"/>. For IMGUI elements, the control must be named with "input" in its
+        /// This method checks both Unity UI (`Selectable`) elements selected by the current EventSystem, and IMGUI focus.
+        /// It prefers recently cached IMGUI focus gathered from <see cref="UpdateImguiFocus"/>, and falls back to direct IMGUI
+        /// queries when that cached data is stale. For named IMGUI elements, the control must be named with "input" in its
         /// control name for this method to return true.
         ///
-        /// For IMGUI usage, you must call <see cref="GUI.SetNextControlName(string)"/> with a name containing "input"
-        /// before the relevant control is rendered.
+        /// For IMGUI usage, call <see cref="UpdateImguiFocus"/> from an active <c>OnGUI()</c> path for the most reliable
+        /// results. If you want named IMGUI controls to count as input, call <see cref="GUI.SetNextControlName(string)"/>
+        /// with a name containing "input" before the relevant control is rendered.
         ///
         /// See: https://docs.unity3d.com/ScriptReference/GUI.GetNameOfFocusedControl.html
         /// </remarks>
@@ -363,9 +381,27 @@ namespace Ride
                     return true;
             }
 
+            const float ImguiFocusCacheDurationSeconds = 0.5f;
+
+            // use cached variables if they were updated recently, otherwise query IMGUI directly.
+            // This allows non-IMGUI update loops to have reliable focus information without depending on the timing of OnGUI calls,
+            // while still allowing IMGUI focus to be detected for cases where UpdateImguiFocus is not called.
+            int keyboardControl = s_imguiKeyboardControl;
+            string focusedControl = s_imguiFocusedControlName;
+
+            // Ignore stale cached IMGUI focus so inactive UI does not block input indefinitely.
+            bool imguiFocusIsFresh = (Time.unscaledTime - s_lastImguiFocusUpdateTime) <= ImguiFocusCacheDurationSeconds;
+            if (!imguiFocusIsFresh)
+            {
+                keyboardControl = GUIUtility.keyboardControl;
+                focusedControl = GUI.GetNameOfFocusedControl();
+            }
+
+            if (keyboardControl != 0)
+                return true;
+
             // you need to manually call GUI.SetNextControlName("input") before any element you want this to return true
             // see https://docs.unity3d.com/ScriptReference/GUI.GetNameOfFocusedControl.html
-            var focusedControl = GUI.GetNameOfFocusedControl();
             if (!string.IsNullOrEmpty(focusedControl) &&
                 focusedControl.IndexOf("input", StringComparison.OrdinalIgnoreCase) >= 0)
                 return true;
@@ -420,6 +456,49 @@ namespace Ride
         /// <param name="sceneName"></param>
         /// <returns></returns>
         public static AsyncOperation LoadSceneAsync(string sceneName) => UnityEngine.SceneManagement.SceneManager.LoadSceneAsync(sceneName);
+
+        /// <summary>
+        /// Finds loaded objects of type <typeparamref name="T"/> using a Unity-version-compatible API.
+        /// </summary>
+        /// <typeparam name="T">The object type to search for.</typeparam>
+        /// <returns>An array of matching loaded objects.</returns>
+        public static T[] FindObjectsByType<T>() where T : UnityEngine.Object
+        {
+#if UNITY_6000_4_OR_NEWER
+            return GameObject.FindObjectsByType<T>();
+#else
+            return GameObject.FindObjectsByType<T>(FindObjectsSortMode.None);
+#endif
+        }
+
+        /// <summary>
+        /// Finds loaded objects of type <typeparamref name="T"/> using a Unity-version-compatible API and inactive filter.
+        /// </summary>
+        /// <typeparam name="T">The object type to search for.</typeparam>
+        /// <param name="findObjectsInactive">Whether inactive objects should be included in the results.</param>
+        /// <returns>An array of matching loaded objects.</returns>
+        public static T[] FindObjectsByType<T>(FindObjectsInactive findObjectsInactive) where T : UnityEngine.Object
+        {
+#if UNITY_6000_4_OR_NEWER
+            return GameObject.FindObjectsByType<T>(findObjectsInactive);
+#else
+            return GameObject.FindObjectsByType<T>(findObjectsInactive, FindObjectsSortMode.None);
+#endif
+        }
+
+        /// <summary>
+        /// Returns a Unity object identifier as a <see cref="ulong"/> using a Unity-version-compatible API.
+        /// </summary>
+        /// <param name="gameObject">The Unity object to identify.</param>
+        /// <returns>The object's Unity identifier represented as a <see cref="ulong"/>.</returns>
+        public static ulong EntityIdToULong(UnityEngine.Object gameObject)
+        {
+#if UNITY_6000_4_OR_NEWER
+            return EntityId.ToULong(gameObject.GetEntityId());
+#else
+            return unchecked((ulong)gameObject.GetHashCode());
+#endif
+        }
 
         #endregion
 
@@ -669,9 +748,9 @@ namespace Ride
         }
 
         /// <summary>
-        /// Scales a normalized Rect (0–1 range) to screen pixel dimensions using <see cref="Screen.width"/> and <see cref="Screen.height"/>.
+        /// Scales a normalized Rect (0-1 range) to screen pixel dimensions using <see cref="Screen.width"/> and <see cref="Screen.height"/>.
         /// </summary>
-        /// <param name="r">A Rect in normalized screen-space (0–1)</param>
+        /// <param name="r">A Rect in normalized screen-space (0-1)</param>
         /// <returns>A Rect scaled to pixel resolution</returns>
         public static Rect ScaleToRes(Rect r) =>
             new Rect(r.x * Screen.width, r.y * Screen.height, r.width * Screen.width, r.height * Screen.height);
@@ -885,7 +964,7 @@ namespace Ride
         #region Physics and Ballistics
 
         /// <summary>
-        /// Applies one integration step using <see href="https://en.wikipedia.org/wiki/Heun%27s_method">Heun’s method</see>
+        /// Applies one integration step using <see href="https://en.wikipedia.org/wiki/Heun%27s_method">Heun's method</see>
         /// (improved Euler method) to estimate the next position and velocity of a projectile.
         /// 
         /// This method averages the initial and predicted derivatives to reduce integration error,

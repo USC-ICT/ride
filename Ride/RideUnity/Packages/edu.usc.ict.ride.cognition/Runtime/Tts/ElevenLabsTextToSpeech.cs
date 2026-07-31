@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using UnityEngine;
@@ -60,7 +61,7 @@ namespace Ride.TextToSpeech
     ///
     /// <para>
     /// On WebGL builds the audio generation path may instead be handled by an
-    /// external Lambda service. In those cases this component may be bypassed for
+    /// external hosted proxy service. In those cases this component may be bypassed for
     /// audio generation and alignment data may not be available.
     /// </para>
     /// </remarks>
@@ -88,6 +89,12 @@ namespace Ride.TextToSpeech
         }
 
 #if UNITY_WEBGL
+        [DllImport("__Internal")] private static extern IntPtr RideWebGLAudio_CreateAudioBlobUrl(string mimeType, string audioBase64);
+#else
+        private static IntPtr RideWebGLAudio_CreateAudioBlobUrl(string mimeType, string audioBase64) => IntPtr.Zero;
+#endif
+
+#if UNITY_WEBGL
         [Serializable]
         private class WebGlLambdaRequest
         {
@@ -107,6 +114,7 @@ namespace Ride.TextToSpeech
         private class WebGlLambdaGenerateReply
         {
             public string url;
+            public string audio_base64;
             public ElevenLabsAlignment alignment;
             public ElevenLabsAlignment normalized_alignment;
         }
@@ -552,6 +560,27 @@ namespace Ride.TextToSpeech
             StartCoroutine(GetAvailableVoicesCoroutine());
         }
 
+        /// <summary>
+        /// The longest text the selected model accepts in one synthesis request. ElevenLabs rejects
+        /// anything longer rather than truncating it, and the ceiling differs sharply between
+        /// models, so text must be shortened or split at sentence boundaries to fit the active
+        /// choice.
+        /// </summary>
+        public int MaxRequestCharacters
+        {
+            get
+            {
+                switch (currentModel)
+                {
+                    case Model.FlashV2_5:
+                    case Model.TurboV2_5:      return 40000;
+                    case Model.MultilingualV2: return 10000;
+                    case Model.V3:             return 3000;
+                    default:                   return 10000;
+                }
+            }
+        }
+
         private string GetModelId()
         {
             switch (currentModel)
@@ -849,27 +878,84 @@ namespace Ride.TextToSpeech
                     yield break;
                 }
 
-                if (reply == null || string.IsNullOrEmpty(reply.url))
+                if (reply == null)
                 {
-                    Debug.LogError("ElevenLabsTextToSpeech.RequestWebGlGenerateCoroutine() - Missing URL in Lambda reply.");
+                    Debug.LogError("ElevenLabsTextToSpeech.RequestWebGlGenerateCoroutine() - Missing Lambda reply.");
                     FailedTimingRequestVersion = requestVersion;
                     resultCallback?.Invoke(false);
                     yield break;
                 }
 
-                LastGeneratedAudioPathOrUrl = reply.url;
                 var timestampsResult = new ElevenLabsTimestampsResult
                 {
-                    audio_base64 = null,
+                    audio_base64 = reply.audio_base64,
                     alignment = reply.alignment,
                     normalized_alignment = reply.normalized_alignment
                 };
 
                 ApplyTimestampsResult(timestampsResult, requestVersion);
+
+                if (!string.IsNullOrEmpty(reply.audio_base64))
+                {
+                    LastGeneratedAudioClip = null;
+                    clipTime = EstimateAlignmentDurationSeconds(reply.normalized_alignment ?? reply.alignment);
+                    LastGeneratedAudioPathOrUrl = CreateInlineAudioReference(reply.audio_base64);
+                    if (string.IsNullOrEmpty(LastGeneratedAudioPathOrUrl))
+                    {
+                        Debug.LogError("ElevenLabsTextToSpeech.RequestWebGlGenerateCoroutine() - Failed to create an inline audio reference.");
+                        FailedTimingRequestVersion = requestVersion;
+                        resultCallback?.Invoke(false);
+                        yield break;
+                    }
+
+                    if (DebugOutputEnabled)
+                        Debug.Log($"[ElevenLabs WebGL] Audio delivery=inline/blob, estimatedDuration={clipTime:0.###}s");
+
+                    resultCallback?.Invoke(true);
+                    yield break;
+                }
+
+                if (string.IsNullOrEmpty(reply.url))
+                {
+                    Debug.LogError("ElevenLabsTextToSpeech.RequestWebGlGenerateCoroutine() - Missing audio payload in Lambda reply.");
+                    FailedTimingRequestVersion = requestVersion;
+                    LastGeneratedAudioPathOrUrl = null;
+                    resultCallback?.Invoke(false);
+                    yield break;
+                }
+
+                LastGeneratedAudioPathOrUrl = reply.url;
+                if (DebugOutputEnabled)
+                    Debug.Log($"[ElevenLabs WebGL] Audio delivery=s3/url, estimatedDuration={clipTime:0.###}s, url={reply.url}");
+
                 resultCallback?.Invoke(true);
             }
         }
 #endif
+
+        private static float EstimateAlignmentDurationSeconds(ElevenLabsAlignment alignment)
+        {
+            if (alignment?.character_end_times_seconds == null || alignment.character_end_times_seconds.Length == 0)
+                return 0f;
+
+            double maxEndTime = 0d;
+            for (int i = 0; i < alignment.character_end_times_seconds.Length; i++)
+            {
+                if (alignment.character_end_times_seconds[i] > maxEndTime)
+                    maxEndTime = alignment.character_end_times_seconds[i];
+            }
+
+            return (float)maxEndTime;
+        }
+
+        private static string CreateInlineAudioReference(string audioBase64)
+        {
+            if (string.IsNullOrEmpty(audioBase64))
+                return null;
+
+            IntPtr blobUrlPtr = RideWebGLAudio_CreateAudioBlobUrl("audio/mpeg", audioBase64);
+            return blobUrlPtr != IntPtr.Zero ? Marshal.PtrToStringAnsi(blobUrlPtr) : null;
+        }
 
         public void ConvertTextToSpeechClip(string text)
         {
@@ -1148,14 +1234,29 @@ namespace Ride.TextToSpeech
             // Determine audio type based on header bytes
             AudioType audioType = DetectAudioType(audioData);
 
-            // Create a temporary file path
-            string tempPath = Application.temporaryCachePath + "/tempAudio" + GetExtension(audioType);
+            string localAudioPath = SaveAudioBytesToPersistentFile(audioData, audioType, "tempAudio");
+            if (string.IsNullOrEmpty(localAudioPath))
+                yield break;
 
-            // Write bytes to temporary file
-            File.WriteAllBytes(tempPath, audioData);
+            string normalizedPath = localAudioPath.Replace("\\", "/");
+            string fileUrl = normalizedPath.StartsWith("file://", StringComparison.OrdinalIgnoreCase)
+                ? normalizedPath
+                : "file://" + normalizedPath;
 
-            // Load audio clip using UnityWebRequest
-            using (var www = UnityWebRequestMultimedia.GetAudioClip("file://" + tempPath, audioType))
+            // Keeping samples compressed saves memory, but AudioClip.GetData cannot read them,
+            // and the clip is re-encoded to a WAV further down. Platforms that take that WAV
+            // route therefore need the samples decompressed. WebGL delivers its audio as a blob
+            // URL and never reaches this method, so it is listed here for intent only.
+            bool keepSamplesCompressed = false;
+            if (RideUtils.IsWebGL() && !RideUtils.IsEditor())
+                keepSamplesCompressed = true;
+
+            var downloadHandler = new DownloadHandlerAudioClip(fileUrl, audioType)
+            {
+                compressed = keepSamplesCompressed
+            };
+
+            using (var www = new UnityWebRequest(fileUrl, UnityWebRequest.kHttpVerbGET, downloadHandler, null))
             {
                 yield return www.SendWebRequest();
 
@@ -1174,10 +1275,26 @@ namespace Ride.TextToSpeech
                     Debug.LogError($"Failed to load audio: {www.error}");
                 }
             }
+        }
 
-            // Clean up temporary file
-            if (System.IO.File.Exists(tempPath))
-                System.IO.File.Delete(tempPath);
+        private string SaveAudioBytesToPersistentFile(byte[] audioData, AudioType audioType, string fileNamePrefix)
+        {
+            if (audioData == null || audioData.Length == 0)
+            {
+                Debug.LogError("ElevenLabsTextToSpeech.SaveAudioBytesToPersistentFile() - Audio data is null or empty.");
+                return null;
+            }
+
+            string extension = GetExtension(audioType);
+            if (string.IsNullOrEmpty(extension) || string.Equals(extension, ".audio", StringComparison.OrdinalIgnoreCase))
+            {
+                Debug.LogError($"ElevenLabsTextToSpeech.SaveAudioBytesToPersistentFile() - Unsupported audio type: {audioType}");
+                return null;
+            }
+
+            string filePath = Path.Combine(Application.persistentDataPath, fileNamePrefix + extension);
+            File.WriteAllBytes(filePath, audioData);
+            return filePath;
         }
 
         private static AudioType DetectAudioType(byte[] data)

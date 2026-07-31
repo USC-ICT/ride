@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 
 namespace Ride.Movement
 {
@@ -372,14 +372,14 @@ namespace Ride.Movement
         // ---------------------------------------------------------------------
 
         /// <summary>
-        /// Sets the mover’s pathing radius, which affects collision checks and path clearance.
+        /// Sets the mover's pathing radius, which affects collision checks and path clearance.
         /// </summary>
         /// <param name="mover">The RideID of the mover.</param>
         /// <param name="radius">Radius in simulation units.</param>
         void SetMoverRadius(RideID mover, float radius);
 
         /// <summary>
-        /// Sets the mover’s pathing height, typically used in vertical clearance tests.
+        /// Sets the mover's pathing height, typically used in vertical clearance tests.
         /// </summary>
         /// <param name="mover">The RideID of the mover.</param>
         /// <param name="height">Height in simulation units.</param>
@@ -449,7 +449,7 @@ namespace Ride.Movement
         /// used by the specified mover.
         /// </summary>
         /// <param name="moverId">The RideID of the mover.</param>
-        /// <returns>The mover’s <see cref="MovementLeg"/> classification.</returns>
+        /// <returns>The mover's <see cref="MovementLeg"/> classification.</returns>
         MovementLeg GetMoverLeg(RideID moverId);
 
 
@@ -565,7 +565,7 @@ namespace Ride.Movement
         /// </summary>
         /// <param name="position">The starting position to evaluate.</param>
         /// <param name="distance">Radius to search for a valid position.</param>
-        /// <returns>A valid world-space position; returns (-∞, -∞, -∞) if none found.</returns>
+        /// <returns>A valid world-space position; returns (-Infinity, -Infinity, -Infinity) if none found.</returns>
         RideVector3 GetClosestAvailablePosition(RideVector3 position, float distance = 1.0f);
 
         /// <summary>

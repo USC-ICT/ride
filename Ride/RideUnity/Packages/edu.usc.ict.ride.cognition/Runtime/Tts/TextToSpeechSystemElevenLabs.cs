@@ -56,6 +56,12 @@ namespace Ride.TextToSpeech
 
 
         /// <inheritdoc/>
+        /// <remarks>Per-request text limits differ by ElevenLabs model, so this follows the selected one.</remarks>
+        public override int MaxRequestCharacters =>
+            textToSpeech != null ? textToSpeech.MaxRequestCharacters : base.MaxRequestCharacters;
+
+
+        /// <inheritdoc/>
         protected override void StartTextToSpeechGeneration(string voice, string text)
         {
             textToSpeech.SetDebugOutputEnabled(lipsyncDebugOutput);
@@ -165,7 +171,7 @@ namespace Ride.TextToSpeech
                 }
             }
 
-            yield return StartCoroutine(WaitForTimingRequestVersion(expectedRequestVersion));
+            yield return StartCoroutine(WaitForTimingRequestVersion(expectedRequestVersion, GetGenerationTimeoutSeconds(text)));
 
             if (textToSpeech.FailedTimingRequestVersion == expectedRequestVersion ||
                 textToSpeech.CompletedTimingRequestVersion != expectedRequestVersion)
@@ -186,12 +192,12 @@ namespace Ride.TextToSpeech
             return availableVoices.Length > 0 ? availableVoices[0] : "Aria";
         }
 
-        private IEnumerator WaitForTimingRequestVersion(int expectedRequestVersion)
+        private IEnumerator WaitForTimingRequestVersion(int expectedRequestVersion, float timeoutSeconds)
         {
             float timer = 0f;
             while (textToSpeech.CompletedTimingRequestVersion != expectedRequestVersion &&
                    textToSpeech.FailedTimingRequestVersion != expectedRequestVersion &&
-                   timer < timeout)
+                   timer < timeoutSeconds)
             {
                 timer += Time.deltaTime;
                 yield return null;

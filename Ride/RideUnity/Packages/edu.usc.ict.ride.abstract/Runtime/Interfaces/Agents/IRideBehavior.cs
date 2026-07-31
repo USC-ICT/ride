@@ -1,9 +1,9 @@
-﻿namespace Ride.AI
+namespace Ride.AI
 {
     /// <summary>
     /// Defines the interface for agent-level runtime behaviors in RIDE.
     /// 
-    /// A behavior represents a modular unit of simulation logic—such as patrol, idle, or follow—that is 
+    /// A behavior represents a modular unit of simulation logic-such as patrol, idle, or follow-that is 
     /// attached to an entity and executed based on context. Implementations are managed per-agent and 
     /// support full lifecycle control, similar in spirit to Unity's <see href="https://docs.unity3d.com/ScriptReference/MonoBehaviour.html">MonoBehaviour</see>.
     /// </summary>

@@ -56,11 +56,16 @@ namespace Ride
         void RemoveLogger(ILogger logger);
 
         /// <summary>
+        /// Logs a fully structured entry.
+        /// </summary>
+        /// <param name="entry">The structured log entry to dispatch.</param>
+        void Log(LogEntry entry);
+
+        /// <summary>
         /// Logs a general message at the default <see cref="LogType.Information"/> level.
         /// Accepts any object, which will be logged using its <c>ToString()</c> representation.
         /// </summary>
         /// <param name="message">The message to log.</param>
-        /// <summary>
         void Log(object message);
 
         /// <summary>
@@ -69,7 +74,6 @@ namespace Ride
         /// </summary>
         /// <param name="type">The severity or verbosity of the message.</param>
         /// <param name="message">The message to log.</param>
-        /// <summary>
         void Log(LogType type, object message);
 
         /// <summary>

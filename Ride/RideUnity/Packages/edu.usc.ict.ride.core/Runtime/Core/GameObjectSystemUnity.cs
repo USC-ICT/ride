@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using VHAssets;
@@ -29,7 +29,7 @@ namespace Ride
         {
             base.SystemInit();
 
-            var gos = FindObjectsByType<GameObject>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            var gos = RideUtils.FindObjectsByType<GameObject>(FindObjectsInactive.Include);
             foreach (var go in gos)
                 Insert(IdentityFactory.CreateId(), go);
 
@@ -134,17 +134,17 @@ namespace Ride
         /// </summary>
         /// <param name="engineGameObjectInstanceId">Unity instance ID from <c>GetInstanceID()</c>.</param>
         /// <returns>The new or existing <see cref="RideID"/> associated with the object, or <see cref="RideID.Null"/> if not found.</returns>
-        public RideID InsertObject(int engineGameObjectInstanceId)
+        public RideID InsertObject(ulong engineGameObjectInstanceId)
         {
             var go = GetObjectInternal(engineGameObjectInstanceId);
             if (go != null)
                 return GetObject(engineGameObjectInstanceId);
 
             // this object isn't yet represented in the m_gameObjects map, add it
-            var gos = FindObjectsByType<GameObject>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            var gos = RideUtils.FindObjectsByType<GameObject>(FindObjectsInactive.Include);
             foreach (var g in gos)
             {
-                if (g.GetInstanceID() == engineGameObjectInstanceId)
+                if (RideUtils.EntityIdToULong(g) == engineGameObjectInstanceId)
                 {
                     //RideID id = IdentityFactory.CreateId();
                     //m_gameObjects.Add(id, go);
@@ -161,10 +161,10 @@ namespace Ride
         /// </summary>
         /// <param name="engineGameObjectInstanceId">The Unity instance ID, typically from <c>gameObject.GetInstanceID()</c>.</param>
         /// <returns>The associated <see cref="RideID"/> if found, or <see cref="RideID.Null"/> otherwise.</returns>
-        public RideID GetObject(int engineGameObjectInstanceId)
+        public RideID GetObject(ulong engineGameObjectInstanceId)
         {
             foreach (var kvp in m_gameObjects)
-                if (kvp.Value.GetInstanceID() == engineGameObjectInstanceId)
+                if (RideUtils.EntityIdToULong(kvp.Value) == engineGameObjectInstanceId)
                     return kvp.Key;
 
             return RideID.Null;
@@ -203,10 +203,10 @@ namespace Ride
         }
 
         /// <inheritdoc/>
-        public int GetEngineObjectId(RideID rideId)
+        public ulong GetEngineObjectId(RideID rideId)
         {
             if (TryGetGameObject(rideId, out var go))
-                return go.GetInstanceID();
+                return RideUtils.EntityIdToULong(go);
 
             return 0;
         }
@@ -524,7 +524,7 @@ namespace Ride
                 return RideID.Null;
             }
 
-            return GetObject(childTransform.gameObject.GetInstanceID());
+            return GetObject(RideUtils.EntityIdToULong(childTransform.gameObject));
         }
 
         /// <inheritdoc/>
@@ -539,12 +539,12 @@ namespace Ride
             var t = go.transform;
             if (childIndex < 0 || childIndex >= t.childCount)
             {
-                RideLog.LogError($"GetChild failed: index {childIndex} out of bounds for transform {transform}. Range: 0–{t.childCount - 1}");
+                RideLog.LogError($"GetChild failed: index {childIndex} out of bounds for transform {transform}. Range: 0-{t.childCount - 1}");
                 return RideID.Null;
             }
 
             var child = t.GetChild(childIndex);
-            return GetObject(child.gameObject.GetInstanceID());
+            return GetObject(RideUtils.EntityIdToULong(child.gameObject));
         }
 
         /// <inheritdoc/>
@@ -738,10 +738,10 @@ namespace Ride
             return false;
         }
 
-        private GameObject GetObjectInternal(int engineGameObjectInstanceId)
+        private GameObject GetObjectInternal(ulong engineGameObjectInstanceId)
         {
             foreach (var kvp in m_gameObjects)
-                if (kvp.Value.GetInstanceID() == engineGameObjectInstanceId)
+                if (RideUtils.EntityIdToULong(kvp.Value) == engineGameObjectInstanceId)
                     return kvp.Value;
 
             return null;

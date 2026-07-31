@@ -29,7 +29,7 @@ namespace Ride.Timeline
 
             public override void ProcessBehaviour()
             {
-                RideTimelineManager manager = FindFirstObjectByType<RideTimelineManager>();
+                RideTimelineManager manager = FindAnyObjectByType<RideTimelineManager>();
                 var character = manager.GetCharacter(m_characterName);
 
                 if (m_movementType == HeadController.MovementType.Nod)

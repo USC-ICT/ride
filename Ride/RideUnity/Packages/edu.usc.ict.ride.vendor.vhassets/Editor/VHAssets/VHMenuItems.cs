@@ -206,7 +206,7 @@ public class VHMenuItems : MonoBehaviour
             EditorUtility.DisplayDialog("Error", "Please select 1 or more cutscenes in the hierarchy", "ok");
         }*/
 
-        Cutscene[] cutscenes = FindObjectsByType<Cutscene>(FindObjectsSortMode.None);
+        Cutscene[] cutscenes = VHUtils.FindObjectsByType<Cutscene>();
 
         foreach (Cutscene cutscene in cutscenes)
         {

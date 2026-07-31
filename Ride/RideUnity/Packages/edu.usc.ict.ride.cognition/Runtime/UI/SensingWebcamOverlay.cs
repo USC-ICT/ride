@@ -29,14 +29,7 @@ namespace Ride.Sensing
         List<Transform> landmarks = new List<Transform>();
         private void Awake()
         {
-            // Create landmark object pool
-            for (int i = 0; i < landmarkCount; i++)
-            {
-                Transform landmark = Instantiate(landmarkPrefab, webcamImage.transform);
-                landmark.gameObject.SetActive(false);
-
-                landmarks.Add(landmark);
-            }
+            EnsureLandmarkCapacity(landmarkCount);
 
             m_frameStartSize = faceFrameRect.sizeDelta;
         }
@@ -57,6 +50,9 @@ namespace Ride.Sensing
         {
             if (processor.headResponse.landmarks == null) return;
 
+            int detectedLandmarkCount = processor.headResponse.landmarks.Length;
+            EnsureLandmarkCapacity(detectedLandmarkCount);
+
             // Store raw webcam imahe size
             m_rawSize = new Vector2Int(webcamImage.texture.width, webcamImage.texture.height);
 
@@ -67,7 +63,7 @@ namespace Ride.Sensing
             Vector2 scaleFactor = new Vector2(m_scaledSize.x / m_rawSize.x, m_scaledSize.y / m_rawSize.y);
 
             // Place landmark UI objects
-            for (int i = 0; i < processor.headResponse.landmarks.Length; i++)
+            for (int i = 0; i < detectedLandmarkCount; i++)
             {
                 Vector2 rectPosition = processor.headResponse.landmarks[i];
 
@@ -89,9 +85,9 @@ namespace Ride.Sensing
                 landmarks[i].gameObject.SetActive(true);
             }
 
-            if (processor.headResponse.landmarks.Length < landmarkCount)
+            if (detectedLandmarkCount < landmarks.Count)
             {
-                for (int i = processor.headResponse.landmarks.Length; i < landmarkCount; i++)
+                for (int i = detectedLandmarkCount; i < landmarks.Count; i++)
                 {
                     landmarks[i].gameObject.SetActive(false);
                 }
@@ -137,6 +133,16 @@ namespace Ride.Sensing
 
             axisScale.z = (axisScale.x + axisScale.y) / 2;
             axisRootRect.localScale = axisScale;
+        }
+
+        void EnsureLandmarkCapacity(int requiredCount)
+        {
+            while (landmarks.Count < requiredCount)
+            {
+                Transform landmark = Instantiate(landmarkPrefab, webcamImage.transform);
+                landmark.gameObject.SetActive(false);
+                landmarks.Add(landmark);
+            }
         }
 
         public void UpdateEmotionDisplay()

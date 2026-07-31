@@ -28,6 +28,16 @@ namespace Ride
         [SerializeField] private int MinimumGazeSpeed = 70;
         [Tooltip("Maximum speed of head movement (roughly degrees per second of angular gaze movement).")]
         [SerializeField] private int MaximumGazeSpeed = 90;
+        [Tooltip("Speed of eye movement (roughly degrees per second). Zero uses the gaze system default.")]
+        [SerializeField] private int m_eyeGazeSpeed = 0;
+        [Tooltip("Speed of body movement (roughly degrees per second). Zero uses the gaze system default.")]
+        [SerializeField] private int m_bodyGazeSpeed = 0;
+        [Tooltip("When greater than zero, each glance takes a random duration between this and the " +
+            "maximum, in seconds, regardless of angular distance. The speed settings above are then ignored.")]
+        [SerializeField] private float m_minGlanceDuration = 0f;
+        [Tooltip("Upper bound of the glance duration range, in seconds. Values below the minimum are " +
+            "treated as equal to it.")]
+        [SerializeField] private float m_maxGlanceDuration = 0f;
 
         [Header("Initial Delay Before Thinking")]
         [Tooltip("Initial delay in seconds before thinking behavior starts.")]
@@ -51,6 +61,7 @@ namespace Ride
         private bool m_isThinking = false;
         private string m_previousGazeTarget = "";
         private float m_nextGazeTime = 0f;
+        private float m_thinkingEngageTime = 0f;
         private bool m_lastDebugThinking;
 
         private float m_origEyeGazeWeight;
@@ -95,10 +106,18 @@ namespace Ride
                 m_lastDebugThinking = m_debugThinkingToggle;
             }
 
-            // Thinking transition handling, including gaze weight blend in and out setup
-            if (m_isThinking != m_previousThinkingState)
+            // Thinking transition handling, including gaze weight blend in and out setup.
+            // Engagement is held back until the initial delay has elapsed, so that an interaction
+            // answered within that delay completes without any visible change in gaze.
+            bool thinkingEngaged = m_isThinking && Time.time >= m_thinkingEngageTime;
+            if (thinkingEngaged != m_previousThinkingState)
             {
-                BeginGazeWeightBlend(m_isThinking);
+                BeginGazeWeightBlend(thinkingEngaged);
+
+                // Hold the first glance until the gaze weights have eased down. Glancing while
+                // gaze is still at full strength turns the head sharply instead of softly.
+                if (thinkingEngaged)
+                    m_nextGazeTime = Time.time + m_enterBlendTime;
             }
 
             // Return if no character defined
@@ -118,14 +137,46 @@ namespace Ride
             {
                 string newGazeTarget = GetNewGazeTarget();
 
-                m_character.Gaze(
-                    newGazeTarget,
-                    m_Random.Next(MinimumGazeSpeed, MaximumGazeSpeed + 1)
-                );
+                PerformGlance(newGazeTarget);
 
                 m_previousGazeTarget = newGazeTarget;
                 m_nextGazeTime = Time.time + m_Random.Next(MinimumGazeFocus, MaximumGazeFocus + 1);
             }
+        }
+
+        /// <summary>
+        /// Directs gaze to the named thinking target. When a glance duration range is configured,
+        /// the glance takes a random duration from that range regardless of how far the gaze has
+        /// to travel, keeping the glance tempo consistent; otherwise the configured speeds
+        /// determine how long the movement takes, so nearby targets are reached sooner than
+        /// distant ones.
+        /// </summary>
+        /// <param name="gazeTargetName">Name of the gaze target GameObject to glance at.</param>
+        private void PerformGlance(string gazeTargetName)
+        {
+            if (m_minGlanceDuration > 0f && m_gazeController != null)
+            {
+                var gazeTarget = GameObject.Find(gazeTargetName);
+                if (gazeTarget == null)
+                {
+                    Debug.LogError($"Could not find gaze target {gazeTargetName}");
+                    return;
+                }
+
+                float maxDuration = Mathf.Max(m_minGlanceDuration, m_maxGlanceDuration);
+                float duration = m_minGlanceDuration +
+                    (float)m_Random.NextDouble() * (maxDuration - m_minGlanceDuration);
+
+                m_gazeController.SetGazeTargetWithDuration(gazeTarget, duration, duration, duration);
+                return;
+            }
+
+            m_character.Gaze(
+                gazeTargetName,
+                m_Random.Next(MinimumGazeSpeed, MaximumGazeSpeed + 1),
+                m_eyeGazeSpeed,
+                m_bodyGazeSpeed
+            );
         }
 
         /// <summary>
@@ -242,6 +293,7 @@ namespace Ride
 
             float delay = withDelay ? m_initialDelay : 0f;
             m_nextGazeTime = Time.time + delay;
+            m_thinkingEngageTime = m_nextGazeTime;
 
             m_isThinking = true;
         }
@@ -255,6 +307,11 @@ namespace Ride
                 return;
 
             m_isThinking = false;
+
+            // Thinking never engaged, so gaze was never altered and there is nothing to blend back.
+            if (!m_previousThinkingState)
+                return;
+
             if (m_character != null && m_gazeController != null)
                 BeginGazeWeightBlend(false);
         }

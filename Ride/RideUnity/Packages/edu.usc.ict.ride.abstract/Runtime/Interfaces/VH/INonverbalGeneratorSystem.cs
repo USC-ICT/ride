@@ -27,6 +27,16 @@ namespace Ride
         void GetNonverbalBehavior(string characterName, string text, NonverbalBehaviorResult resultCallback);
 
         /// <summary>
+        /// Requests generated nonverbal behavior for the supplied character and utterance text, using a language tag
+        /// when the implementation supports language-specific rule routing.
+        /// </summary>
+        /// <param name="characterName">The character whose nonverbal behavior should be generated.</param>
+        /// <param name="text">The speech text to enrich with nonverbal behavior.</param>
+        /// <param name="languageTag">Detected or configured language tag for the utterance. Empty falls back to English.</param>
+        /// <param name="resultCallback">Callback invoked when generation finishes.</param>
+        void GetNonverbalBehavior(string characterName, string text, string languageTag, NonverbalBehaviorResult resultCallback);
+
+        /// <summary>
         /// Starts or warms up generation resources for the supplied character when supported by the implementation.
         /// </summary>
         /// <param name="characterName">The character to initialize.</param>

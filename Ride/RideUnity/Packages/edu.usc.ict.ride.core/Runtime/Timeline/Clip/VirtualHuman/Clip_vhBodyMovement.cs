@@ -23,7 +23,7 @@ namespace Ride.Timeline
 
             public override IEnumerator ProcessContinuousBehaviour()
             {
-                RideTimelineManager manager = FindFirstObjectByType<RideTimelineManager>();
+                RideTimelineManager manager = FindAnyObjectByType<RideTimelineManager>();
                 var character = manager.GetCharacter(m_characterName);
                 
                 var mecanimChar = character.GetComponent<MecanimCharacter>();

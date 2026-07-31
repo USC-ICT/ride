@@ -454,6 +454,17 @@ namespace VHAssets
                 Debug.LogError($"MecanimCharacter.PlayAudio() - {name} requires a FacialAnimator component in order PlayAudio");
         }
 
+        /// <summary>
+        /// Plays realtime word-timing lipsync without compressing gaps between words.
+        /// </summary>
+        public void PlayRealtimeAudio(List<TtsReader.WordTiming> timings)
+        {
+            if (m_FacialAnimator != null)
+                m_FacialAnimator.PlayRealtime(timings);
+            else
+                Debug.LogError($"MecanimCharacter.PlayRealtimeAudio() - {name} requires a FacialAnimator component in order PlayRealtimeAudio");
+        }
+
         public void SetGazeTarget(GameObject gazeTarget)
         {
             if (gazeTarget != null)

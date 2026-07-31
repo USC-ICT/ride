@@ -42,6 +42,20 @@ public class AssetCatalogWindow : EditorWindow
     private Rect m_cursorRectPath;
 
     private List<bool> m_groupFoldouts = new();
+    private readonly Dictionary<string, bool> m_attributeEditorExpanded = new();
+    private readonly Dictionary<string, List<AssetCatalogAttribute>> m_attributeDisplayOrder = new();
+    private readonly HashSet<AssetCatalogAttribute> m_customAttributeKeys = new();
+    private readonly HashSet<AssetCatalogAttribute> m_customAttributeValues = new();
+    private readonly Dictionary<string, List<string>> m_suggestedAttributeValues = new(StringComparer.OrdinalIgnoreCase)
+    {
+        { "category", new List<string> { "character", "vehicle", "building", "prop" } },
+        { "age", new List<string> { } },
+        { "ageGroup", new List<string> { "child", "young", "middle", "older" } },
+        { "gender", new List<string> { "male", "female", "ambiguous" } },
+        { "ethnicity", new List<string> { "white", "africanDescent", "asian", "latino", "middleEastern" } },
+        { "clothing", new List<string> { "casual", "formal", "uniform", "workwear", "military" } },
+        { "role", new List<string> { "civilian", "soldier", "medic", "student", "parent" } },
+    };
 
     private string m_artAssetSvnRevision = "0";
     private AssetCatalogBuildTargets m_selectedBuildTargets;
@@ -79,6 +93,8 @@ public class AssetCatalogWindow : EditorWindow
     /// </summary>
     private void LoadOrCreateCatalogProfile()
     {
+        m_attributeDisplayOrder.Clear();
+
         if (!AssetDatabase.IsValidFolder(ASSET_CATALOG_DATA_PATH))
         {
             m_assetCatalogProfile = null;
@@ -86,6 +102,7 @@ public class AssetCatalogWindow : EditorWindow
         }
 
         m_assetCatalogProfile = AssetDatabase.LoadAssetAtPath<AssetCatalogProfile>($"{ASSET_CATALOG_DATA_PATH}/{ASSET_CATALOG_PROFILE_NAME}");
+        RebuildAttributeDisplayOrderCache();
     }
 
     private void CreateCatalogProfile()
@@ -97,6 +114,7 @@ public class AssetCatalogWindow : EditorWindow
         AssetDatabase.CreateAsset(m_assetCatalogProfile, $"{ASSET_CATALOG_DATA_PATH}/{ASSET_CATALOG_PROFILE_NAME}");
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
+        RebuildAttributeDisplayOrderCache();
     }
 
     private void SavePersistentData(bool catalogChanged)
@@ -106,6 +124,35 @@ public class AssetCatalogWindow : EditorWindow
 
         if (catalogChanged)
             AssetDatabase.SaveAssets();
+    }
+
+    private void ExportAssetCatalogProfileJson()
+    {
+        if (m_assetCatalogProfile == null)
+            return;
+
+        string profileAssetPath = AssetDatabase.GetAssetPath(m_assetCatalogProfile);
+        string defaultDirectory = GetAbsoluteDirectory(profileAssetPath);
+        string projectName = string.IsNullOrWhiteSpace(Application.productName) ? Path.GetFileNameWithoutExtension(profileAssetPath) : Application.productName;
+        string defaultFileName = $"{projectName}-AssetCatalog.json";
+        string outputPath = EditorUtility.SaveFilePanel("Export Asset Catalog JSON", defaultDirectory, defaultFileName, "json");
+        if (string.IsNullOrWhiteSpace(outputPath))
+            return;
+
+        string json = EditorJsonUtility.ToJson(m_assetCatalogProfile, true).Replace("\n", Environment.NewLine);
+        File.WriteAllText(outputPath, json);
+        AssetDatabase.Refresh();
+        Debug.Log($"Exported asset catalog profile JSON to {outputPath}", m_assetCatalogProfile);
+    }
+
+    private static string GetAbsoluteDirectory(string assetPath)
+    {
+        if (string.IsNullOrWhiteSpace(assetPath))
+            return Directory.GetCurrentDirectory();
+
+        string absolutePath = Path.GetFullPath(assetPath);
+        string directory = Path.GetDirectoryName(absolutePath);
+        return string.IsNullOrWhiteSpace(directory) ? Directory.GetCurrentDirectory() : directory;
     }
 
     private void OnInspectorUpdate()
@@ -208,6 +255,8 @@ public class AssetCatalogWindow : EditorWindow
             EditorGUILayout.SelectableLabel(m_artAssetSvnRevision, GUILayout.Height(EditorGUIUtility.singleLineHeight));
 
             GUILayout.FlexibleSpace();
+            if (GUILayout.Button("Export Catalog JSON...", GUILayout.Width(140)))
+                ExportAssetCatalogProfileJson();
             if (GUILayout.Button("Query Remote Paths...", GUILayout.Width(160)))
                 AssetCatalogRemoteQueryWindow.ShowWindow(m_assetCatalogProfile);
         }
@@ -479,7 +528,7 @@ public class AssetCatalogWindow : EditorWindow
     }
 
     /// <summary>
-    /// Draws the section that displays assets within a selected group, with label menus and removal buttons.
+    /// Draws the section that displays assets within a selected group, including labels and generic key/value attributes.
     /// </summary>
     /// <param name="group">The asset group being drawn.</param>
     private void DrawGroupAssetSection(AssetCatalogGroup group)
@@ -492,12 +541,14 @@ public class AssetCatalogWindow : EditorWindow
         int? removeIndex = null;
         foreach (var entry in group.assets)
         {
-            EditorGUILayout.BeginHorizontal("box");
+            EditorGUILayout.BeginVertical("box");
+
+            EditorGUILayout.BeginHorizontal();
             var previousObj = entry.asset;
             var selectedObj = EditorGUILayout.ObjectField(previousObj, typeof(UnityEngine.Object), false, GUILayout.Width(m_nameColumnWidth));
             if (selectedObj != previousObj)
             {
-                string selectedName = selectedObj != null ? selectedObj.name : "";
+                string selectedName = selectedObj != null ? selectedObj.name : string.Empty;
                 bool duplicate = group.assets
                     .Any(e => e != entry && e.asset != null && e.asset.name == selectedName);
                 if (duplicate)
@@ -545,9 +596,13 @@ public class AssetCatalogWindow : EditorWindow
                 removeIndex = group.assets.IndexOf(entry);
 
             EditorGUILayout.EndHorizontal();
+
+            DrawAttributeEditor(group, entry);
+
+            EditorGUILayout.EndVertical();
         }
 
-        int phantomRows = Mathf.Max(4 - group.assets.Count, 4);
+        int phantomRows = Mathf.Max(2 - group.assets.Count, 1);
         float phantomHeight = phantomRows * 22f;
         GUILayout.Space(phantomHeight);
         Rect dropArea = GUILayoutUtility.GetLastRect();
@@ -560,6 +615,266 @@ public class AssetCatalogWindow : EditorWindow
             m_catalogIsDirty = true;
             GUIUtility.ExitGUI();
         }
+    }
+
+    private void DrawAttributeEditor(AssetCatalogGroup group, LoadableAsset entry)
+    {
+        if (entry.attributes == null)
+            entry.attributes = new List<AssetCatalogAttribute>();
+
+        string stateKey = GetAttributeStateKey(group, entry);
+        if (!m_attributeEditorExpanded.ContainsKey(stateKey))
+            m_attributeEditorExpanded[stateKey] = false;
+
+        using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+        {
+            string newDescription = EditorGUILayout.TextField("Description", entry.description ?? string.Empty);
+            if (newDescription != (entry.description ?? string.Empty))
+            {
+                entry.description = newDescription;
+                m_catalogIsDirty = true;
+            }
+
+            EditorGUILayout.Space(2f);
+
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                Rect foldoutRect = GUILayoutUtility.GetRect(90f, EditorGUIUtility.singleLineHeight, GUILayout.Width(90f));
+                m_attributeEditorExpanded[stateKey] = EditorGUI.Foldout(foldoutRect, m_attributeEditorExpanded[stateKey], "Attributes", true);
+                EditorGUILayout.SelectableLabel(
+                    GetAttributeSummary(entry.attributes),
+                    EditorStyles.miniLabel,
+                    GUILayout.MinWidth(120f),
+                    GUILayout.Height(EditorGUIUtility.singleLineHeight));
+            }
+
+            if (!m_attributeEditorExpanded[stateKey])
+                return;
+
+            // Reserved for future grouped suggestion sets once we have enough curated presets
+            // to justify a dedicated UI. Keeping the block here makes it easy to re-enable later.
+            /*
+            using (new EditorGUI.DisabledScope(true))
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                GUILayout.Label("Suggestion Sets", EditorStyles.miniBoldLabel, GUILayout.Width(88));
+                GUILayout.Button("Common", EditorStyles.miniButton, GUILayout.Width(68));
+                GUILayout.Button("VH", EditorStyles.miniButton, GUILayout.Width(44));
+                GUILayout.Button("Units", EditorStyles.miniButton, GUILayout.Width(52));
+                GUILayout.Button("Buildings", EditorStyles.miniButton, GUILayout.Width(72));
+                GUILayout.FlexibleSpace();
+            }
+            */
+
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                GUILayout.Label("Quick Add", EditorStyles.miniBoldLabel, GUILayout.Width(58));
+                if (GUILayout.Button("+ Custom", EditorStyles.miniButton, GUILayout.Width(70)))
+                    AddAttribute(entry);
+
+                foreach (string suggestedKey in m_suggestedAttributeValues.Keys)
+                {
+                    string buttonLabel = ObjectNames.NicifyVariableName(suggestedKey);
+                    if (GUILayout.Button(buttonLabel, EditorStyles.miniButton))
+                        AddAttribute(entry, suggestedKey);
+                }
+
+                GUILayout.FlexibleSpace();
+            }
+
+            EditorGUILayout.Space(4f);
+
+            if (entry.attributes.Count == 0)
+            {
+                EditorGUILayout.HelpBox("No attributes yet. Use Quick Add for common fields, or start with a fully custom key/value pair.", MessageType.Info);
+            }
+
+            List<AssetCatalogAttribute> displayAttributes = GetDisplayAttributes(stateKey, entry.attributes);
+            int? removeIndex = null;
+            for (int i = 0; i < displayAttributes.Count; i++)
+            {
+                var attribute = displayAttributes[i];
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    DrawAttributeKeyField(attribute);
+                    GUILayout.Label("=", GUILayout.Width(10));
+                    DrawAttributeValueField(attribute);
+                    if (GUILayout.Button("X", GUILayout.Width(20)) && entry.attributes != null)
+                        removeIndex = entry.attributes.IndexOf(attribute);
+                }
+            }
+
+            if (removeIndex.HasValue)
+            {
+                m_customAttributeKeys.Remove(entry.attributes[removeIndex.Value]);
+                m_customAttributeValues.Remove(entry.attributes[removeIndex.Value]);
+                entry.attributes.RemoveAt(removeIndex.Value);
+                m_catalogIsDirty = true;
+            }
+        }
+    }
+
+    private void AddAttribute(LoadableAsset entry, string key = "", string value = "")
+    {
+        entry.attributes.Add(new AssetCatalogAttribute { key = key, value = value });
+        m_catalogIsDirty = true;
+    }
+
+    private void DrawAttributeKeyField(AssetCatalogAttribute attribute)
+    {
+        List<string> suggestedKeys = m_suggestedAttributeValues.Keys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase).ToList();
+        List<string> keyOptions = new() { "<Custom...>" };
+        keyOptions.AddRange(suggestedKeys);
+        bool keyIsCustom = m_customAttributeKeys.Contains(attribute) || string.IsNullOrWhiteSpace(attribute.key) || !m_suggestedAttributeValues.ContainsKey(attribute.key);
+        int currentIndex = keyIsCustom ? 0 : Mathf.Max(1, keyOptions.IndexOf(attribute.key));
+        int selectedIndex = EditorGUILayout.Popup(currentIndex, keyOptions.ToArray(), GUILayout.Width(130));
+        if (selectedIndex == 0)
+        {
+            m_customAttributeKeys.Add(attribute);
+            string newKey = EditorGUILayout.TextField(attribute.key, GUILayout.MinWidth(120));
+            if (newKey != attribute.key)
+            {
+                attribute.key = newKey;
+                m_catalogIsDirty = true;
+            }
+        }
+        else
+        {
+            m_customAttributeKeys.Remove(attribute);
+            string newKey = keyOptions[selectedIndex];
+            if (newKey != attribute.key)
+            {
+                attribute.key = newKey;
+                m_catalogIsDirty = true;
+            }
+        }
+    }
+
+    private void DrawAttributeValueField(AssetCatalogAttribute attribute)
+    {
+        List<string> suggestions = GetSuggestedAttributeValues(attribute.key);
+        List<string> valueOptions = new() { "<Custom...>" };
+        valueOptions.AddRange(suggestions);
+        bool valueIsCustom = m_customAttributeValues.Contains(attribute) || string.IsNullOrWhiteSpace(attribute.value) || !suggestions.Contains(attribute.value);
+        int currentIndex = !valueIsCustom ? Mathf.Max(1, valueOptions.IndexOf(attribute.value)) : 0;
+        int selectedIndex = EditorGUILayout.Popup(currentIndex, valueOptions.ToArray(), GUILayout.Width(130));
+        if (selectedIndex == 0)
+        {
+            m_customAttributeValues.Add(attribute);
+            string newValue = EditorGUILayout.TextField(attribute.value, GUILayout.MinWidth(140));
+            if (newValue != attribute.value)
+            {
+                attribute.value = newValue;
+                m_catalogIsDirty = true;
+            }
+        }
+        else
+        {
+            m_customAttributeValues.Remove(attribute);
+            string newValue = valueOptions[selectedIndex];
+            if (newValue != attribute.value)
+            {
+                attribute.value = newValue;
+                m_catalogIsDirty = true;
+            }
+        }
+    }
+
+    private List<string> GetSuggestedAttributeValues(string key)
+    {
+        if (!string.IsNullOrWhiteSpace(key) && m_suggestedAttributeValues.TryGetValue(key, out List<string> values))
+            return values;
+
+        return new List<string>();
+    }
+
+    /// <summary>
+    /// Returns the attribute list to render in the editor by combining the load-time sorted cache
+    /// with any live edits made while the window remains open. Cached items keep their original
+    /// display order, newly added attributes appear at the bottom, and removed attributes drop out
+    /// of the rendered list without reordering the underlying serialized data.
+    /// </summary>
+    /// <param name="stateKey">Stable cache key for the current asset entry.</param>
+    /// <param name="attributes">Live attribute list stored on the asset entry.</param>
+    /// <returns>The ordered attribute list that should be drawn for the current GUI frame.</returns>
+    private List<AssetCatalogAttribute> GetDisplayAttributes(string stateKey, List<AssetCatalogAttribute> attributes)
+    {
+        if (attributes == null || attributes.Count == 0)
+            return new List<AssetCatalogAttribute>();
+
+        if (!m_attributeDisplayOrder.TryGetValue(stateKey, out List<AssetCatalogAttribute> cachedOrder))
+            cachedOrder = new List<AssetCatalogAttribute>();
+
+        List<AssetCatalogAttribute> displayOrder = new();
+        foreach (AssetCatalogAttribute attribute in cachedOrder)
+        {
+            if (attribute != null && attributes.Contains(attribute))
+                displayOrder.Add(attribute);
+        }
+
+        foreach (AssetCatalogAttribute attribute in attributes)
+        {
+            if (attribute != null && !displayOrder.Contains(attribute))
+                displayOrder.Add(attribute);
+        }
+
+        m_attributeDisplayOrder[stateKey] = displayOrder;
+        return displayOrder;
+    }
+
+    /// <summary>
+    /// Rebuilds the per-entry display-order cache from the current catalog profile by sorting each
+    /// entry's existing attributes alphabetically once at load time. This establishes the baseline
+    /// visual order used for comparison while leaving the serialized attribute lists unchanged.
+    /// </summary>
+    private void RebuildAttributeDisplayOrderCache()
+    {
+        m_attributeDisplayOrder.Clear();
+
+        if (m_assetCatalogProfile == null || m_assetCatalogProfile.groups == null)
+            return;
+
+        foreach (AssetCatalogGroup group in m_assetCatalogProfile.groups)
+        {
+            if (group?.assets == null)
+                continue;
+
+            foreach (LoadableAsset entry in group.assets)
+            {
+                if (entry?.attributes == null || entry.attributes.Count == 0)
+                    continue;
+
+                string stateKey = GetAttributeStateKey(group, entry);
+                m_attributeDisplayOrder[stateKey] = entry.attributes
+                    .Where(attribute => attribute != null)
+                    .OrderBy(attribute => attribute.key ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(attribute => attribute.value ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+            }
+        }
+    }
+
+    private string GetAttributeStateKey(AssetCatalogGroup group, LoadableAsset entry)
+    {
+        int assetIndex = group.assets.IndexOf(entry);
+        string assetName = entry.asset != null ? entry.asset.name : "(none)";
+        return $"{group.groupName}::{assetIndex}::{assetName}";
+    }
+
+    private static string GetAttributeSummary(List<AssetCatalogAttribute> attributes)
+    {
+        if (attributes == null || attributes.Count == 0)
+            return "No attributes";
+
+        List<string> parts = new();
+        foreach (var attribute in attributes)
+        {
+            string key = string.IsNullOrWhiteSpace(attribute.key) ? "key" : attribute.key;
+            string value = string.IsNullOrWhiteSpace(attribute.value) ? "value" : attribute.value;
+            parts.Add($"{key}={value}");
+        }
+
+        return string.Join(", ", parts);
     }
 
     private static AssetCatalogBuildTargets MapBuildTargetToMask(BuildTarget target)

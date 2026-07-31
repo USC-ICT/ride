@@ -374,6 +374,7 @@ MonoBehaviour:
   CharacterId: Kevin
   IdlePostureId: ChrGenericMleAdult@IdleStandingUpright01
   m_launchOnStartup: 1
+  m_overwriteCachedGeneratedRulePacks: 0
 --- !u!1 &8706608244888396074
 GameObject:
   m_ObjectHideFlags: 0

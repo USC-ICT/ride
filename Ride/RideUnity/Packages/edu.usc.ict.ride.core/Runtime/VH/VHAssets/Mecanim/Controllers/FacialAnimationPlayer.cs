@@ -350,6 +350,24 @@ public abstract class FacialAnimationPlayer : MonoBehaviour
         StartCoroutine(WaitForScheduleToFinish(latestEndTime));
     }
 
+    /// <summary>
+    /// Plays word-timing lipsync while preserving absolute timing offsets between words.
+    /// Intended for realtime transcript/audio streams where gaps should not be compressed.
+    /// </summary>
+    public void PlayRealtime(List<TtsReader.WordTiming> timings)
+    {
+        if (timings == null || timings.Count == 0)
+            return;
+
+        BeginRuntimeDebugSession("RealtimeWordTimings");
+        LogScheduleSummary(BuildWordTimingScheduleSummary(timings));
+
+        float latestEndTime = ScheduleRealtimeWordTimings(timings);
+
+        // Wait until the last scheduled word/viseme segment should have finished.
+        StartCoroutine(WaitForScheduleToFinish(latestEndTime));
+    }
+
     public void Play(BMLReader.UtteranceTiming uttTiming)
     {
         if (uttTiming == null || uttTiming.m_CurveData == null || uttTiming.m_CurveData.Count == 0)
@@ -780,6 +798,69 @@ public abstract class FacialAnimationPlayer : MonoBehaviour
 
             // Wait wordTiming.Duration between words, by advancing the base time by the same amount.
             currentBaseTime += wordTiming.Duration;
+        }
+
+        return latestEndTime;
+    }
+
+    /// <summary>
+    /// Builds realtime viseme animation segments while preserving the timing offsets in each WordTiming entry.
+    /// </summary>
+    private float ScheduleRealtimeWordTimings(List<TtsReader.WordTiming> timings)
+    {
+        if (timings == null || timings.Count == 0)
+            return Time.time;
+
+        float now = Time.time;
+        float latestEndTime = now;
+        float timelineStart = timings[0].start;
+
+        // These match the 0.4f / 0.4f ramp fractions used previously.
+        const float DefaultRampInPct = 0.4f;
+        const float DefaultRampOutPct = 0.4f;
+
+        foreach (var wordTiming in timings)
+        {
+            if (wordTiming.m_VisemesUsed == null)
+                continue;
+
+            float wordStartDelay = Mathf.Max(0f, wordTiming.start - timelineStart);
+
+            foreach (var visemeData in wordTiming.m_VisemesUsed)
+            {
+                // Original logic:
+                //  delay   = visemeData.start - wordTiming.start;
+                //  duration = wordTiming.end - visemeData.start;
+                float localDelay = visemeData.start - wordTiming.start;
+                float visemeDuration = wordTiming.end - visemeData.start;
+
+                if (visemeDuration <= 0f)
+                    continue;
+
+                float rampInTime = visemeDuration * Mathf.Clamp01(DefaultRampInPct);
+                float rampOutTime = visemeDuration * Mathf.Clamp01(DefaultRampOutPct);
+                float holdTime = Mathf.Max(0f, visemeDuration - (rampInTime + rampOutTime));
+
+                float attackStartTime = now + wordStartDelay + Mathf.Max(0f, localDelay);
+                float attackEndTime = attackStartTime + rampInTime;
+                float releaseStartTime = attackStartTime + rampInTime + holdTime;
+                float releaseEndTime = releaseStartTime + rampOutTime;
+
+                if (TryParseViseme(visemeData.type, out FaceShape shape))
+                {
+                    // Attack: from current viseme value to target articulation.
+                    // Since we're scheduling up front, we assume starting from 0 (neutral) is acceptable.
+                    if (rampInTime > 0f)
+                        ScheduleVisemeAnimation(shape, 0f, visemeData.articulation, attackStartTime, rampInTime, null);
+
+                    // Release: from articulation back to 0.
+                    if (rampOutTime > 0f)
+                        ScheduleVisemeAnimation(shape, visemeData.articulation, 0f, releaseStartTime, rampOutTime, null);
+                }
+
+                if (releaseEndTime > latestEndTime)
+                    latestEndTime = releaseEndTime;
+            }
         }
 
         return latestEndTime;

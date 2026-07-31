@@ -325,7 +325,8 @@ namespace Ride
                         $"'{catalog.catalogName ?? "(unknown)"}'," +
                         $"rideBundleVersion={catalog.rideBundleVersion ?? "(none)"} " +
                         $"(cur={AssetCatalogData.RIDE_VERSION})," +
-                        $"artAssetSvnRevision={catalog.artAssetVersion ?? "(unknown)"}."
+                        $"artAssetSvnRevision={catalog.artAssetVersion ?? "(unknown)"}, " +
+                        $"path='{catalogFilePath}'."
                     );
 
                     LogCatalogContents(catalog, "[AssetLoadingSystemAssetBundles] Loaded remote catalog.");
@@ -913,6 +914,107 @@ namespace Ride
         /// <param name="assetName">The asset name to find.</param>
         /// <returns>Catalog entry if found, otherwise null.</returns>
         public AssetCatalogEntry GetCatalogEntry(string assetName) => m_catalogs.SelectMany(c => c.entries).FirstOrDefault(e => e.assetName == assetName);
+
+        /// <summary>
+        /// Gets the free-form description assigned to a catalog entry.
+        /// </summary>
+        /// <param name="assetName">The asset name to inspect.</param>
+        /// <returns>The description, or an empty string if the asset or description is missing.</returns>
+        public string GetCatalogEntryDescription(string assetName)
+        {
+            var entry = GetCatalogEntry(assetName);
+            return entry?.description ?? string.Empty;
+        }
+
+        /// <summary>
+        /// Returns all attributes defined on a catalog entry for the requested asset name.
+        /// </summary>
+        /// <param name="assetName">The asset name to inspect.</param>
+        /// <returns>A copied list of attributes, or an empty list if the asset or attributes are missing.</returns>
+        /// <remarks>
+        /// Duplicate attributes are preserved in the returned list. If an entry contains multiple
+        /// attributes with the same key, callers receive them in the same stored order rather than
+        /// as a deduplicated set.
+        /// </remarks>
+        public List<AssetCatalogAttribute> GetCatalogEntryAttributes(string assetName)
+        {
+            var entry = GetCatalogEntry(assetName);
+            if (entry?.attributes == null || entry.attributes.Count == 0)
+                return new List<AssetCatalogAttribute>();
+
+            return entry.attributes
+                .Select(a => new AssetCatalogAttribute { key = a.key, value = a.value })
+                .ToList();
+        }
+
+        /// <summary>
+        /// Gets the first value assigned to an attribute key on a catalog entry.
+        /// </summary>
+        /// <param name="assetName">The asset name to inspect.</param>
+        /// <param name="attributeKey">The attribute key to look up.</param>
+        /// <returns>The first matching attribute value, or null if not found.</returns>
+        /// <remarks>
+        /// If the entry contains duplicate attributes with the same key, this method returns the
+        /// first matching value in stored order and ignores later matches.
+        /// </remarks>
+        public string GetCatalogEntryAttributeValue(string assetName, string attributeKey)
+        {
+            if (string.IsNullOrWhiteSpace(attributeKey))
+                return null;
+
+            var entry = GetCatalogEntry(assetName);
+            return entry?.attributes?
+                .FirstOrDefault(a => string.Equals(a.key, attributeKey, StringComparison.OrdinalIgnoreCase))
+                ?.value;
+        }
+
+        /// <summary>
+        /// Returns whether a catalog entry contains the requested attribute key, and optionally value.
+        /// </summary>
+        /// <param name="assetName">The asset name to inspect.</param>
+        /// <param name="attributeKey">The attribute key to match.</param>
+        /// <param name="attributeValue">Optional attribute value to match. If null or empty, any value for the key is accepted.</param>
+        /// <returns>True if a matching attribute exists; otherwise false.</returns>
+        /// <remarks>
+        /// Duplicate attributes do not change the result beyond the first successful match. This
+        /// method returns <see langword="true"/> when any matching attribute is present.
+        /// </remarks>
+        public bool CatalogEntryHasAttribute(string assetName, string attributeKey, string attributeValue = null)
+        {
+            if (string.IsNullOrWhiteSpace(attributeKey))
+                return false;
+
+            var entry = GetCatalogEntry(assetName);
+            if (entry?.attributes == null)
+                return false;
+
+            return entry.attributes.Any(a =>
+                string.Equals(a.key, attributeKey, StringComparison.OrdinalIgnoreCase) &&
+                (string.IsNullOrEmpty(attributeValue) || string.Equals(a.value, attributeValue, StringComparison.OrdinalIgnoreCase)));
+        }
+
+        /// <summary>
+        /// Returns all loaded catalog entries that contain the requested attribute key, and optionally value.
+        /// </summary>
+        /// <param name="attributeKey">The attribute key to match.</param>
+        /// <param name="attributeValue">Optional attribute value to match. If null or empty, any value for the key is accepted.</param>
+        /// <returns>Matching catalog entries across all loaded catalogs.</returns>
+        /// <remarks>
+        /// Each matching <see cref="AssetCatalogEntry"/> is returned at most once, even if that
+        /// entry contains multiple duplicate attributes that satisfy the filter.
+        /// </remarks>
+        public List<AssetCatalogEntry> GetCatalogEntriesWithAttribute(string attributeKey, string attributeValue = null)
+        {
+            if (string.IsNullOrWhiteSpace(attributeKey))
+                return new List<AssetCatalogEntry>();
+
+            return m_catalogs
+                .SelectMany(c => c.entries)
+                .Where(e => e.attributes != null && e.attributes.Any(a =>
+                    string.Equals(a.key, attributeKey, StringComparison.OrdinalIgnoreCase) &&
+                    (string.IsNullOrEmpty(attributeValue) || string.Equals(a.value, attributeValue, StringComparison.OrdinalIgnoreCase))))
+                .ToList();
+        }
 
         /// <summary>Returns the total number of assets across all catalogs.</summary>
         public int GetEntryCount() => m_catalogs.SelectMany(c => c.entries).Count();

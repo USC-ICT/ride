@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using Ride.Entities;
 
 namespace Ride.Movement
@@ -50,9 +50,9 @@ namespace Ride.Movement
         FormationProcedureType formationType { get; }
 
 
-        // ─────────────────────────────────────────────────────────────
+        // -------------------------------------------------------------
         // High-level layout
-        // ─────────────────────────────────────────────────────────────
+        // -------------------------------------------------------------
 
         /// <summary>
         /// Calculates the formation layout for the specified unit or group,
@@ -71,9 +71,9 @@ namespace Ride.Movement
         );
 
 
-        // ─────────────────────────────────────────────────────────────
+        // -------------------------------------------------------------
         // Basic layout
-        // ─────────────────────────────────────────────────────────────
+        // -------------------------------------------------------------
 
         /// <summary>
         /// Calculates the position for each mover in a flat list of RideIDs,
@@ -108,9 +108,9 @@ namespace Ride.Movement
         );
 
 
-        // ─────────────────────────────────────────────────────────────
+        // -------------------------------------------------------------
         // Utilities
-        // ─────────────────────────────────────────────────────────────
+        // -------------------------------------------------------------
 
         /// <summary>
         /// Rotates the specified movers from one world-space direction to another,
@@ -135,9 +135,9 @@ namespace Ride.Movement
         RideVector3 GetFormationCenter(IEnumerable<RideID> movers);
 
 
-        // ─────────────────────────────────────────────────────────────
+        // -------------------------------------------------------------
         // Built-in shape builders (for recursive layout)
-        // ─────────────────────────────────────────────────────────────
+        // -------------------------------------------------------------
 
         /// <summary>
         /// Generates a wedge-shaped formation layout for the given movers.

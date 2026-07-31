@@ -1,4 +1,4 @@
-﻿using Ride.Movement;
+using Ride.Movement;
 
 namespace Ride.Entities
 {
@@ -14,7 +14,7 @@ namespace Ride.Entities
         /// Each additional nested subgroup increases the level by 1.
         /// </summary>
         /// <param name="groupId">The unique ID of the group.</param>
-        /// <returns>The group’s hierarchical depth (0 = leaf group).</returns>
+        /// <returns>The group's hierarchical depth (0 = leaf group).</returns>
         int GetGroupLevel(RideID groupId);
 
         /// <summary>

@@ -101,10 +101,28 @@ namespace Ride.SpeechRecognition
         public float Confidence { get; }
 
         /// <summary>
+        /// Gets the detected or configured language for the recognition result when available.
+        /// Empty means the provider did not supply a language.
+        /// </summary>
+        public string Language { get; }
+
+        /// <summary>
         /// Initializes a new instance of the <see cref="SpeechRecognizedEventArgs"/> class.
         /// </summary>
         /// <param name="text">The recognized speech text.</param>
-        /// <param name="confidence">The confidence score (0–1) of the recognition result.</param>
+        /// <param name="confidence">The confidence score (0-1) of the recognition result.</param>
+        /// <param name="language">The detected or configured language tag, if available.</param>
+        public SpeechRecognizedEventArgs(string text, float confidence, string language = "")
+        {
+            Text = text;
+            Confidence = confidence;
+            Language = language ?? string.Empty;
+        }
+
+        /// Initializes a new instance of the <see cref="SpeechRecognizedEventArgs"/> class.
+        /// </summary>
+        /// <param name="text">The recognized speech text.</param>
+        /// <param name="confidence">The confidence score (0-1) of the recognition result.</param>
         public SpeechRecognizedEventArgs(string text, float confidence)
         {
             Text = text;

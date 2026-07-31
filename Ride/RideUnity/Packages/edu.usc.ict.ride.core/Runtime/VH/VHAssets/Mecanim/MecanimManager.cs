@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using Ride;
 
 namespace VHAssets
 {
@@ -76,14 +77,14 @@ public class MecanimManager : ICharacterController
     {
         m_characterCacheDirty = true;
 
-        m_speechFiles = FindObjectsByType<AudioSpeechFile>(FindObjectsSortMode.None);
+        m_speechFiles = RideUtils.FindObjectsByType<AudioSpeechFile>();
     }
 
     public override string GetCharacterControllerType() => "MecanimManager";
 
     public void FindAudioFiles()
     {
-        m_speechFiles = FindObjectsByType<AudioSpeechFile>(FindObjectsSortMode.None);
+        m_speechFiles = RideUtils.FindObjectsByType<AudioSpeechFile>();
     }
 
     public void AddCharacter(MecanimCharacter mecAnimCharacter)
@@ -150,6 +151,9 @@ public class MecanimManager : ICharacterController
 
     private AudioSpeechFile GetSpeechFile(string fileName)
     {
+        if (fileName == "realtime_stream_silent")
+            return null;
+
         if (fileName == "unused")
             fileName = "UnnamedAudioClip";
 
@@ -517,7 +521,7 @@ public class MecanimManager : ICharacterController
         m_characterByNameCache.Clear();
 
         FindObjectsInactive inactiveMode = m_includeInactiveInCache ? FindObjectsInactive.Include : FindObjectsInactive.Exclude;
-        var mecanimCharacters = FindObjectsByType<MecanimCharacter>(inactiveMode, FindObjectsSortMode.None);
+        var mecanimCharacters = RideUtils.FindObjectsByType<MecanimCharacter>(inactiveMode);
 
         foreach (var character in mecanimCharacters)
         {

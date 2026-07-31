@@ -1,6 +1,7 @@
 root = false
 
 [*.cs]
+dotnet_diagnostic.IDE0031.severity = none  # Null check can be simplified
 dotnet_diagnostic.IDE0056.severity = none  # Indexing can be simplified
 dotnet_diagnostic.IDE0057.severity = none  # "" can be simplified
 dotnet_diagnostic.IDE0059.severity = none  # Unnecessary assignment of a value to ''
@@ -8,6 +9,7 @@ dotnet_diagnostic.IDE0060.severity = none  # Remove unused parameter '' if it is
 dotnet_diagnostic.IDE0063.severity = none  # 'using' statement can be simplified
 dotnet_diagnostic.IDE0066.severity = none  # Use 'switch' expression
 dotnet_diagnostic.IDE0090.severity = none  # 'new' expression can be simplified
+dotnet_diagnostic.IDE0130.severity = none  # Namespace "" does not match folder structure, expected ""
 dotnet_diagnostic.IDE0251.severity = none  # Member can be made 'readonly'
 dotnet_diagnostic.IDE1006.severity = none  # Naming rule violation: These words must begin with upper case characters:
 dotnet_diagnostic.UNT0026.severity = none  # GetComponent allocates even if no component is found.

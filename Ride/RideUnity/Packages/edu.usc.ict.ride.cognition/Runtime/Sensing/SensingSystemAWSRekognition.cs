@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
 #if !UNITY_WEBGL
 using Amazon.Rekognition;
 using Amazon.Rekognition.Model;
@@ -14,7 +15,7 @@ namespace Ride.Sensing
     /// Amazon Rekognition-based implementation of sensing.
     /// Supports detection of emotions, head pose, and facial characteristics.
     /// </summary>
-    public class SensingSystemAWSRekognition : SensingSystemUnity
+    public class SensingSystemAWSRekognition : SensingSystemUnity, ISensingFrameSystem
     {
         /// <summary>
         /// Represents state for an AWS Rekognition request of a specific type.
@@ -55,6 +56,14 @@ namespace Ride.Sensing
         private readonly string[] m_headRequestParameters = new [] { "DEFAULT", "FACE_OCCLUDED" };
         private readonly string[] m_emotionRequestParameters = new [] { "DEFAULT", "EMOTIONS" };
         private readonly string[] m_characteristicsRequestParameters = new [] { "DEFAULT", "SMILE", "EYEGLASSES", "BEARD", "MUSTACHE", "GENDER", "AGE_RANGE", "SUNGLASSES" };
+        private readonly string[] m_frameRequestParameters = new[] { "ALL" };
+
+        /// <inheritdoc/>
+        public SensingCapability Capabilities => SensingCapability.FaceBounds
+            | SensingCapability.FaceLandmarks
+            | SensingCapability.HeadPose
+            | SensingCapability.Emotions
+            | SensingCapability.Characteristics;
 
 
 #if !UNITY_WEBGL
@@ -147,6 +156,33 @@ namespace Ride.Sensing
 #endif
         }
 
+        /// <inheritdoc/>
+        public void AnalyzeFrame(object input, Action<SensingFrameResponse> onComplete)
+        {
+#if !UNITY_WEBGL
+            AddRequestToQueue(new AWSRekognitionServiceRequest
+            {
+                requestType = "AnalyzeFrame",
+                requestData = CreateRequest((byte[])input, m_frameRequestParameters),
+                onCompleteDelegate = response => onComplete?.Invoke(response as SensingFrameResponse)
+            }, SendFrameResponse);
+#else
+            onComplete?.Invoke(CreateUnavailableFrameResponse());
+#endif
+        }
+
+        SensingFrameResponse CreateUnavailableFrameResponse()
+        {
+            return new SensingFrameResponse("AWS Rekognition sensing is not available in WebGL.")
+            {
+                provider = "AWS Rekognition",
+                error = "AWS Rekognition sensing is not available in WebGL.",
+                capabilities = Capabilities,
+                coordinateSpace = SensingCoordinateSpace.Normalized,
+                faces = Array.Empty<SensingFaceResult>()
+            };
+        }
+
 #if !UNITY_WEBGL
         private void EnsureRekognitionClient()
         {
@@ -216,6 +252,84 @@ namespace Ride.Sensing
                 // "ALL": See https://docs.aws.amazon.com/sdkfornet/v3/apidocs/items/Rekognition/TFaceDetail.html
                 Attributes = new List<string>(attributes)
             };
+        }
+
+        void SendFrameResponse(Action<SensingResponse> onCompleteDelegate, FaceDetail face)
+        {
+            string rawResponse = face != null ? JsonConvert.SerializeObject(face) : "empty";
+            var response = new SensingFrameResponse(rawResponse)
+            {
+                provider = "AWS Rekognition",
+                timestamp = DateTime.UtcNow.Subtract(DateTime.UnixEpoch).TotalSeconds,
+                capabilities = Capabilities,
+                coordinateSpace = SensingCoordinateSpace.Normalized,
+                faces = face != null
+                    ? new[] { CreateFrameFace(face, rawResponse) }
+                    : Array.Empty<SensingFaceResult>()
+            };
+
+            onCompleteDelegate?.Invoke(response);
+        }
+
+        SensingFaceResult CreateFrameFace(FaceDetail face, string rawResponse)
+        {
+            var result = new SensingFaceResult
+            {
+                hasFace = true,
+                confidence = Math.Max(0, Math.Min(1, face.Confidence / 100.0)),
+                landmarks = ParseLandMarksResponse(face.Landmarks),
+                emotions = ParseEmotionScores(face.Emotions),
+                characteristics = CreateCharacteristicsResponse(face, rawResponse)
+            };
+
+            if (face.BoundingBox != null)
+            {
+                result.faceRectangle = new FaceRectangle(
+                    face.BoundingBox.Top,
+                    face.BoundingBox.Left,
+                    face.BoundingBox.Width,
+                    face.BoundingBox.Height);
+            }
+
+            if (face.Pose != null)
+            {
+                result.pitch = face.Pose.Pitch;
+                result.roll = face.Pose.Roll;
+                result.yaw = face.Pose.Yaw;
+            }
+
+            return result;
+        }
+
+        SensingNamedScore[] ParseEmotionScores(List<Emotion> emotions)
+        {
+            if (emotions == null || emotions.Count == 0)
+                return Array.Empty<SensingNamedScore>();
+
+            var results = new SensingNamedScore[emotions.Count];
+            for (int i = 0; i < emotions.Count; i++)
+            {
+                string name = emotions[i].Type != null ? emotions[i].Type.Value : string.Empty;
+                double confidence = Math.Max(0, Math.Min(1, emotions[i].Confidence / 100.0));
+                results[i] = new SensingNamedScore(name, confidence);
+            }
+
+            return results;
+        }
+
+        SensingCharacteristicsResponse CreateCharacteristicsResponse(FaceDetail face, string rawResponse)
+        {
+            var response = new SensingCharacteristicsResponse(rawResponse);
+
+            if (face.Gender?.Value != null)
+                response.gender = face.Gender.Value.Value;
+            if (face.AgeRange != null)
+                response.age = (face.AgeRange.High + face.AgeRange.Low) / 2.0;
+
+            response.glasses = ParseGlassesReponse(face.Eyeglasses, face.Sunglasses);
+            response.moustache = face.Mustache != null ? face.Mustache.Confidence : 0;
+            response.beard = face.Beard != null ? face.Beard.Confidence : 0;
+            return response;
         }
 
         /// <summary>

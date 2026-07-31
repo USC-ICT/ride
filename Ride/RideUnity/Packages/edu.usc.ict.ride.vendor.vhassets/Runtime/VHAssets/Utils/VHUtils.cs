@@ -127,13 +127,31 @@ public static class VHUtils
         if (string.IsNullOrEmpty(gameObjectName))
             return null;
 
-        var character = GameObject.FindObjectsByType<ICharacter>(FindObjectsSortMode.None)
+        var character = VHUtils.FindObjectsByType<ICharacter>()
             .FirstOrDefault(c => c.CharacterName == gameObjectName || c.gameObject.name == gameObjectName);
         if (character != null)
             return character;
 
         Debug.LogWarning($"Couldn't find Character {gameObjectName} in the scene. Event {eventName} needs to be looked at");
         return null;
+    }
+
+    public static T[] FindObjectsByType<T>() where T : UnityEngine.Object
+    {
+#if UNITY_6000_4_OR_NEWER
+        return GameObject.FindObjectsByType<T>();
+#else
+        return GameObject.FindObjectsByType<T>(FindObjectsSortMode.None);
+#endif
+    }
+
+    public static ulong EntityIdToULong(UnityEngine.Object gameObject)
+    {
+#if UNITY_6000_4_OR_NEWER
+        return EntityId.ToULong(gameObject.GetEntityId());
+#else
+        return unchecked((ulong)gameObject.GetHashCode());
+#endif
     }
 
     public static GameObject GetRootGameObject(GameObject child)

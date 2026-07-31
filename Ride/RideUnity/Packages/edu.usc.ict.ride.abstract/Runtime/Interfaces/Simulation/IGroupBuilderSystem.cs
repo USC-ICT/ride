@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using Ride.Movement;
 
 namespace Ride.Entities
@@ -8,7 +8,7 @@ namespace Ride.Entities
     /// </summary>
     public interface IGroupBuilderSystem : IRideSystem
     {
-        // ──────────────── Group Creation / Deletion ────────────────
+        // ---------------- Group Creation / Deletion ----------------
 
         /// <summary>
         /// Creates a new group with the specified name.
@@ -48,7 +48,7 @@ namespace Ride.Entities
         /// <returns>True if the group exists.</returns>
         bool DoesGroupExist(RideID group);
 
-        // ──────────────── Membership Management ────────────────
+        // ---------------- Membership Management ----------------
 
         /// <summary>
         /// Adds a member to the specified group with the given rank and title.
@@ -131,7 +131,7 @@ namespace Ride.Entities
         /// <returns>The mean center position of the group.</returns>
         RideVector3 GetGroupCenter(RideID groupId);
 
-        // ──────────────── Subgroup Management ────────────────
+        // ---------------- Subgroup Management ----------------
 
         /// <summary>
         /// Adds the specified subgroup to the given parent group.
@@ -156,7 +156,7 @@ namespace Ride.Entities
         /// <returns>A collection of subgroup IDs. Returns an empty collection if none exist.</returns>
         IEnumerable<RideID> GetSubgroups(RideID group);
 
-        // ──────────────── Metadata ────────────────
+        // ---------------- Metadata ----------------
 
         /// <summary>
         /// Sets the name of the specified group.

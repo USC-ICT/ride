@@ -1,4 +1,4 @@
-﻿
+
 namespace Ride
 {
     /// <summary>
@@ -14,7 +14,7 @@ namespace Ride
         float Fps { get; }
 
         /// <summary>
-        /// A smoothed FPS value based on Unity’s smoothDeltaTime.
+        /// A smoothed FPS value based on Unity's smoothDeltaTime.
         /// May fluctuate more than AverageFps but typically responds faster to spikes.
         /// </summary>
         float SmoothFps { get; }

@@ -1,11 +1,11 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 
 namespace Ride
 {
     /// <summary>
-    /// Provides a unified interface for managing and rendering runtime debug menus using Unity’s IMGUI system.
+    /// Provides a unified interface for managing and rendering runtime debug menus using Unity's IMGUI system.
     /// This interface supports layout helpers, multiple menu views, and system configuration tools,
     /// and is commonly used for in-game diagnostics, testing, or live debugging on desktop and mobile platforms.
     ///
@@ -118,19 +118,19 @@ namespace Ride
         /// <summary>
         /// Sets the position and size of the debug menu.
         /// </summary>
-        /// <param name="x">X coordinate (normalized 0–1).</param>
-        /// <param name="y">Y coordinate (normalized 0–1).</param>
-        /// <param name="width">Width (normalized 0–1).</param>
-        /// <param name="height">Height (normalized 0–1).</param>
+        /// <param name="x">X coordinate (normalized 0-1).</param>
+        /// <param name="y">Y coordinate (normalized 0-1).</param>
+        /// <param name="width">Width (normalized 0-1).</param>
+        /// <param name="height">Height (normalized 0-1).</param>
         void SetMenuSize(float x, float y, float width, float height);
 
         /// <summary>
         /// Sets the position and size of the debug menu when wide mode is enabled.
         /// </summary>
-        /// <param name="x">X coordinate (normalized 0–1).</param>
-        /// <param name="y">Y coordinate (normalized 0–1).</param>
-        /// <param name="width">Width (normalized 0–1).</param>
-        /// <param name="height">Height (normalized 0–1).</param>
+        /// <param name="x">X coordinate (normalized 0-1).</param>
+        /// <param name="y">Y coordinate (normalized 0-1).</param>
+        /// <param name="width">Width (normalized 0-1).</param>
+        /// <param name="height">Height (normalized 0-1).</param>
         void SetWideMenuSize(float x, float y, float width, float height);
 
         /// <summary>
@@ -145,7 +145,7 @@ namespace Ride
         bool IsWideMode();
 
         /// <summary>
-        /// Enables or disables using Unity’s screen safe area to avoid notches.
+        /// Enables or disables using Unity's screen safe area to avoid notches.
         /// </summary>
         /// <param name="useSafeArea">True to enable the safe area.</param>
         void SetUseSafeArea(bool useSafeArea);

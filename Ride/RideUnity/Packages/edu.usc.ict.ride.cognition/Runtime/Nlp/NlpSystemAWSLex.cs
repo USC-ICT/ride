@@ -11,6 +11,10 @@ namespace Ride.NLP
     /// </summary>
     public class NlpSystemAWSLex : NlpSystemUnity
     {
+        // Intent-based scripted bot: responses are authored content, so there is no
+        // persona to jailbreak and nothing to screen. Bypass the conversation guard.
+        protected override bool GuardRequests => false;
+
         public bool useV2 = false;
         public string m_botName { get; set; }               // V1
         public string m_botAlias { get; set; }              // V1
@@ -138,7 +142,7 @@ namespace Ride.NLP
         }
 
         /// <inheritdoc/>
-        public override async void Request(NlpRequest request, Action<NlpResponse> onComplete)
+        protected override async void RequestInternal(NlpRequest request, Action<NlpResponse> onComplete)
         {
             // TODO: 
             // Clean-up; currently mix of V1 Ask Question, Queing system, and Request

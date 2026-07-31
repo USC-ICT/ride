@@ -40,7 +40,7 @@ namespace Ride.UI
             base.SystemInit();
 
             if (selectorDisplayMenu == null)
-                selectorDisplayMenu = Object.FindFirstObjectByType<RectSelectionDisplay>();
+                selectorDisplayMenu = Object.FindAnyObjectByType<RectSelectionDisplay>();
         }
 
         public override void SystemUpdate(float dt)

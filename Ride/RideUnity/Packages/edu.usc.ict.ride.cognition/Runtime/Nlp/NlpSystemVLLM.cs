@@ -1,7 +1,7 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Text;
-using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Networking;
 
@@ -13,16 +13,40 @@ namespace Ride.NLP
     /// </summary>
     public class NlpSystemVLLM : NlpSystemUnity
     {
-        [Header("Endpoint")]
-        [SerializeField] private string m_endpoint = "http://127.0.0.1:8000/v1/chat/completions";
-        [SerializeField] private string m_model = "Qwen/Qwen2.5-3B-Instruct";
-        //[SerializeField] private string m_model = "meta-llama/Llama-3.1-8B-Instruct";
-        [SerializeField] private bool m_sendAuthorizationHeader = false;
-        [SerializeField] private string m_authorizationToken = string.Empty;
+        // Connection/deployment config is code-authoritative (NOT [SerializeField]) so changing a default
+        // here takes effect immediately, with no prefab/scene edit. For per-deployment overrides, source from RideConfig.
+        // Model must match what the vLLM container serves (WebServices/vllm/Dockerfile). Qwen3-4B-Instruct-2507
+        // is Apache-2.0 (redistributable); the previous Qwen2.5-3B-Instruct was non-commercial.
+        private string m_endpoint = "http://127.0.0.1:8000/v1/chat/completions";
+        // Requests use the vLLM "served-model-name" alias, not a specific model id, so the actual model
+        // can be swapped via the container's VLLM_MODEL env with no change here (WebServices/vllm/Dockerfile,
+        // WebServices/local-ai/.env). vLLM serves one model per process and can't hot-load per request.
+        private string m_model = "vhtoolkit-llm";
+        private bool m_sendAuthorizationHeader = true;
+        private string m_authorizationToken = "local-dev-token";
+        private int m_requestTimeoutSeconds = 20; // a cold first call that must load the model may hit this
 
         [Header("Generation")]
         [SerializeField] private double m_temperature = 0.3;
-        [SerializeField] private int m_maxTokens = 200;
+
+        /// <inheritdoc/>
+        public override float Temperature
+        {
+            get => (float)m_temperature;
+            set => m_temperature = value;
+        }
+
+        /// <inheritdoc/>
+        public override bool SupportsGenerationSettings => true;
+
+        /// <inheritdoc/>
+        public override int MaxTokens
+        {
+            get => m_maxTokens;
+            set => m_maxTokens = value;
+        }
+
+        [SerializeField] private int m_maxTokens = 2000;
         [SerializeField] private int m_answerSize = 1;
 
 
@@ -37,6 +61,7 @@ namespace Ride.NLP
         /// <inheritdoc/>
         public override void SetSystemPrompt(string prompt)
         {
+            m_initialPrompt = prompt;
             if (m_interactionHistory.Count == 0)
             {
                 m_interactionHistory.Add(new NlpInteraction { input = prompt });
@@ -46,8 +71,23 @@ namespace Ride.NLP
             m_interactionHistory[0] = new NlpInteraction { input = prompt };
         }
 
+        public override void ClearHistory()
+        {
+            string prompt = string.Empty;
+            if (m_interactionHistory.Count > 0)
+                prompt = m_interactionHistory[0].input;
+
+            m_interactionHistory.Clear();
+            SetSystemPrompt(prompt);
+        }
+
         /// <inheritdoc/>
-        public override async void Request(NlpRequest request, Action<NlpResponse> onComplete)
+        protected override void RequestInternal(NlpRequest request, Action<NlpResponse> onComplete)
+        {
+            StartCoroutine(RequestCoroutine(request, onComplete));
+        }
+
+        private IEnumerator RequestCoroutine(NlpRequest request, Action<NlpResponse> onComplete)
         {
             var history = GetParsedHistory();
             history.Add(new VllmMessage { role = "user", content = request.content });
@@ -68,24 +108,26 @@ namespace Ride.NLP
             byte[] bodyRaw = Encoding.UTF8.GetBytes(questionJson);
             webRequest.uploadHandler = new UploadHandlerRaw(bodyRaw);
             webRequest.downloadHandler = new DownloadHandlerBuffer();
+            webRequest.timeout = m_requestTimeoutSeconds;
             webRequest.SetRequestHeader("Content-Type", "application/json");
 
             if (m_sendAuthorizationHeader && !string.IsNullOrWhiteSpace(m_authorizationToken))
                 webRequest.SetRequestHeader("Authorization", $"Bearer {m_authorizationToken}");
 
-            var operation = webRequest.SendWebRequest();
-            while (!operation.isDone)
-                await Task.Yield();
+            yield return webRequest.SendWebRequest();
 
             DateTime endTime = DateTime.Now;
             m_responseTime = (endTime - startTime).TotalMilliseconds + " ms";
 
-            if (webRequest.result == UnityWebRequest.Result.ConnectionError     ||
-                webRequest.result == UnityWebRequest.Result.DataProcessingError ||
-                webRequest.result == UnityWebRequest.Result.ProtocolError)
+            // Every exit path must invoke onComplete: callers block their conversation flow
+            // (including the character's thinking behavior) until a response arrives, so a
+            // silent return leaves the character waiting forever.
+            if (webRequest.result != UnityWebRequest.Result.Success)
             {
                 Debug.LogWarning($"NlpSystemVLLM::Request() - Failed: {webRequest.result} - {webRequest.error}");
-                return;
+                onComplete?.Invoke(new NlpResponse(
+                    $"I'm sorry, something went wrong. I'm getting the error: '{webRequest.error}'"));
+                yield break;
             }
 
             string response = webRequest.downloadHandler.text;
@@ -94,7 +136,8 @@ namespace Ride.NLP
             if (string.IsNullOrEmpty(content))
             {
                 Debug.LogWarning("NlpSystemVLLM::Request() - Received an empty response.");
-                return;
+                onComplete?.Invoke(new NlpResponse("I'm sorry, I did not receive a text response."));
+                yield break;
             }
 
             m_interactionHistory.Add(new NlpInteraction

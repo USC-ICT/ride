@@ -14,7 +14,7 @@ public class CharacterActionController : MonoBehaviour
     #region Node
     public void Start()
     {
-        m_CharacterControllers = FindObjectsByType<ICharacterController>(FindObjectsSortMode.None);
+        m_CharacterControllers = VHUtils.FindObjectsByType<ICharacterController>();
     }
 
     public void NodHead(float speed, float amplitude, float numRepeats)

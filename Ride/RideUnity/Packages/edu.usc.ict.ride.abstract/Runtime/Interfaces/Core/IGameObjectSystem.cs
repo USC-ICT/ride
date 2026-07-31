@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 
 namespace Ride
 {
@@ -15,7 +15,7 @@ namespace Ride
     /// 
     /// <para>
     /// Note: This system depends on Unity's GameObject lifecycle and should be considered Unity-specific.
-    /// See <see cref="UnityEngine.Object"/> for details about Unity’s native object model.
+    /// See <see cref="UnityEngine.Object"/> for details about Unity's native object model.
     /// </para>
     /// 
     /// <para>
@@ -112,7 +112,7 @@ namespace Ride
         /// </summary>
         /// <param name="engineGameObjectInstanceId">The Unity instance ID of the object (not a RideID).</param>
         /// <returns>The RideID associated with this object.</returns>
-        RideID InsertObject(int engineGameObjectInstanceId);
+        RideID InsertObject(ulong engineGameObjectInstanceId);
 
         #endregion
 
@@ -127,7 +127,7 @@ namespace Ride
         /// Use with caution: Unity instance IDs are not stable across sessions and may collide. 
         /// This method is intended for advanced scenarios only.
         /// </remarks>
-        RideID GetObject(int engineGameObjectInstanceId);
+        RideID GetObject(ulong engineGameObjectInstanceId);
 
         /// <summary>
         /// Looks up a RideID using an engine object reference.
@@ -161,7 +161,7 @@ namespace Ride
         /// </summary>
         /// <param name="rideId">The RideID to convert.</param>
         /// <returns>The Unity engine instance ID, or -1 if not found.</returns>
-        int GetEngineObjectId(RideID rideId);
+        ulong GetEngineObjectId(RideID rideId);
 
         /// <summary>
         /// Determines whether a RideID is currently associated with a valid object.

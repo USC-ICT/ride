@@ -1,4 +1,4 @@
-﻿namespace Ride.Entities
+namespace Ride.Entities
 {
     /// <summary>
     /// Indicates the intended echelon size for a unit. Helps with naming, AI setup, and behavior scaling.
@@ -36,7 +36,7 @@
         /// <summary>Number of columns in the agent formation (only applies if num_agents is zero).</summary>
         public int cols;
 
-        /// <summary>Overrides automatic rows × cols calculation if set. Used in CreateCustomGroup() to spawn an exact number of agents regardless of layout.</summary>
+        /// <summary>Overrides automatic rows x cols calculation if set. Used in CreateCustomGroup() to spawn an exact number of agents regardless of layout.</summary>
         public int numAgents;
 
         /// <summary>Team to which this unit belongs.</summary>
@@ -79,7 +79,7 @@
         RideID CreateFireTeam(UnitCreationParams p);
 
         /// <summary>
-        /// Creates a squad unit, generally consisting of 4–10 agents.
+        /// Creates a squad unit, generally consisting of 4-10 agents.
         /// Commander's Rank: Sgt or Staff Sgt
         /// </summary>
         /// <param name="p">Parameters defining team, position, layout, and name.</param>
@@ -87,7 +87,7 @@
         RideID CreateSquad(UnitCreationParams p);
 
         /// <summary>
-        /// Creates a platoon made up of multiple squads (typically 16–40 agents).
+        /// Creates a platoon made up of multiple squads (typically 16-40 agents).
         /// Commander's Rank: Lieutenant
         /// </summary>
         /// <param name="p">Parameters defining team, position, layout, and name.</param>
@@ -95,7 +95,7 @@
         RideID CreatePlatoon(UnitCreationParams p);
 
         /// <summary>
-        /// Creates a company-level unit composed of multiple (3-5) platoons (typically 100–200 agents).
+        /// Creates a company-level unit composed of multiple (3-5) platoons (typically 100-200 agents).
         /// Commander's Rank: Captain
         /// </summary>
         /// <param name="p">Parameters defining team, position, layout, and name.</param>

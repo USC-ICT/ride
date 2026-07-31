@@ -12,15 +12,17 @@ namespace Ride.SpeechRecognition
     /// </summary>
     public class SpeechRecognitionSystemFasterWhisper : SpeechRecognitionSystemUnity
     {
-        [Header("Endpoint")]
-        [SerializeField] private string m_endpoint = "http://127.0.0.1:9001/transcribe";
-        [SerializeField] private bool m_sendAuthorizationHeader = false;
-        [SerializeField] private string m_authorizationToken = string.Empty;
+        // Connection/deployment config is code-authoritative (NOT [SerializeField]) so script changes take
+        // effect without a prefab/scene edit; per-deployment overrides should come from RideConfig.
+        // Recognition/audio tuning below stays in the inspector.
+        private string m_endpoint = "http://127.0.0.1:9005/transcribe";
+        private bool m_sendAuthorizationHeader = false;
+        private string m_authorizationToken = string.Empty;
+        private int m_requestTimeoutSeconds = 20;
 
         [Header("Recognition Settings")]
         [SerializeField] private string m_language = "en";
         [SerializeField] private bool m_vadFilter = true;
-        [SerializeField, Min(1)] private int m_requestTimeoutSeconds = 30;
 
         [Header("Audio Capture")]
         [SerializeField, Min(8000)] private int m_sampleRate = 16000;
@@ -39,7 +41,6 @@ namespace Ride.SpeechRecognition
 #pragma warning restore 0414
         private float m_silenceElapsedSeconds;
         private bool m_requestInFlight;
-        private Coroutine m_requestCoroutine;
 
         public override bool IsSupported => !RideUtils.IsWebGL();
         public override bool SupportsContinuousRecognition => true;
@@ -231,7 +232,7 @@ namespace Ride.SpeechRecognition
                 return;
             }
 
-            m_requestCoroutine = StartCoroutine(SubmitUtteranceCoroutine(utteranceClip));
+            StartCoroutine(SubmitUtteranceCoroutine(utteranceClip));
         }
 
         private AudioClip CreateUtteranceClip(int sampleFrames)
@@ -279,7 +280,7 @@ namespace Ride.SpeechRecognition
                     RideIO.JsonDeserialize<FasterWhisperResponse>(webRequest.downloadHandler.text);
 
                 if (!string.IsNullOrWhiteSpace(response.text))
-                    OnSpeechRecognized(response.text, Mathf.Clamp01(response.confidence));
+                    OnSpeechRecognized(response.text, Mathf.Clamp01(response.confidence), response.language);
             }
             else
             {
@@ -288,7 +289,6 @@ namespace Ride.SpeechRecognition
             }
 
             m_requestInFlight = false;
-            m_requestCoroutine = null;
 
             if (IsRecognizing)
                 StartCapture();

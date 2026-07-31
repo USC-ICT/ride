@@ -1,4 +1,4 @@
-﻿using Ride.Entities;
+using Ride.Entities;
 
 namespace Ride
 {
@@ -44,7 +44,7 @@ namespace Ride
         IItem InstantiateItem(ItemType type);
 
         /// <summary>
-        /// Instantiates a new <see cref="IItem"/> based on the item’s registered name.
+        /// Instantiates a new <see cref="IItem"/> based on the item's registered name.
         /// The implementation determines how the item is created (e.g., via prefab cloning or proxy construction).
         /// </summary>
         /// <param name="itemName">The name of the item to instantiate</param>

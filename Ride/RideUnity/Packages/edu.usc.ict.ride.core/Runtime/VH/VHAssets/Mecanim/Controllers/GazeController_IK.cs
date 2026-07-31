@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using Ride;
 
 namespace VHAssets
@@ -168,15 +168,15 @@ namespace VHAssets
         /// <list type="bullet">
         ///   <item><description>Head bone (preferred)</description></item>
         ///   <item><description>Left or right eye bone (if available)</description></item>
-        ///   <item><description>The Animator’s transform as a fallback</description></item>
+        ///   <item><description>The Animator's transform as a fallback</description></item>
         /// </list>
         ///
         /// This origin is only used to measure the up/down angle of the gaze
-        /// (for eyelids and other “soft eye” effects). The IK look-at itself is
+        /// (for eyelids and other "soft eye" effects). The IK look-at itself is
         /// handled entirely by the Animator, so assigning this field is optional.
         /// 
         /// For <see cref="GazeController_IK"/>, it is recommended to leave
-        /// <c>m_GazeOrigin</c> unset—this method will automatically choose an
+        /// <c>m_GazeOrigin</c> unset-this method will automatically choose an
         /// appropriate bone from the Animator.
         /// </summary>
         private void EnsureGazeOrigin()

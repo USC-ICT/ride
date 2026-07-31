@@ -61,7 +61,7 @@ GameObject:
   - component: {fileID: 7224627094153215833}
   - component: {fileID: 708040730922164036}
   m_Layer: 0
-  m_Name: ApplicationLogMessageSystem
+  m_Name: UnityLogBridgeSystem
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -79,8 +79,7 @@ Transform:
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children:
-  - {fileID: 6874730789832204845}
+  m_Children: []
   m_Father: {fileID: 9127247369056854466}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &708040730922164036
@@ -95,7 +94,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6f483cdf352bd8444ab163a2a96322f9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_logCallbackHandler: {fileID: 6906693827886200099}
 --- !u!1 &282535596449750063
 GameObject:
   m_ObjectHideFlags: 0
@@ -128,6 +126,61 @@ Transform:
   - {fileID: 9147189446725557019}
   m_Father: {fileID: 7469554344096456899}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1461527716608828929
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 6612450690101408894}
+  - component: {fileID: 5998403679799374251}
+  m_Layer: 0
+  m_Name: LoggerUnityFileCsv
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 0
+--- !u!4 &6612450690101408894
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1461527716608828929}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1122024502576367301}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &5998403679799374251
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1461527716608828929}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9052eadaf423315409bdfa87cb042ce8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: USC-ICT.Ride.Core::Ride.LoggerUnityFileCsv
+  m_logDeveloperMessages: 1
+  m_logApplicationMessages: 1
+  m_logTelemetryMessages: 0
+  m_logAnalyticsMessages: 0
+  m_receiveEngineLogMessages: 1
+  m_folder: 
+  m_fileNamePrefix: 
+  m_flushIntervalSeconds: 0
+  m_enableRollover: 0
+  m_maxFileSizeBytes: 10485760
+  m_rolloverCounterPadding: 2
 --- !u!1 &1622760256345167807
 GameObject:
   m_ObjectHideFlags: 0
@@ -250,6 +303,7 @@ Transform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 2396863730870319237}
+  - {fileID: 5256758982137528198}
   m_Father: {fileID: 9127247369056854466}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &5858441826350204687
@@ -442,7 +496,7 @@ GameObject:
   - component: {fileID: 2878867358908098104}
   - component: {fileID: 1109745456281689214}
   m_Layer: 0
-  m_Name: LoggerUnityDebug
+  m_Name: LoggerUnityConsole
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -475,6 +529,55 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f5cb3bfccebc15141b8b256ad8703e18, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  m_logDeveloperMessages: 1
+  m_logApplicationMessages: 1
+  m_logTelemetryMessages: 0
+  m_logAnalyticsMessages: 0
+  m_receiveEngineLogMessages: 0
+--- !u!1 &3507262137039235263
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 5256758982137528198}
+  - component: {fileID: 8289915286748182682}
+  m_Layer: 0
+  m_Name: LogCallbackHandler
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &5256758982137528198
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3507262137039235263}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 4528425079735491026}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &8289915286748182682
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3507262137039235263}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c31909d7cdb7a0343a5f323182aea08d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: USC-ICT.Ride.Vendor.VHAssets::VHAssets.LogCallbackHandler
 --- !u!1 &4278235958075253839
 GameObject:
   m_ObjectHideFlags: 0
@@ -506,6 +609,10 @@ Transform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 2878867358908098104}
+  - {fileID: 1082818151280316160}
+  - {fileID: 6612450690101408894}
+  - {fileID: 7399827563762929226}
+  - {fileID: 6646241596654374713}
   m_Father: {fileID: 9127247369056854466}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &6917804048181049586
@@ -739,7 +846,6 @@ Transform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
-  - {fileID: 7224627094153215833}
   - {fileID: 7219066838009096746}
   - {fileID: 924293073086702651}
   - {fileID: 912550786194205846}
@@ -755,6 +861,7 @@ Transform:
   - {fileID: 1823674630764904077}
   - {fileID: 4191589110610868273}
   - {fileID: 8004318134217170342}
+  - {fileID: 7224627094153215833}
   - {fileID: 1895192390194915792}
   m_Father: {fileID: 7469554344096456899}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
@@ -893,6 +1000,61 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_numAudioSourcesToCreate: 5
+--- !u!1 &6306399991063432295
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7399827563762929226}
+  - component: {fileID: 5157490164572885464}
+  m_Layer: 0
+  m_Name: LoggerUnityFileJsonl
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 0
+--- !u!4 &7399827563762929226
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6306399991063432295}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1122024502576367301}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &5157490164572885464
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6306399991063432295}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 926a779b01b993349b003c3649eb7b42, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: USC-ICT.Ride.Core::Ride.LoggerUnityFileJsonl
+  m_logDeveloperMessages: 1
+  m_logApplicationMessages: 1
+  m_logTelemetryMessages: 0
+  m_logAnalyticsMessages: 0
+  m_receiveEngineLogMessages: 1
+  m_folder: 
+  m_fileNamePrefix: 
+  m_flushIntervalSeconds: 0
+  m_enableRollover: 0
+  m_maxFileSizeBytes: 10485760
+  m_rolloverCounterPadding: 2
 --- !u!1 &6372858622646437934
 GameObject:
   m_ObjectHideFlags: 0
@@ -984,50 +1146,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d7c6f836789b9c94f99e7fd37bd827e4, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
---- !u!1 &7016634054965247229
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 6874730789832204845}
-  - component: {fileID: 6906693827886200099}
-  m_Layer: 0
-  m_Name: LogCallbackHandler
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &6874730789832204845
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7016634054965247229}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 7224627094153215833}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &6906693827886200099
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7016634054965247229}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c31909d7cdb7a0343a5f323182aea08d, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!1 &7060751382355961630
 GameObject:
   m_ObjectHideFlags: 0
@@ -1072,7 +1190,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0cb0a5fe5a3d78840acb82f737a92e53, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_applicationLogMessageSystem: {fileID: 708040730922164036}
+  m_unityLogBridgeSystem: {fileID: 708040730922164036}
   m_framesPerSecondCounter: {fileID: 3572207268905487941}
   m_showOnStartup: 0
   m_useSafeArea: 1
@@ -1081,7 +1199,63 @@ MonoBehaviour:
   m_defaultMenuRideSystemsOn: 1
   m_defaultMenuSystemOn: 1
   m_defaultMenuSystem2On: 1
+  m_defaultMenuProfilerCountersOn: 1
   m_defaultMenuIOSOn: 1
+--- !u!1 &7534526491838199367
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1082818151280316160}
+  - component: {fileID: 1454673998758850285}
+  m_Layer: 0
+  m_Name: LoggerUnityFile
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 0
+--- !u!4 &1082818151280316160
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7534526491838199367}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1122024502576367301}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1454673998758850285
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7534526491838199367}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ee8c9ff58a68b2a498df811fc2374215, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: USC-ICT.Ride.Core::Ride.LoggerUnityFile
+  m_logDeveloperMessages: 1
+  m_logApplicationMessages: 1
+  m_logTelemetryMessages: 0
+  m_logAnalyticsMessages: 0
+  m_receiveEngineLogMessages: 1
+  m_folder: 
+  m_fileNamePrefix: 
+  m_flushIntervalSeconds: 0
+  m_enableRollover: 0
+  m_maxFileSizeBytes: 10485760
+  m_rolloverCounterPadding: 2
 --- !u!1 &7749704229511456026
 GameObject:
   m_ObjectHideFlags: 0
@@ -1206,3 +1380,53 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   m_catalogsToLoad: []
   m_verboseLogging: 0
+--- !u!1 &8898141820308611894
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 6646241596654374713}
+  - component: {fileID: 2861965274795863880}
+  m_Layer: 0
+  m_Name: LoggerUnityHttp
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 0
+--- !u!4 &6646241596654374713
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8898141820308611894}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1122024502576367301}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2861965274795863880
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8898141820308611894}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4a640c97fbdb2c649b77bb61b48c34ca, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: USC-ICT.Ride.Core::Ride.LoggerUnityHttp
+  m_logDeveloperMessages: 1
+  m_logApplicationMessages: 1
+  m_logTelemetryMessages: 0
+  m_logAnalyticsMessages: 0
+  m_receiveEngineLogMessages: 1
+  m_flushIntervalSeconds: 5

@@ -18,7 +18,7 @@ namespace Ride
             m_labelToLoadProperty = serializedObject.FindProperty("m_assetLabelToLoad");
             m_onAssetLoadedProperty = serializedObject.FindProperty("m_onAssetLoaded");
             m_assetLabelsOfLoadedObjectProperty = serializedObject.FindProperty("m_assetLabelsOfLoadedObject");
-            m_rideAddressableSystem = FindFirstObjectByType<AddressableSystem>();
+            m_rideAddressableSystem = FindAnyObjectByType<AddressableSystem>();
         }
 
         public override void OnInspectorGUI()

@@ -1,4 +1,4 @@
-﻿
+
 namespace Ride
 {
     /// <summary>
@@ -17,7 +17,7 @@ namespace Ride
 
         /// <summary>
         /// Gets the human-readable name for this object.
-        /// This is typically used for debugging, UI labels, or logging — and may not be unique.
+        /// This is typically used for debugging, UI labels, or logging - and may not be unique.
         /// </summary>
         string name { get; }
     }

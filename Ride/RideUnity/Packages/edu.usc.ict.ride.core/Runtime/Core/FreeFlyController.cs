@@ -72,6 +72,11 @@ namespace Ride
             rotationY = transform.localRotation.eulerAngles.x;
         }
 
+        protected virtual void OnGUI()
+        {
+            RideUtils.UpdateImguiFocus();
+        }
+
         /// <summary>
         /// Handles input polling each frame for both mouse-based rotation (if enabled) and directional movement.
         /// Rotation and translation are clamped and applied in local space. Movement is suppressed when any UI element has input focus.

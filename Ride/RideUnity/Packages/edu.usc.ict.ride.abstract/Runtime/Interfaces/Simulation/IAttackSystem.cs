@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 
@@ -31,14 +31,14 @@ namespace Ride.Combat
     /// </summary>
     public interface IAttackSystem : IRideSystem
     {
-        // ─────────────────────────────────────────────────────────────────────────────
+        // -----------------------------------------------------------------------------
         // Core Attack APIs
         //
         // These methods perform immediate attacks by one agent against another agent or
         // position. Overloads support default weapons, explicit weapon selection,
         // attack metadata (like timing and aim), and dependency-injected calculators
         // for simulation-based scenarios.
-        // ─────────────────────────────────────────────────────────────────────────────
+        // -----------------------------------------------------------------------------
 
         /// <summary>
         /// Commands the attacker to perform a basic attack on the target using their primary weapon.
@@ -129,14 +129,14 @@ namespace Ride.Combat
         IAttackResult AttackWhileInRange(IAttack attack, RideID agent, RideID weapon, RideID enemy);
 
 
-        // ─────────────────────────────────────────────────────────────────────────────
+        // -----------------------------------------------------------------------------
         // Calculation Utilities
         //
         // These methods allow computation of damage, hit accuracy, and attack results
         // without necessarily applying the attack in-game. Useful for AI decision-making,
         // UI previews, simulation testing, and deferred combat resolution.
         // They support both NPC-to-NPC calculations and player-like ray-based targeting.
-        // ─────────────────────────────────────────────────────────────────────────────
+        // -----------------------------------------------------------------------------
 
         /// <summary>
         /// Calculates the result of a ray-based attack, typically used for player-controlled
@@ -182,13 +182,13 @@ namespace Ride.Combat
         IAttackResult CalculateAttack(IAttack attack, RideID target, RideID weapon, RideID attackee, IAttackResultCalculator attackCalc);
 
 
-        // ─────────────────────────────────────────────────────────────────────────────
+        // -----------------------------------------------------------------------------
         // Range Checking
         //
         // These methods determine whether a given target position or entity is within
-        // range of an attacker’s weapon. Useful for validating targetability before
+        // range of an attacker's weapon. Useful for validating targetability before
         // triggering an attack or to inform UI/AI behavior.
-        // ─────────────────────────────────────────────────────────────────────────────
+        // -----------------------------------------------------------------------------
 
         /// <summary>
         /// Determines whether the target agent is within range of the specified weapon,
@@ -202,7 +202,7 @@ namespace Ride.Combat
 
         /// <summary>
         /// Determines whether a world-space position is within range of another position,
-        /// given a specific weapon’s range characteristics.
+        /// given a specific weapon's range characteristics.
         /// </summary>
         /// <param name="start">World position of the attacker or weapon origin.</param>
         /// <param name="target">World position of the intended target.</param>
@@ -221,13 +221,13 @@ namespace Ride.Combat
         bool IsInAttackRange(RideVector3 start, RideVector3 target, float range);
 
 
-        // ─────────────────────────────────────────────────────────────────────────────
+        // -----------------------------------------------------------------------------
         // Engagement / Target Management
         //
         // These methods manage combat relationships between agents, including engagement
         // creation, target tracking, and cleanup. Engagements are typically used by AI and
         // systems managing ongoing combat state or behaviors.
-        // ─────────────────────────────────────────────────────────────────────────────
+        // -----------------------------------------------------------------------------
 
         /// <summary>
         /// Creates an engagement record between the attacking and defending agents,
@@ -260,13 +260,13 @@ namespace Ride.Combat
 
 
 
-        // ─────────────────────────────────────────────────────────────────────────────
+        // -----------------------------------------------------------------------------
         // Trajectory, Aiming, and Projectile Launch
         //
         // These methods visualize, prepare, and execute projectile-based attacks.
         // Includes trajectory prediction, aiming indicators, and logic to fire or throw
         // projectiles using configured ballistic or physics-based models.
-        // ─────────────────────────────────────────────────────────────────────────────
+        // -----------------------------------------------------------------------------
 
         /// <summary>
         /// Draws a predicted trajectory line from the attacker's weapon to the target position.
@@ -323,13 +323,13 @@ namespace Ride.Combat
         bool RotateGun(ITransform weaponPoint, ITransform firePoint, IAttack attack, float projectileSpeed, bool isArtillery);
 
 
-        // ─────────────────────────────────────────────────────────────────────────────
+        // -----------------------------------------------------------------------------
         // Hit Box & Health Utilities
         //
         // These methods manage entity-level health and hit box interactions.
         // They are useful for querying and modifying health values during attacks,
         // and for calculating weapon effectiveness against armor.
-        // ─────────────────────────────────────────────────────────────────────────────
+        // -----------------------------------------------------------------------------
 
         /// <summary>
         /// Checks whether the specified entity has a registered hit box that can receive damage.
@@ -375,13 +375,13 @@ namespace Ride.Combat
         float GetArmorDamageModifier(RideID entityArmor, RideID weaponId);
 
 
-        // ─────────────────────────────────────────────────────────────────────────────
+        // -----------------------------------------------------------------------------
         // System Configuration
         //
         // These members allow configuration of core systems used by the attack logic,
         // including setting global behavior flags, injecting external calculation logic,
         // and assigning companion systems like engagement or targeting managers.
-        // ─────────────────────────────────────────────────────────────────────────────
+        // -----------------------------------------------------------------------------
 
         /// <summary>
         /// Global flags that control attack system behavior, such as auto-attack
@@ -411,13 +411,13 @@ namespace Ride.Combat
         void SetTargetAcquisitionSystem(ITargetAcquisitionSystem targetAcquisitionSystem);
 
 
-        // ─────────────────────────────────────────────────────────────────────────────
+        // -----------------------------------------------------------------------------
         // Effects and Raycasting
         //
         // Provides utility functions for combat visualization and low-level raycasting.
         // Used to display effects, simulate impact hits, and calculate suppression
         // based on where rounds land relative to agents.
-        // ─────────────────────────────────────────────────────────────────────────────
+        // -----------------------------------------------------------------------------
 
         /// <summary>
         /// Performs a physics raycast based on the attack ray and weapon definition,

@@ -1,4 +1,5 @@
 ﻿using System;
+using Ride.Conversation;
 
 namespace Ride.NLP
 {
@@ -8,6 +9,25 @@ namespace Ride.NLP
     public class NlpRequest : ServiceRequest
     {
         public string content;
+
+        // When false, the request bypasses the conversation guard (see IConversationGuard).
+        // Set false for internal/meta LLM calls (analysis prompts, summarization, etc.) that
+        // are not user conversation turns. Defaults to true: user-facing turns are screened.
+        public bool screen = true;
+
+        // Transient reference material attached by the knowledge pipeline for THIS turn only
+        // (see IKnowledgeSystem). It is composed into the outgoing payload at dispatch, and
+        // the provider's interaction history is repaired to hold the clean user turn - so
+        // retrieved context is never replayed into LLM context on later turns and never
+        // compounds token cost. Set by the NLP layer, not by callers.
+        public string context;
+
+        // When false, the knowledge pipeline skips retrieval for this request. Set false for
+        // internal/meta LLM calls (corrective hints, summarization, etc.) that are not user
+        // conversation turns. Defaults to true: user-facing turns are augmented when a
+        // knowledge system is registered and has items.
+        public bool augment = true;
+
         public NlpRequest(string request)
         {
             this.content = request;
@@ -20,6 +40,12 @@ namespace Ride.NLP
     public class NlpResponse : SystemResponse
     {
         public string[] content;
+
+        // What the conversation guard did to this turn (GuardDisposition.None when the guard
+        // is absent/disabled or took no action). Callers that keep their own transcript and
+        // replay it into LLM context should skip recording Deflected turns, so flagged input
+        // never re-enters the context. See IConversationGuard.
+        public GuardDisposition guardDisposition = GuardDisposition.None;
 
         public NlpResponse (string response)
         {

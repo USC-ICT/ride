@@ -23,10 +23,10 @@ namespace Ride.TextToSpeech
     /// 
     /// Voice-dependent methods such as <see cref="GetAvailableVoices"/>, <see cref="GenerateAudioSpeechMap"/>,
     /// and <see cref="StartTextToSpeechGeneration"/> will automatically block internally until the voice list
-    /// is available. Alternatively, clients may poll the <see cref="VoicesReady"/> property to gate usage.
+    /// is available. Alternatively, clients may poll <see cref="TextToSpeechSystemUnity.VoicesResolved"/>.
     ///
-    /// For non-WebGL builds, this class uses the native AWS SDK for Polly. For WebGL, voice-related features
-    /// are currently stubbed or disabled, pending integration with a server-side Lambda proxy.
+    /// For non-WebGL builds, this class uses the native AWS SDK for Polly. For WebGL, it uses the configured
+    /// server-side proxy endpoint for voice lookup, viseme generation, and audio generation.
     ///
     /// Implements:
     /// - <see cref="ILipsyncedTextToSpeechSystem"/> for audio + lipsync XML output
@@ -144,17 +144,11 @@ namespace Ride.TextToSpeech
         };
 
         string[] m_voices = new string[] { "Loading..." };
-        bool m_voicesReady = false;
 
 #if !UNITY_WEBGL
         Amazon.Polly.AmazonPollyClient m_pollyClient;
         bool ConnectionActive => m_pollyClient != null;
 #endif
-
-        /// <summary>
-        /// Indicates whether the list of available voices has been loaded from AWS.
-        /// </summary>
-        public bool VoicesReady => m_voicesReady;
 
         /// <inheritdoc/>
         public override void SystemInit()
@@ -168,11 +162,20 @@ namespace Ride.TextToSpeech
             m_pollyClient = new Amazon.Polly.AmazonPollyClient(m_awsAccessKey, m_awsSecretKey, Amazon.RegionEndpoint.USWest2);
 #endif
 
-            StartCoroutine(RequestAvailableVoicesCoroutine());
+            VoiceListStatus = VoiceListState.NotFetched;
+            RefreshVoices();
         }
 
         /// <inheritdoc/>
         public override string[] GetAvailableVoices() => m_voices;
+
+        /// <inheritdoc/>
+        /// <remarks>
+        /// Amazon Polly's synchronous speech synthesis accepts 3000 billed characters per request
+        /// and rejects anything longer, so callers must shorten or split text before submitting it.
+        /// </remarks>
+        public override int MaxRequestCharacters => 3000;
+
 
         /// <inheritdoc/>
         public void GenerateAudioSpeechMap(string voice, string text, Action<AudioSpeechMap> resultCallback)
@@ -549,22 +552,18 @@ namespace Ride.TextToSpeech
             wordTimings[index] = pair;
         }
 
-        private IEnumerator WaitForVoices()
-        {
-            while (!m_voicesReady)
-                yield return null;
-        }
-
         /// <summary>
         /// Asynchronously queries AWS Polly for the list of available TTS voices.
         /// </summary>
-        private IEnumerator RequestAvailableVoicesCoroutine()
+        /// <inheritdoc/>
+        protected override IEnumerator FetchAvailableVoices()
         {
 #if !UNITY_WEBGL
             if (!ConnectionActive)
             {
                 Debug.LogWarning("AWS Polly not initialized.");
                 m_voices = new string[] { };
+                CompleteVoiceFetch(false);
                 yield break;
             }
 
@@ -590,8 +589,9 @@ namespace Ride.TextToSpeech
                 }
                 catch (Exception e)
                 {
-                    Debug.LogError("RequestAvailableVoicesCoroutine() - Exception in DescribeVoicesAsync: " + e.Message);
+                    Debug.LogError("FetchAvailableVoices() - Exception in DescribeVoicesAsync: " + e.Message);
                     m_voices = new string[] { };
+                    CompleteVoiceFetch(false);
                     yield break;
                 }
 
@@ -600,8 +600,9 @@ namespace Ride.TextToSpeech
 
                 if (task.IsFaulted || task.Result == null)
                 {
-                    Debug.LogError("RequestAvailableVoicesCoroutine() - DescribeVoicesAsync failed.");
+                    Debug.LogError("FetchAvailableVoices() - DescribeVoicesAsync failed.");
                     m_voices = new string[] { };
+                    CompleteVoiceFetch(false);
                     yield break;
                 }
 
@@ -614,13 +615,13 @@ namespace Ride.TextToSpeech
             while (!string.IsNullOrEmpty(nextToken));
 
             m_voices = voices.ToArray();
-            m_voicesReady = true;
+            CompleteVoiceFetch(true);
 #else
             string lambdaUrl = ConfigurationSystemUnity.GetPollyTtsProxyEndpoint("voices");
             if (string.IsNullOrWhiteSpace(lambdaUrl))
             {
                 m_voices = new string[0];
-                m_voicesReady = true;
+                CompleteVoiceFetch(false);
                 yield break;
             }
 
@@ -631,8 +632,9 @@ namespace Ride.TextToSpeech
 
                 if (request.result != UnityWebRequest.Result.Success)
                 {
-                    Debug.LogError($"RequestAvailableVoicesCoroutine() - Failed to get voices: {request.error}");
+                    Debug.LogError($"FetchAvailableVoices() - Failed to get voices: {request.error}");
                     m_voices = new string[] { };
+                    CompleteVoiceFetch(false);
                     yield break;
                 }
 
@@ -640,12 +642,13 @@ namespace Ride.TextToSpeech
                 {
                     var reply = JsonUtility.FromJson<VoicesReply>(request.downloadHandler.text);
                     m_voices = reply.voices;
-                    m_voicesReady = true;
+                    CompleteVoiceFetch(true);
                 }
                 catch (Exception ex)
                 {
-                    Debug.LogError($"RequestAvailableVoicesCoroutine() - JSON parse error: {ex.Message}");
+                    Debug.LogError($"FetchAvailableVoices() - JSON parse error: {ex.Message}");
                     m_voices = new string[] { };
+                    CompleteVoiceFetch(false);
                 }
             }
 #endif

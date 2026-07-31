@@ -342,7 +342,7 @@ namespace Ride.Terrain.Navigation
         private void SetEnableOtherMeshRenderers(bool enable, MeshRenderer []ignoreMeshRenderers)
         {
             List<MeshRenderer> ignoreMeshRendererList = (ignoreMeshRenderers != null) ? new List<MeshRenderer>(ignoreMeshRenderers) : new List<MeshRenderer>();
-            foreach(MeshRenderer meshRenderer in UnityEngine.Object.FindObjectsByType<MeshRenderer>(FindObjectsSortMode.None))
+            foreach(MeshRenderer meshRenderer in RideUtils.FindObjectsByType<MeshRenderer>())
             {
                 if (ignoreMeshRendererList.Count == 0 || !ignoreMeshRendererList.Contains(meshRenderer))
                     meshRenderer.enabled = enable;

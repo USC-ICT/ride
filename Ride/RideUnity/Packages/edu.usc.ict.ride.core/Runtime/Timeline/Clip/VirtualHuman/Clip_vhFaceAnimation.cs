@@ -26,7 +26,7 @@ namespace Ride.Timeline
             {
                 MecanimManager mecanimManager = null;
 
-                var managers = FindObjectsByType<MecanimManager>(FindObjectsSortMode.None);
+                var managers = RideUtils.FindObjectsByType<MecanimManager>();
                 foreach (var m in managers)
                 {
                     if (m.gameObject.activeSelf == true)

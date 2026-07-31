@@ -93,7 +93,7 @@ namespace Ride
             base.Start();
 
             // this alerts the ride api about the entities that are in the scene prior to hitting play
-            var conversionObjects = FindObjectsByType<ConvertToRide>(FindObjectsSortMode.None);
+            var conversionObjects = RideUtils.FindObjectsByType<ConvertToRide>();
             foreach (var conversionObject in conversionObjects)
                 conversionObject.Convert();
         }
@@ -172,7 +172,7 @@ namespace Ride
                 }
             }
 
-            var objects = FindObjectsByType<UnityEngine.Object>(FindObjectsSortMode.None);
+            var objects = RideUtils.FindObjectsByType<RideSystemMonoBehaviour>();
             foreach (var obj in objects)
             {
                 if (obj is T match)

@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using Ride.AI;
 using Ride.Movement;
 
@@ -143,14 +143,14 @@ namespace Ride.Entities
         bool IsAgentDead(RideID agentId);
 
         /// <summary>
-        /// Shows or hides the agent’s health bar.
+        /// Shows or hides the agent's health bar.
         /// </summary>
         /// <param name="agentId">The agent whose health bar to modify.</param>
         /// <param name="visible">True to show, false to hide.</param>
         void SetHealthBarVisible(RideID agentId, bool visible);
 
         /// <summary>
-        /// Enables or disables the agent’s health bar entirely.
+        /// Enables or disables the agent's health bar entirely.
         /// </summary>
         /// <param name="agentId">The agent whose health bar to control.</param>
         /// <param name="enable">True to enable; false to disable.</param>
@@ -171,14 +171,14 @@ namespace Ride.Entities
         float GetAgentSuppression(RideID agentId);
 
         /// <summary>
-        /// Gets the rate at which the agent’s suppression reduces (per second).
+        /// Gets the rate at which the agent's suppression reduces (per second).
         /// </summary>
         /// <param name="agentId">The agent to query.</param>
         /// <returns>The suppression recovery rate.</returns>
         float GetAgentSuppressionReductionRate(RideID agentId);
 
         /// <summary>
-        /// Sets the rate at which the agent’s suppression reduces (per second).
+        /// Sets the rate at which the agent's suppression reduces (per second).
         /// </summary>
         /// <param name="agentId">The agent to update.</param>
         /// <param name="suppressionReductionRate">The suppression recovery rate.</param>
@@ -281,7 +281,7 @@ namespace Ride.Entities
         void InitializeAgentStateMachine(RideID agentId);
 
         /// <summary>
-        /// Sets the agent’s current state by directly assigning a state name.
+        /// Sets the agent's current state by directly assigning a state name.
         /// </summary>
         /// <param name="agentId">The agent whose state to set.</param>
         /// <param name="state">The name of the state to assign.</param>
@@ -311,7 +311,7 @@ namespace Ride.Entities
 
         /// <summary>
         /// Replaces the agent's state machine with a new one.
-        /// Use with caution — this overrides internal behavior logic.
+        /// Use with caution - this overrides internal behavior logic.
         /// </summary>
         /// <param name="agentID">The agent whose state machine to replace.</param>
         /// <param name="sm">The new state machine instance.</param>
@@ -507,7 +507,7 @@ namespace Ride.Entities
         /// Gets the current posture of the agent.
         /// </summary>
         /// <param name="agentId">The agent to query.</param>
-        /// <returns>The agent’s posture.</returns>
+        /// <returns>The agent's posture.</returns>
         AgentPosture GetAgentPosture(RideID agentId);
 
         /// <summary>
@@ -522,32 +522,32 @@ namespace Ride.Entities
         /// Gets the agent's configured movement speed.
         /// </summary>
         /// <param name="agent">The agent to query.</param>
-        /// <returns>The agent’s target movement speed.</returns>
+        /// <returns>The agent's target movement speed.</returns>
         float GetAgentSpeed(RideID agent);
 
         /// <summary>
-        /// Gets the agent’s current actual speed (based on velocity).
+        /// Gets the agent's current actual speed (based on velocity).
         /// </summary>
         /// <param name="agent">The agent to query.</param>
-        /// <returns>The agent’s current movement speed.</returns>
+        /// <returns>The agent's current movement speed.</returns>
         float GetAgentCurrentSpeed(RideID agent);
 
         /// <summary>
-        /// Gets the agent’s configured maximum speed.
+        /// Gets the agent's configured maximum speed.
         /// </summary>
         /// <param name="agentId">The agent to query.</param>
         /// <returns>The maximum speed the agent may move at.</returns>
         float GetAgentMaxSpeed(RideID agentId);
 
         /// <summary>
-        /// Gets the agent’s facing direction in world space.
+        /// Gets the agent's facing direction in world space.
         /// </summary>
         /// <param name="agentId">The agent to query.</param>
         /// <returns>The agent's forward direction as a vector.</returns>
         RideVector3 GetAgentForwardDirection(RideID agentId);
 
         /// <summary>
-        /// Gets the agent’s current velocity relative to their local coordinate system.
+        /// Gets the agent's current velocity relative to their local coordinate system.
         /// </summary>
         /// <param name="agentId">The agent to query.</param>
         /// <returns>The local velocity vector.</returns>
@@ -660,17 +660,17 @@ namespace Ride.Entities
         void SetAgentData(RideID agent, Unit data);
 
         /// <summary>
-        /// Attaches a custom object reference to the agent. Use with caution — no serialization.
+        /// Attaches a custom object reference to the agent. Use with caution - no serialization.
         /// </summary>
         /// <param name="agentId">The agent to attach to.</param>
         /// <param name="obj">The object to associate with the agent.</param>
         void AttachObjectToAgent(RideID agentId, object obj);
 
         /// <summary>
-        /// Returns a JSON string representing the agent’s Unit data.
+        /// Returns a JSON string representing the agent's Unit data.
         /// </summary>
         /// <param name="agentId">The agent to serialize.</param>
-        /// <returns>JSON string describing the agent’s data.</returns>
+        /// <returns>JSON string describing the agent's data.</returns>
         string GetAgentJSON(RideID agentId);
 
         /// <summary>

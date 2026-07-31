@@ -16,7 +16,7 @@ namespace Ride.TextToSpeech
     /// <remarks>
     /// This class provides full TTS and viseme-driven lipsync using **Azure Speech**. It mirrors the
     /// Polly implementation’s coroutine pattern so it works in both standalone (native SDK) and
-    /// WebGL (via proxy Lambda) builds.
+    /// WebGL (via hosted proxy service) builds.
     ///
     /// ### Platform behavior
     /// - **Non-WebGL (Editor/Standalone):**
@@ -27,7 +27,7 @@ namespace Ride.TextToSpeech
     ///   - Lipsync generation subscribes to SDK events (VisemeReceived / WordBoundary) while synthesizing
     ///     to memory using fast PCM output for minimal overhead.
     /// - **WebGL:**
-    ///   - Uses an HTTP proxy (AWS Lambda Function URL) with endpoints:
+    ///   - Uses an HTTP proxy fronted by the shared RIDE API Gateway with endpoints:
     ///     - <c>GET /voices</c> → returns available en-US short voice names (e.g., <c>AriaNeural</c>)
     ///     - <c>POST /audio</c>  → returns a public MP3 URL (no local file is written in WebGL)
     ///     - <c>POST /visemes</c> → returns viseme + word timing events for lipsync
@@ -38,7 +38,7 @@ namespace Ride.TextToSpeech
     ///
     /// ### Lifecycle & gating
     /// - <see cref="SystemInit"/> starts a coroutine to populate the voice list.
-    /// - Voice-dependent calls wait internally on <see cref="VoicesReady"/> via <c>WaitForVoices()</c>.
+    /// - Voice-dependent calls wait internally until the voice list settles (see <c>WaitForVoices()</c>).
     /// - If a voice is not specified, a sensible default (e.g., <c>AriaNeural</c>) is chosen.
     ///
     /// ### Output & mapping
@@ -49,14 +49,14 @@ namespace Ride.TextToSpeech
     /// - Final lipsync XML is produced with <see cref="TextToSpeechXMLBuilder.BuildSpeechXML(AudioSpeechMap)"/>.
     ///
     /// ### Key APIs
-    /// - <see cref="GetAvailableVoices"/> / <see cref="VoicesReady"/>
+    /// - <see cref="GetAvailableVoices"/> / <see cref="TextToSpeechSystemUnity.VoicesResolved"/>
     /// - <see cref="GenerateAudioSpeechMap(string, string, System.Action{AudioSpeechMap})"/>
     /// - <see cref="StartTextToSpeechGeneration(string, string)"/>
     ///
     /// ### Configuration
     /// - **Non-WebGL** reads Azure credentials (key, region) from the RIDE configuration system.
-    /// - **WebGL** expects the proxy Function URL to be set in this script (single place) and reachable
-    ///   from the client. The proxy is responsible for Azure auth and S3 hosting of MP3 assets.
+    /// - **WebGL** expects the configured proxy endpoint to be reachable from the client.
+    ///   The proxy is responsible for Azure auth and S3 hosting of MP3 assets.
     ///
     /// ### Performance notes
     /// - Viseme/word event capture uses **PCM (16 kHz mono)** to minimize synthesis time when audio
@@ -191,19 +191,18 @@ namespace Ride.TextToSpeech
         };
 
         string[] m_voices = new string[] { "Loading...", };
-        bool m_voicesReady = false;
 
         /// <summary>
         /// Indicates whether the list of available voices has been loaded from Azure.
         /// </summary>
-        public bool VoicesReady => m_voicesReady;
 
         /// <inheritdoc/>
         public override void SystemInit()
         {
             base.SystemInit();
 
-            StartCoroutine(RequestAvailableVoicesCoroutine());
+            VoiceListStatus = VoiceListState.NotFetched;
+            RefreshVoices();
         }
 
         /// <inheritdoc/>
@@ -578,7 +577,8 @@ namespace Ride.TextToSpeech
         /// <summary>
         /// Asynchronously requests available TTS voices from Azure and stores them locally.
         /// </summary>
-        private IEnumerator RequestAvailableVoicesCoroutine()
+        /// <inheritdoc/>
+        protected override IEnumerator FetchAvailableVoices()
         {
 #if !UNITY_WEBGL
             var voices = new List<string>();
@@ -626,13 +626,13 @@ namespace Ride.TextToSpeech
                     }
 
                     m_voices = voices.ToArray();
-                    m_voicesReady = true;
+                    CompleteVoiceFetch(true);
                 }
                 else
                 {
-                    Debug.LogError($"RequestAvailableVoicesCoroutine() - Voices not retrieved. Reason: {voicesResult.Reason}");
+                    Debug.LogError($"FetchAvailableVoices() - Voices not retrieved. Reason: {voicesResult.Reason}");
                     m_voices = Array.Empty<string>();
-                    // Do not set ready; callers waiting will continue waiting until we retry (if you add retries later).
+                    CompleteVoiceFetch(false);
                 }
             }
             finally
@@ -645,7 +645,7 @@ namespace Ride.TextToSpeech
             if (string.IsNullOrWhiteSpace(lambdaUrl))
             {
                 m_voices = new string[0];
-                m_voicesReady = true;
+                CompleteVoiceFetch(false);
                 yield break;
             }
 
@@ -656,9 +656,9 @@ namespace Ride.TextToSpeech
 
                 if (request.result != UnityEngine.Networking.UnityWebRequest.Result.Success)
                 {
-                    Debug.LogError($"RequestAvailableVoicesCoroutine() - WebGL voices fetch failed: {request.error}");
+                    Debug.LogError($"FetchAvailableVoices() - WebGL voices fetch failed: {request.error}");
                     m_voices = Array.Empty<string>();
-                    m_voicesReady = true; // avoid deadlocks, caller can retry later if desired
+                    CompleteVoiceFetch(false);
                     yield break;
                 }
 
@@ -669,14 +669,14 @@ namespace Ride.TextToSpeech
                 }
                 catch (Exception ex)
                 {
-                    Debug.LogError($"RequestAvailableVoicesCoroutine() - JSON parse error: {ex.Message}");
+                    Debug.LogError($"FetchAvailableVoices() - JSON parse error: {ex.Message}");
                     m_voices = Array.Empty<string>();
-                    m_voicesReady = true;
+                    CompleteVoiceFetch(false);
                     yield break;
                 }
 
                 m_voices = reply?.voices ?? Array.Empty<string>();
-                m_voicesReady = true;
+                CompleteVoiceFetch(true);
             }
 #endif
         }
@@ -773,10 +773,5 @@ namespace Ride.TextToSpeech
             Debug.Log($"[Azure FaceFX Map] MissingVisemeMappings={missingSummary}");
         }
 
-        private IEnumerator WaitForVoices()
-        {
-            while (!m_voicesReady)
-                yield return null;
-        }
     }
 }

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 
 namespace Ride
 {
@@ -9,7 +9,7 @@ namespace Ride
     [Serializable]
     public struct RideConfig
     {
-        public static readonly Version DefaultVersion = new Version("1.0.5.8");
+        public static readonly Version DefaultVersion = new("1.0.5.13");
 
 
         /// <summary>Application specific settings for Anthropic</summary>
@@ -22,7 +22,7 @@ namespace Ride
             /// <summary>Authorization key for Anthropic</summary>
             public string endpointKey;
 
-            public static AnthropicSettings Default => new AnthropicSettings
+            public static AnthropicSettings Default => new()
             {
                 endpoint = "https://api.anthropic.com/v1/messages",
                 endpointKey = "sk-ant-api03-k0yD-XXXXXXXXXXXXXXXXXXXXXXXXXXXXX_XXXXXXXXXXXXXXXXXXXX-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-XXXXXXXX"
@@ -42,7 +42,7 @@ namespace Ride
             /// <summary>Authorization Token for Ask Sage</summary>
             public string authorizationToken;
 
-            public static AskSageSettings Default => new AskSageSettings
+            public static AskSageSettings Default => new()
             {
                 apiKey = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
                 authorizationToken = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.XXXXXXXXXXXXXXXXXXXXXXXXXXXX_XXXXXXXX-XXXXXXXXXX_XXXXXX-XXXXXXXXXXXXXXXXXXXXXX-XXXXXXX",
@@ -67,7 +67,7 @@ namespace Ride
             public string accessKey;
             public string secretKey;
 
-            public static AWSLexSettings Default => new AWSLexSettings
+            public static AWSLexSettings Default => new()
             {
                 botName = "LexBot",
                 botId = "XXXXXXXXXX",
@@ -91,7 +91,7 @@ namespace Ride
             public string accessKey;
             public string secretKey;
 
-            public static AWSPollySettings Default => new AWSPollySettings
+            public static AWSPollySettings Default => new()
             {
                 accessKey = "XXXXXXXXXXXXXXXXXXXX",
                 secretKey = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
@@ -105,26 +105,10 @@ namespace Ride
             public string accessKey;
             public string secretKey;
 
-            public static AWSRekognitionSettings Default => new AWSRekognitionSettings
+            public static AWSRekognitionSettings Default => new()
             {
                 accessKey = "XXXXXXXXXXXXXXXXXXXX",
                 secretKey = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-            };
-        }
-
-        /// <summary>Application specific settings for Amazon Web Services</summary>
-        [Serializable]
-        public struct AWSSettings
-        {
-            public string region;
-            public string s3bucket;
-            public string cognitoIdentityPoolId;
-
-            public static AWSSettings Default => new AWSSettings
-            {
-                region = "us-west-2",
-                s3bucket = "test-bucket",
-                cognitoIdentityPoolId = "us-west-2:0000xx0x-000x-000x-0000-x0xx0x0x00xx",
             };
         }
 
@@ -134,7 +118,7 @@ namespace Ride
         {
             public string cognitoIdentityPoolId;
 
-            public static AWSTerrain Default => new AWSTerrain
+            public static AWSTerrain Default => new()
             {
                 cognitoIdentityPoolId = "us-west-2:0000xx0x-000x-000x-0000-x0xx0x0x00xx",
             };
@@ -148,7 +132,7 @@ namespace Ride
 
             public string storageKey;
 
-            public static AzureBlobSettings Default => new AzureBlobSettings
+            public static AzureBlobSettings Default => new()
             {
                 connectionString = "DefaultEndpointsProtocol=https;AccountName=myazureaccount;AccountKey=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX==;EndpointSuffix=core.windows.net",
                 storageKey = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX==",
@@ -174,7 +158,7 @@ namespace Ride
             /// <summary>api version of Custom QnA</summary>
             public string deploymentName;
 
-            public static AzureCustomQnASettings Default => new AzureCustomQnASettings
+            public static AzureCustomQnASettings Default => new()
             {
                 endpoint = @"https://myqna.cognitiveservices.azure.com",
                 ocpApimSubscriptionKey = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
@@ -194,7 +178,7 @@ namespace Ride
             /// <summary>Subscription key for Azure Face</summary>
             public string endpointKey;
 
-            public static AzureFaceSettings Default => new AzureFaceSettings
+            public static AzureFaceSettings Default => new()
             {
                 endpoint = @"https://azure-face.cognitiveservices.azure.com",
                 endpointKey = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
@@ -214,7 +198,7 @@ namespace Ride
             /// <summary>ID of the QnAMaker knowledge base</summary>
             public string kbId;
 
-            public static AzureQnAMakerSettings Default => new AzureQnAMakerSettings
+            public static AzureQnAMakerSettings Default => new()
             {
                 endpoint = @"https://myqna.azurewebsites.net",
                 endpointKey = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX",
@@ -232,7 +216,7 @@ namespace Ride
             /// <summary>Region</summary>
             public string region;
 
-            public static AzureSpeechRecognitionSettings Default => new AzureSpeechRecognitionSettings
+            public static AzureSpeechRecognitionSettings Default => new()
             {
                 apiKey = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
                 region = "westus",
@@ -249,7 +233,7 @@ namespace Ride
             /// <summary>Subscription key for Azure Text Analytics (TA)</summary>
             public string endpointKey;
 
-            public static AzureTASettings Default => new AzureTASettings
+            public static AzureTASettings Default => new()
             {
                 endpoint = "https://my-text-analytics.cognitiveservices.azure.com",
                 endpointKey = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
@@ -266,7 +250,7 @@ namespace Ride
             /// <summary>API key for ElevenLabs</summary>
             public string apiKey;
 
-            public static ElevenLabsSettings Default => new ElevenLabsSettings
+            public static ElevenLabsSettings Default => new()
             {
                 endpoint = "https://api.elevenlabs.io/v1",
                 apiKey = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
@@ -283,14 +267,14 @@ namespace Ride
             /// <summary>API key for Gemini</summary>
             public string endpointKey;
 
-            /// <summary>Gemini model identifier</summary>
-            public string model;
+            // Model identifier intentionally removed: each Gemini system (NLP/ASR/TTS) defines its own
+            // selectable model in code - see Nlp/NlpSystemGemini.cs, ASR/SpeechRecognitionSystemGemini.cs,
+            // Tts/TextToSpeechSystemGemini.cs.
 
-            public static GeminiSettings Default => new GeminiSettings
+            public static GeminiSettings Default => new()
             {
                 endpoint = "https://generativelanguage.googleapis.com/v1beta/models",
                 endpointKey = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-                model = "gemini-2.0-flash",
             };
         }
 
@@ -316,7 +300,7 @@ namespace Ride
             /// <summary>the type of assertion to get the required signed JSON Web Token for proper authentication</summary>
             public string assertionType;
 
-            public static GoogleDialogflowSettings Default => new GoogleDialogflowSettings
+            public static GoogleDialogflowSettings Default => new()
             {
                 googleServiceAccount = "dialogflow-XXXXXX@mydialogflow.iam.gserviceaccount.com",
                 projectId = "mydialogflow",
@@ -337,7 +321,7 @@ namespace Ride
             /// <summary>API key for Stability API in HuggingFace, see InferenceEndpointTextGenerationSystem</summary>
             public string stabilityApiKey;
 
-            public static HuggingFaceSettings Default => new HuggingFaceSettings
+            public static HuggingFaceSettings Default => new()
             {
                 apiKey = "XX_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
                 stabilityApiKey = "XX_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
@@ -353,7 +337,7 @@ namespace Ride
             public string secret;
             public bool writeToFile;
 
-            public static LRSSettings Default => new LRSSettings
+            public static LRSSettings Default => new()
             {
                 url = "https://mylrs.lrs.io/xapi/", 
                 key = "XXXXXX", 
@@ -373,35 +357,30 @@ namespace Ride
             public string endpointKey;
 
             public static OpenAISettings Default => DefaultChatGPT;
-            public static OpenAISettings DefaultChatGPT => new OpenAISettings
+            public static OpenAISettings DefaultChatGPT => new()
             {
                 endpoint = @"https://api.openai.com/v1/chat/completions",
                 endpointKey = "XX-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
             };
-            public static OpenAISettings DefaultDalle => new OpenAISettings
+            public static OpenAISettings DefaultDalle => new()
             {
                 endpoint = @"https://api.openai.com/v1/images/generations",
                 endpointKey = "XX-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
             };
-            public static OpenAISettings DefaultGPT => new OpenAISettings
+            public static OpenAISettings DefaultGPT => new()
             {
                 endpoint = @"https://api.openai.com/v1/completions",
                 endpointKey = "XX-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
             };
-            public static OpenAISettings DefaultNews => new OpenAISettings
+            public static OpenAISettings DefaultNews => new()
             {
                 endpointKey = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",  // newsapi.org
             };
-            public static OpenAISettings DefaultWeather => new OpenAISettings
+            public static OpenAISettings DefaultWeather => new()
             {
                 endpointKey = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",  // openweathermap.org
             };
-            public static OpenAISettings DefaultWhisper => new OpenAISettings
-            {
-                endpoint = "https://api.openai.com/v1/audio/transcriptions",
-                endpointKey = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",  
-            };
-            public static OpenAISettings DefaultRealtime => new OpenAISettings
+            public static OpenAISettings DefaultRealtime => new()
             {
                 endpoint = "wss://api.openai.com/v1/realtime",
                 endpointKey = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",  
@@ -436,16 +415,24 @@ namespace Ride
             /// <summary>Direct endpoint for the RIDE WebGL proxy service for AWS Polly Text-To-Speech requests</summary>
             public string pollyTtsProxyEndpoint;
 
-            public static RestServerApiSettings Default => new RestServerApiSettings
+            /// <summary>Direct endpoint for the RIDE service that receives Unity log entries</summary>
+            public string logsProxyEndpoint;
+
+            /// <summary>Cognito Identity Pool ID used to authenticate log submissions; controls which CloudWatch log group receives entries</summary>
+            public string logsCognitoIdentityPoolId;
+
+            public static RestServerApiSettings Default => new()
             {
                 url = "https://xxxxxxxxxx.execute-api.us-west-2.amazonaws.com",
                 stage = "Prod",
                 signedUrlEndpoint = "https://cpg5yjn7apmqn3u3l5tnwqq22e0xixgd.lambda-url.us-west-2.on.aws",
-                anthropicProxyEndpoint = "https://ebntrsdtqgf4r4lcnosspkj7wy0mhjrf.lambda-url.us-west-2.on.aws/chat",
-                openAIProxyEndpoint = "https://ah7b4cjitre7z5xlems5dhvecu0pnzrb.lambda-url.us-west-2.on.aws/chat",
-                azureTtsProxyEndpoint = "https://ik5zqibyechvqdv2w4zkstfb2m0hybqr.lambda-url.us-west-2.on.aws",
-                elevenLabsTtsProxyEndpoint = "https://zmxqrfujpmzuoaobpa57aattpm0omenq.lambda-url.us-west-2.on.aws",
-                pollyTtsProxyEndpoint = "https://5seu6aym2kayhec2dw4m46udeq0xrfir.lambda-url.us-west-2.on.aws",
+                anthropicProxyEndpoint = "https://3cit75g8ii.execute-api.us-west-2.amazonaws.com/prod/anthropic/chat",
+                openAIProxyEndpoint = "https://3cit75g8ii.execute-api.us-west-2.amazonaws.com/prod/openai/chat",
+                azureTtsProxyEndpoint = "https://3cit75g8ii.execute-api.us-west-2.amazonaws.com/prod/azure",
+                elevenLabsTtsProxyEndpoint = "https://3cit75g8ii.execute-api.us-west-2.amazonaws.com/prod/elevenlabs",
+                pollyTtsProxyEndpoint = "https://3cit75g8ii.execute-api.us-west-2.amazonaws.com/prod/polly",
+                logsProxyEndpoint = "https://2iozkaxf4gz3glkwnixjjdrx6u0gruzz.lambda-url.us-west-2.on.aws/logs",
+                logsCognitoIdentityPoolId = "us-west-2:0000xx0x-000x-000x-0000-x0xx0x0x00xx",
             };
         }
 
@@ -457,9 +444,9 @@ namespace Ride
             public string address;
 
             /// <summary>the communication port</summary>
-            public ushort port;
+            public int port;
 
-            public static RESTSettings Default => new RESTSettings
+            public static RESTSettings Default => new()
             {
                 address = "127.0.0.1",
                 port = 9157,
@@ -476,7 +463,7 @@ namespace Ride
             /// <summary>The id of the slack channel to connect with</summary>
             public string channel;
 
-            public static SlackSettings Default => new SlackSettings
+            public static SlackSettings Default => new()
             {
                 token = "XXXX-XXXXXXXXXXX-XXXXXXXXXXXXX-XXXXXXXXXXXXXXXXXXXXXXXX",
                 channel = "XXXXXXXXXXX",
@@ -493,7 +480,7 @@ namespace Ride
             /// <summary>Authorization key for Stability AI</summary>
             public string endpointKey;
 
-            public static StabilityAISettings Default => new StabilityAISettings
+            public static StabilityAISettings Default => new()
             {
                 endpoint = @"https://api.stability.ai/v1/generation/stable-diffusion-xl-beta-v2-2-2/text-to-image",
                 endpointKey = @"XX-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
@@ -507,7 +494,6 @@ namespace Ride
         public AWSLexSettings awsLex;
         public AWSPollySettings awsPolly;
         public AWSRekognitionSettings awsRekognition;
-        public AWSSettings aws;
         public AWSTerrain awsTerrain;
         public AzureBlobSettings azureBlob;
         public AzureCustomQnASettings azureCustomQnA;
@@ -522,10 +508,8 @@ namespace Ride
         public LRSSettings lrs;
         public OpenAISettings openAIChatGPT;
         public OpenAISettings openAIDalle;
-        public OpenAISettings openAIGPT;
         public OpenAISettings openAINews;
         public OpenAISettings openAIWeather;
-        public OpenAISettings openAIWhisper;
         public OpenAISettings openAIRealtime;
         public RestServerApiSettings restApi;
         public RESTSettings rest;
@@ -533,7 +517,7 @@ namespace Ride
         public StabilityAISettings stableDiffusion;
 
 
-        public static readonly RideConfig Default = new RideConfig
+        public static readonly RideConfig Default = new()
         {
             version = DefaultVersion,
             anthropic = AnthropicSettings.Default,
@@ -541,7 +525,6 @@ namespace Ride
             awsLex = AWSLexSettings.Default,
             awsPolly = AWSPollySettings.Default,
             awsRekognition = AWSRekognitionSettings.Default,
-            aws = AWSSettings.Default,
             awsTerrain = AWSTerrain.Default,
             azureBlob = AzureBlobSettings.Default,
             azureCustomQnA = AzureCustomQnASettings.Default,
@@ -556,10 +539,8 @@ namespace Ride
             lrs = LRSSettings.Default,
             openAIChatGPT = OpenAISettings.DefaultChatGPT,
             openAIDalle = OpenAISettings.DefaultDalle,
-            openAIGPT = OpenAISettings.DefaultGPT,
             openAINews = OpenAISettings.DefaultNews,
             openAIWeather = OpenAISettings.DefaultWeather,
-            openAIWhisper = OpenAISettings.DefaultWhisper,
             openAIRealtime = OpenAISettings.DefaultRealtime,
             restApi = RestServerApiSettings.Default,
             rest = RESTSettings.Default,

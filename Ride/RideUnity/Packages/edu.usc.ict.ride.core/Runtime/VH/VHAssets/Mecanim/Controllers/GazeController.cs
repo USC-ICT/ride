@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -582,7 +582,7 @@ namespace VHAssets
         {
             if (gazeTarget == null)
             {
-                // Null target means "stop gazing" – delegate to StopGaze() so we respect the configured fade-out behavior
+                // Null target means "stop gazing" - delegate to StopGaze() so we respect the configured fade-out behavior
                 StopGaze();
                 return;
             }

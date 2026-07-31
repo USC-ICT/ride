@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System;
 using System.Reflection;
 using UnityEngine;
@@ -66,7 +66,7 @@ namespace Ride
         /// <summary>
         /// Validates the format of a Cognito Identity Pool ID used for AWS terrain loading.
         /// 
-        /// This does not check whether the key itself is valid — only that it appears to be in the correct format,
+        /// This does not check whether the key itself is valid - only that it appears to be in the correct format,
         /// which is typically <c>"region:key"</c>. It also rejects known dummy values such as <see cref="RideConfig.awsTerrainDefault"/>.
         /// </summary>
         /// <returns><c>true</c> if the format appears valid; otherwise, <c>false</c>.</returns>
@@ -297,7 +297,7 @@ namespace Ride
         /// <summary>
         /// Validates the format of a Cognito Identity Pool ID used for AWS terrain loading.
         /// 
-        /// This does not check whether the key itself is valid — only that it appears to be in the correct format,
+        /// This does not check whether the key itself is valid - only that it appears to be in the correct format,
         /// which is typically <c>"region:key"</c>. It also rejects known dummy values such as <see cref="RideConfig.awsTerrainDefault"/>.
         /// </summary>
         /// <param name="cognitoIdentityPoolId">The AWS Cognito Identity Pool ID string to validate.</param>
@@ -437,6 +437,32 @@ namespace Ride
                 return null;
 
             return GetConfiguredEndpoint(restApi.pollyTtsProxyEndpoint, nameof(RideConfig.RestServerApiSettings.pollyTtsProxyEndpoint), nameof(GetPollyTtsProxyEndpoint), route);
+        }
+
+        /// <summary>Gets the configured RIDE endpoint for Unity log submissions.</summary>
+        /// <returns>The configured logs proxy endpoint, or <c>null</c> if it is not configured.</returns>
+        public static string GetLogsProxyEndpoint()
+        {
+            if (!TryGetRestApiSettings(nameof(GetLogsProxyEndpoint), out var restApi))
+                return null;
+
+            return GetConfiguredEndpoint(restApi.logsProxyEndpoint, nameof(RideConfig.RestServerApiSettings.logsProxyEndpoint), nameof(GetLogsProxyEndpoint));
+        }
+
+        /// <summary>Gets the Cognito Identity Pool ID used to authenticate Unity log submissions.</summary>
+        /// <returns>The configured pool ID, or <c>null</c> if it is not configured.</returns>
+        public static string GetLogsCognitoIdentityPoolId()
+        {
+            if (!TryGetRestApiSettings(nameof(GetLogsCognitoIdentityPoolId), out var restApi))
+                return null;
+
+            if (string.IsNullOrWhiteSpace(restApi.logsCognitoIdentityPoolId))
+            {
+                RideLog.LogError($"{nameof(ConfigurationSystemUnity)}.{nameof(GetLogsCognitoIdentityPoolId)}() failed. '{nameof(RideConfig.RestServerApiSettings.logsCognitoIdentityPoolId)}' is not configured.");
+                return null;
+            }
+
+            return restApi.logsCognitoIdentityPoolId;
         }
 
         private static bool TryGetRestApiSettings(string callerName, out RideConfig.RestServerApiSettings restApi)

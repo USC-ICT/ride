@@ -1,10 +1,10 @@
-﻿using System;
+using System;
 
 namespace Ride
 {
     /// <summary>
     /// Represents a view frustum defined by six clipping planes, abstracted from UnityEngine.Plane[] to support engine-agnostic visibility tests.
-    /// The planes are ordered as follows: Left, Right, Bottom, Top, Near, Far — matching the output of UnityEngine.GeometryUtility.CalculateFrustumPlanes().
+    /// The planes are ordered as follows: Left, Right, Bottom, Top, Near, Far - matching the output of UnityEngine.GeometryUtility.CalculateFrustumPlanes().
     /// 
     /// Provides construction helpers from camera parameters or explicit transforms, bounding volume containment checks, and conversion to/from Unity types.
     /// Used in RIDE for frustum culling, perception modeling, and general 3D spatial queries.

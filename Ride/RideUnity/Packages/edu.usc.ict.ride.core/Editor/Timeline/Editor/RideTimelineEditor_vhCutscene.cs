@@ -6,6 +6,7 @@ using UnityEditor;
 using UnityEditor.Timeline;
 using UnityEngine;
 using UnityEngine.Timeline;
+using Ride;
 using Ride.Timeline;
 using VHAssets;
 
@@ -315,7 +316,7 @@ public class RideTimelineEditor_vhCutscene : ClipEditor
 
     private float GetAnimationLength(string animationName)
     {
-        foreach (Animator animator in Object.FindObjectsByType<Animator>(FindObjectsSortMode.None))
+        foreach (Animator animator in RideUtils.FindObjectsByType<Animator>())
         {
             UnityEditor.Animations.AnimatorController animController = animator.runtimeAnimatorController as UnityEditor.Animations.AnimatorController;
 

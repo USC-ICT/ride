@@ -17,7 +17,7 @@ public class RideTimelineTrack : TrackAsset, ILayerable
         {
             if (director != null)
             {
-                director.SetGenericBinding(this, FindFirstObjectByType<RideTimelineManager>());
+                director.SetGenericBinding(this, FindAnyObjectByType<RideTimelineManager>());
             }
         }
         var scriptPlayable = ScriptPlayable<RideTimelineTrackMixer>.Create(graph, inputCount);
@@ -43,7 +43,7 @@ public class RideTimelineTrack : TrackAsset, ILayerable
             var director = go.GetComponent<PlayableDirector>();
             if (director != null)
             {
-                director.SetGenericBinding(this, FindFirstObjectByType<RideTimelineManager>());
+                director.SetGenericBinding(this, FindAnyObjectByType<RideTimelineManager>());
             }
         }
 

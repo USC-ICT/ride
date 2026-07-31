@@ -7,7 +7,17 @@ namespace Ride
     #region Asset Catalog Related Data
 
     /// <summary>
-    /// Represents an asset that can be included in a catalog, along with its associated labels.
+    /// Represents a generic key/value metadata pair attached to a catalog asset.
+    /// </summary>
+    [Serializable]
+    public class AssetCatalogAttribute
+    {
+        public string key;
+        public string value;
+    }
+
+    /// <summary>
+    /// Represents an asset that can be included in a catalog, along with its associated labels and attributes.
     /// Used in the Unity Editor for organizing assets before building.
     /// </summary>
     [Serializable]
@@ -15,13 +25,15 @@ namespace Ride
     {
         public UnityEngine.Object asset;
         public List<string> labels = new();
+        public string description;
+        public List<AssetCatalogAttribute> attributes = new();
 
         [NonSerialized] public string assetPath;  // cache the asset path, to avoid calling AssetDatabase.GetAssetPath() every frame
     }
 
     /// <summary>
     /// Represents a single catalog entry written into a built catalog.json file.
-    /// Maps asset name to the bundle it resides in, along with its labels.
+    /// Maps asset name to the bundle it resides in, along with its labels and generic attributes.
     /// </summary>
     [Serializable]
     public class AssetCatalogEntry
@@ -30,6 +42,8 @@ namespace Ride
         public string bundleFileName;
         public string bundleHash128;
         public List<string> labels = new();
+        public string description;
+        public List<AssetCatalogAttribute> attributes = new();
     }
 
     /// <summary>
@@ -79,11 +93,14 @@ namespace Ride
     [Serializable]
     public class CatalogLoadInfoUnity
     {
-        [Tooltip("Optional reference to a prebuilt catalog.json TextAsset.")]
+        [Header("Option A — Embedded TextAsset (overrides path below)")]
+        [Tooltip("Assign a catalog.json TextAsset. When set, Catalog Path and Is Remote are ignored.")]
         public TextAsset catalogJsonFile;
-        [Tooltip("Optional manual path to the catalog.json file.")]
+
+        [Header("Option B — Path (used only when catalog TextAsset is not assigned)")]
+        [Tooltip("File path or URL to catalog.json. Used only when Catalog JSON File is not assigned.")]
         public string catalogPath;
-        [Tooltip("Is the manual path referring to a remote file?")]
+        [Tooltip("Set true when Catalog Path is a remote URL rather than a local file path.")]
         public bool isRemote;
 
         /// <summary>

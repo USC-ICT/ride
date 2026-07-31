@@ -2,6 +2,7 @@ root = false
 
 [*.cs]
 dotnet_diagnostic.IDE0017.severity = none  # Object initialization can be simplified
+dotnet_diagnostic.IDE0019.severity = none  # Use pattern matching
 dotnet_diagnostic.IDE0028.severity = none  # Collection initialization can be simplified
 dotnet_diagnostic.IDE0044.severity = none  # Make field readonly
 dotnet_diagnostic.IDE0056.severity = none  # Indexing can be simplified
@@ -12,6 +13,10 @@ dotnet_diagnostic.IDE0063.severity = none  # 'using' statement can be simplified
 dotnet_diagnostic.IDE0066.severity = none  # Use 'switch' expression
 dotnet_diagnostic.IDE0074.severity = none  # Use compound assignment
 dotnet_diagnostic.IDE0090.severity = none  # 'new' expression can be simplified
+dotnet_diagnostic.IDE0130.severity = none  # Namespace "" does not match folder structure, expected ""
 dotnet_diagnostic.IDE0251.severity = none  # Member can be made 'readonly'
 dotnet_diagnostic.IDE1006.severity = none  # Naming rule violation: These words must begin with upper case characters: 
 dotnet_diagnostic.UNT0001.severity = none  # The Unity message '' is empty.
+dotnet_diagnostic.UNT0008.severity = none  # Unity objects should not use null propagation.
+dotnet_diagnostic.UNT0038.severity = none  # Cache WaitForSeconds invocations instead of creating new instances.
+dotnet_diagnostic.UNT0039.severity = none  # Use RequireComponent attribute when self-invoking GetComponent

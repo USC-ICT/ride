@@ -1,4 +1,4 @@
-﻿using Ride;
+using Ride;
 using UnityEngine;
 
 using Random = UnityEngine.Random;
@@ -24,7 +24,7 @@ namespace VHAssets
     /// <list type="bullet">
     ///   <item>
     ///     <description>
-    ///     <see cref="BlinkMode.Animation"/> – plays a named Mecanim animation clip
+    ///     <see cref="BlinkMode.Animation"/> - plays a named Mecanim animation clip
     ///     (<see cref="m_BlinkAnimName"/>) on the character's face layer. In this
     ///     mode the controller does not drive any parameters or blend shapes; the
     ///     animation is responsible for the eyelid motion.
@@ -32,7 +32,7 @@ namespace VHAssets
     ///   </item>
     ///   <item>
     ///     <description>
-    ///     <see cref="BlinkMode.BlendTree"/> – drives one or more float parameters
+    ///     <see cref="BlinkMode.BlendTree"/> - drives one or more float parameters
     ///     (see <see cref="m_EyeLidControllerParams"/>) on the attached
     ///     <see cref="Animator"/>. These parameters are typically used by a Mecanim
     ///     blend tree to pose the eyelids. The values are driven smoothly between
@@ -41,7 +41,7 @@ namespace VHAssets
     ///   </item>
     ///   <item>
     ///     <description>
-    ///     <see cref="BlinkMode.BlendShape"/> – drives one or more blend shapes on a
+    ///     <see cref="BlinkMode.BlendShape"/> - drives one or more blend shapes on a
     ///     <see cref="SkinnedMeshRenderer"/> (see <see cref="m_EyeLidBlendShapes"/>
     ///     and <see cref="m_BlendShapeSkinnedMeshName"/>). The blend shape weights
     ///     are driven smoothly between 0 and <see cref="m_BlinkBlendMax"/>.
@@ -54,9 +54,9 @@ namespace VHAssets
     /// <see cref="Update"/>:
     /// </para>
     /// <list type="bullet">
-    ///   <item><description><see cref="BlinkState.Idle"/> – waiting for the next blink time.</description></item>
-    ///   <item><description><see cref="BlinkState.BlinkClosing"/> – lids close over <see cref="m_BlinkLength"/> seconds.</description></item>
-    ///   <item><description><see cref="BlinkState.BlinkOpening"/> – lids open over <see cref="m_BlinkLength"/> seconds.</description></item>
+    ///   <item><description><see cref="BlinkState.Idle"/> - waiting for the next blink time.</description></item>
+    ///   <item><description><see cref="BlinkState.BlinkClosing"/> - lids close over <see cref="m_BlinkLength"/> seconds.</description></item>
+    ///   <item><description><see cref="BlinkState.BlinkOpening"/> - lids open over <see cref="m_BlinkLength"/> seconds.</description></item>
     /// </list>
     ///
     /// <para>

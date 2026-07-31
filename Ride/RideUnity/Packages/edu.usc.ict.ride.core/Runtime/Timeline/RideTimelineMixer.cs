@@ -16,7 +16,7 @@ namespace Ride.Timeline
             {
                 m_trackBinding = playerData as RideTimelineManager;
                 if (m_trackBinding == null)
-                    m_trackBinding = Object.FindFirstObjectByType<RideTimelineManager>();
+                    m_trackBinding = Object.FindAnyObjectByType<RideTimelineManager>();
                 if (m_trackBinding == null)
                 {
                     Debug.LogWarning("RideTimelineMixer.cs: Track binding is null."); return;

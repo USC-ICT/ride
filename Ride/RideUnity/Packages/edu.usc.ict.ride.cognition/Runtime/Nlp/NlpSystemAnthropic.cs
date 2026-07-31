@@ -7,12 +7,60 @@ using UnityEngine.Networking;
 
 namespace Ride.NLP
 {
+    /// <summary>Selectable Anthropic Claude models for NLP. Model ids live in code (not
+    /// RideConfig) - see the dictionary below; mirrors the ChatGPT NLP pattern.</summary>
+    public enum AnthropicModel
+    {
+        Fable5   = 10,
+        Opus5    = 20,
+        Sonnet5  = 30,
+        Haiku45  = 40,
+    }
+
     /// <summary>
     /// Uses Anthropic Claude (https://www.anthropic.com/api) to provide LLM functionalities.
     /// </summary>
     public class NlpSystemAnthropic : NlpSystemUnity
     {
-        private string m_model = "claude-haiku-4-5"; //claude-sonnet-4-5
+        [SerializeField, Range(0f, 1f)] private float m_temperature = 0.3f;
+
+        // Hard ceiling on a response. It is a cost/runaway guard, NOT a brevity control - the
+        // system prompt sets the desired length.
+        [SerializeField, Min(1)] private int m_maxTokens = 2000;
+        [SerializeField, Min(1)] private int m_requestTimeoutSeconds = 20;
+
+        /// <inheritdoc/>
+        public override float Temperature
+        {
+            get => m_temperature;
+            set => m_temperature = value;
+        }
+
+        /// <inheritdoc/>
+        public override bool SupportsGenerationSettings => true;
+
+        /// <inheritdoc/>
+        public override int MaxTokens
+        {
+            get => m_maxTokens;
+            set => m_maxTokens = value;
+        }
+
+        [SerializeField] private AnthropicModel m_model = AnthropicModel.Haiku45;
+
+        private readonly Dictionary<AnthropicModel, string> m_modelDictionary = new()
+        {
+            { AnthropicModel.Fable5,  "claude-fable-5"   },
+            { AnthropicModel.Opus5,   "claude-opus-5"    },
+            { AnthropicModel.Sonnet5, "claude-sonnet-5"  },
+            { AnthropicModel.Haiku45, "claude-haiku-4-5" },
+        };
+
+        /// <summary>The Anthropic model id currently selected, e.g. for UI display.</summary>
+        public string ModelId => m_modelDictionary[m_model];
+
+        /// <summary>Selects which model subsequent requests use.</summary>
+        public void SetActiveModel(AnthropicModel model) => m_model = model;
 
 
         /// <summary>
@@ -20,7 +68,7 @@ namespace Ride.NLP
         /// </summary>
         /// <param name="request">User input, string question</param>
         /// <param name="onComplete">Delegate to execute on successful request, typically parses JSON response</param>
-        public override async void Request(NlpRequest request, Action<NlpResponse> onComplete)
+        protected override async void RequestInternal(NlpRequest request, Action<NlpResponse> onComplete)
         { 
             //Prepare parameters for the request
             var messagesList = GetParsedHistory();
@@ -29,10 +77,11 @@ namespace Ride.NLP
             //Serialize data for the question
             string data = RideIO.JsonSerialize(new
             {
-                model = m_model,
+                model = ModelId,
                 system = m_initialPrompt,
                 messages = messagesList.ToArray(),
-                max_tokens = 1024
+                max_tokens = m_maxTokens,
+                temperature = m_temperature
             },
             RideIO.GetJsonConfigNoNameHandling());
 
@@ -40,17 +89,18 @@ namespace Ride.NLP
             m_uri = configSystem.config.anthropic.endpoint;
             m_authorizationKey = configSystem.config.anthropic.endpointKey;
 
-#if UNITY_WEBGL && !UNITY_EDITOR
-            m_uri = ConfigurationSystemUnity.GetAnthropicProxyEndpoint();
-#endif
+            if (RideUtils.IsWebGL() && !RideUtils.IsEditor())
+                m_uri = ConfigurationSystemUnity.GetAnthropicProxyEndpoint();
 
             // Call web service
             using var webRequest = new UnityWebRequest(m_uri, "POST");
             byte [] bodyRaw = Encoding.UTF8.GetBytes(data);
             webRequest.uploadHandler = new UploadHandlerRaw(bodyRaw);
             webRequest.downloadHandler = new DownloadHandlerBuffer();
+            webRequest.timeout = m_requestTimeoutSeconds;
             webRequest.SetRequestHeader("Content-Type", "application/json");
-            webRequest.SetRequestHeader("x-api-key", m_authorizationKey);
+            if (!(RideUtils.IsWebGL() && !RideUtils.IsEditor()))
+                webRequest.SetRequestHeader("x-api-key", m_authorizationKey);
             webRequest.SetRequestHeader("anthropic-version", "2023-06-01");
 
             DateTime startTime = DateTime.Now;
@@ -61,28 +111,45 @@ namespace Ride.NLP
 
             m_responseTime = (endTime - startTime).TotalMilliseconds + " ms";
 
+            // Every exit path must invoke onComplete: callers block their conversation flow
+            // (including the character's thinking behavior) until a response arrives, so a
+            // silent return leaves the character waiting forever.
             if (webRequest.result == UnityWebRequest.Result.ConnectionError     ||
                 webRequest.result == UnityWebRequest.Result.DataProcessingError ||
                 webRequest.result == UnityWebRequest.Result.ProtocolError)
             {
-                Debug.LogWarning($"AnthropicSystem.cs::Request() - Failed: {webRequest.result}");
+                string error = string.IsNullOrEmpty(webRequest.error) ? webRequest.result.ToString() : webRequest.error;
+                Debug.LogWarning($"AnthropicSystem.cs::Request() - Failed: {webRequest.result} - {error}");
+                onComplete?.Invoke(new NlpResponse(
+                    $"I'm sorry, something went wrong. I'm getting the error: '{error}'"));
                 return;
             }
 
             // Deserialize reponse
             var result = webRequest.downloadHandler.text;
             var res = RideIO.JsonDeserialize<AnthropicResponse>(result);
+            string content = res.content != null && res.content.Length > 0 ? res.content[0].text : null;
+
+            // An empty response is a real outcome, most often when the answer hit max_tokens.
+            // Speaking a short line keeps the conversation - and the character's thinking
+            // behavior - from stalling on an utterance that never comes.
+            if (string.IsNullOrWhiteSpace(content))
+            {
+                Debug.LogWarning($"AnthropicSystem.cs::Request() - Empty response content " +
+                    $"(stop reason '{res.stop_reason}', max tokens {m_maxTokens}).");
+                content = "I'm sorry, I did not receive a text response.";
+            }
 
             // Update conversation history
             NlpInteraction interaction = new NlpInteraction();
             interaction.input = request.content;
-            interaction.response = res.content[0].text;
+            interaction.response = content;
             interaction.inputTimestamp = startTime;
             interaction.responseTimestamp = endTime;
             m_interactionHistory.Add(interaction);
 
             // Invoke callback on complete
-            onComplete?.Invoke(new NlpResponse(/*result, */res.content[0].text));
+            onComplete?.Invoke(new NlpResponse(content));
         }
 
         /// <summary>
@@ -93,6 +160,11 @@ namespace Ride.NLP
         public override void SetSystemPrompt(string prompt)
         {
             m_initialPrompt = prompt;
+        }
+
+        public override void ClearHistory()
+        {
+            m_interactionHistory.Clear();
         }
 
         /// <summary>

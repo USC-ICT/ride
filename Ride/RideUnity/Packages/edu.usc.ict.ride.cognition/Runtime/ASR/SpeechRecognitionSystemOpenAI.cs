@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using UnityEngine;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Ride.Conversation;
 using Ride.Vendor.NativeWebSocket.NativeWebSocket;
 #if UNITY_ANDROID
 using UnityEngine.Android;
@@ -17,12 +18,49 @@ using UnityEngine.iOS;
 namespace Ride.SpeechRecognition
 {
     /// <summary>
-    /// Class to support OpenAI speech recognition. Combination of Whisper and GPT models.
-    /// While mainly used for speech recognition, it contains an optional ChatGPT text and audio response. 
-    /// All of these are streaming using web sockets. 
+    /// OpenAI Realtime API speech recognition implementation for microphone-driven streaming transcription.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This implementation adapts OpenAI's realtime websocket session into the shared
+    /// <see cref="SpeechRecognitionSystemUnity"/> contract used by the rest of the package. It streams
+    /// microphone audio to the configured OpenAI realtime endpoint, forwards partial and final transcript
+    /// events through the normal RIDE speech-recognition callbacks, and can optionally request assistant
+    /// audio output when <c>transcriptOnly</c> is disabled.
+    /// </para>
+    /// <para>
+    /// In transcript-only mode, the class behaves as a speech-recognition backend. In transcript-plus-audio
+    /// mode, it also exercises the assistant response path so the same websocket session can return both
+    /// transcription updates and synthesized audio playback. That makes this class useful both as an ASR
+    /// provider and as a lightweight reference for the broader realtime conversation flow.
+    /// </para>
+    /// <para>
+    /// Runtime configuration is resolved from <see cref="ConfigurationSystemUnity"/> when needed rather than
+    /// cached locally, so changes to the active RIDE configuration remain the source of truth for the
+    /// endpoint and API key used by connection setup.
+    /// </para>
+    /// <para>
+    /// External references:
+    /// <see href="https://developers.openai.com/api/docs/guides/realtime">OpenAI Realtime guide</see>,
+    /// <see href="https://developers.openai.com/api/reference/resources/realtime">OpenAI Realtime API reference</see>,
+    /// <see href="https://docs.unity3d.com/Manual/class-Microphone.html">Unity Manual: Microphone</see>.
+    /// Related RIDE implementations:
+    /// <see cref="SpeechRecognitionSystemUnity"/>,
+    /// <see cref="SpeechRecognitionSystemWindows"/>,
+    /// <see cref="SpeechRecognitionSystemAzure"/>,
+    /// <see cref="SpeechRecognitionSystemElevenLabs"/>,
+    /// <see cref="Ride.Conversation.UnifiedConversationSystemOpenAIRealtime"/>.
+    /// </para>
+    /// </remarks>
     public class SpeechRecognitionSystemOpenAI : SpeechRecognitionSystemUnity
     {
+        [Serializable]
+        private class WhisperResponse
+        {
+            public string text;
+        }
+
+
         public override bool IsSupported => true;
         public override bool SupportsContinuousRecognition => true;
 
@@ -31,14 +69,11 @@ namespace Ride.SpeechRecognition
         // https://docs.unity3d.com/Manual/android-manifest.html
 #endif        
 
-#if !UNITY_WEBGL
-        string m_apiKey;
-        string m_endpoint;
-#endif
-
         [Header("API Settings")]
 #pragma warning disable 0414  // (WebGL) The field '' is assigned but its value is never used
-        [SerializeField] private string model = "gpt-realtime-mini";
+        [SerializeField] private OpenAIRealtimeModel model = OpenAIRealtimeModel.Realtime21Mini;
+        [SerializeField] private OpenAIRealtimeTranscriptionModel transcriptionModel =
+            OpenAIRealtimeTranscriptionModel.RealtimeWhisper;
 #pragma warning restore 0414
 
         [Header("Audio Settings")]
@@ -61,9 +96,15 @@ namespace Ride.SpeechRecognition
         [Header("Voice Activity Detection")]
         [SerializeField] private float vadThreshold = 0.7f; // VAD sensitivity (0.0-1.0, higher = less sensitive)
         [SerializeField] private int vadPrefixPaddingMs = 300; // Audio captured before speech detected (ms)
-        [SerializeField] private int vadSilenceDurationMs = 700; // Silence duration before considering speech stopped (ms)
+        // How long a pause ends the utterance. Server-side VAD takes milliseconds, while the shared
+        // setting is in seconds, so this converts rather than duplicating the knob: a second field
+        // would let the Inspector show one value while the service is sent another.
+        private int VadSilenceDurationMs => Mathf.RoundToInt(AutoSilenceTimeoutSeconds * 1000f);
+
 
         private const float MinCommitAudioSeconds = 0.1f;
+        private const float StreamingPlaybackMonitorIntervalSeconds = 0.1f;
+        private const float RestartRecordingPlaybackSettleSeconds = 0.2f;
         private WebSocket websocket;
         private AudioClip recordingClip;
         private bool isRecording = false;
@@ -81,10 +122,11 @@ namespace Ride.SpeechRecognition
         private int currentClipSamples = 0;
         private string currentTranscriptionBuffer = "";
         private object audioQueueLock = new object();
-        private Coroutine checkRecognizedSpeechCoroutine;
-        private Coroutine sendWebsocketMessagesCoroutine;
-        private Coroutine monitorStreamingPlaybackCoroutine;
-        private Coroutine restartRecordingCoroutine;
+        private float m_streamingPlaybackMonitorTimer = 0f;
+        private int m_streamingPlaybackEmptyFrames = 0;
+        private bool m_restartRecordingPending = false;
+        private bool m_restartRecordingAwaitingPlaybackStop = false;
+        private float m_restartRecordingReadyTime = 0f;
 
         // Events
         public event Action<string> OnTranscriptionReceived;
@@ -100,23 +142,14 @@ namespace Ride.SpeechRecognition
 
         private string m_recognizedSpeech;
         private string m_recognizedSpeechPartial;
+        private string m_recognizedLanguage = string.Empty;
+        private string m_recognizedLanguagePartial = string.Empty;
+
 
         /// <inheritdoc/>
         public override void SystemInit()
         {
             base.SystemInit();
-
-#if !UNITY_WEBGL
-            ConfigurationSystemUnity configSystem = Globals.api.GetSystem<ConfigurationSystemUnity>();
-            m_apiKey = configSystem.config.openAIRealtime.endpointKey;
-            m_endpoint = configSystem.config.openAIRealtime.endpoint;
-
-            if (string.IsNullOrEmpty(m_apiKey))
-            {
-                Debug.LogError("Please set your OpenAI API key in the RIDE configuration file.");
-                return;
-            }
-#endif
 
             CheckMicrophonePermissions();
 
@@ -127,7 +160,7 @@ namespace Ride.SpeechRecognition
                 return;
             }
 
-            Debug.Log($"Available microphones: {string.Join(", ", Microphone.devices)}");
+            Debug.Log($"[SpeechRecognitionSystemOpenAI] Available microphones: {string.Join(", ", Microphone.devices)}");
 #endif
 
             InitializeAgentResponseAudio();  // Not needed for ASR, but included as unified real-time ASR + NLP + TTS example
@@ -149,9 +182,6 @@ namespace Ride.SpeechRecognition
         /// <inheritdoc/>
         public override void OnRecognizingStarted()
         {
-            if (checkRecognizedSpeechCoroutine == null)
-                checkRecognizedSpeechCoroutine = StartCoroutine(CheckRecognizedSpeechRoutine());
-
             StartRecording();
 
             base.OnRecognizingStarted();
@@ -162,83 +192,98 @@ namespace Ride.SpeechRecognition
         {
             StopRecording();
 
-            if (checkRecognizedSpeechCoroutine != null)
-            {
-                StopCoroutine(checkRecognizedSpeechCoroutine);
-                checkRecognizedSpeechCoroutine = null;
-            }
-
             base.OnRecognizingStopped();
         }
 
-        protected override void Update()
+        /// <inheritdoc/>
+        public override void SystemUpdate(float dt)
         {
             // Dispatch WebSocket messages on Unity main thread
 #if !UNITY_WEBGL || UNITY_EDITOR
             websocket?.DispatchMessageQueue();
 #endif
-            base.Update();
+
+            ProcessRecognizedSpeech();
+            PumpMicrophoneAudio();
+            UpdateStreamingPlaybackMonitor(dt);
+            UpdatePendingRecordingRestart();
+
+            base.SystemUpdate(dt);
         }
 
         /// <summary>
-        /// Coroutine that polls partial and final recognition results each frame.
+        /// Processes the most recent partial and final transcription results gathered from the
+        /// realtime websocket callbacks and forwards them through the shared speech-recognition
+        /// event flow exposed by <see cref="SpeechRecognitionSystemUnity"/>.
         /// </summary>
-        protected IEnumerator CheckRecognizedSpeechRoutine()
+        /// <remarks>
+        /// <para>
+        /// This method is called from <see cref="SystemUpdate(float)"/> after websocket message
+        /// dispatch has populated the staged recognition fields.
+        /// </para>
+        /// <para>
+        /// Keeping transcript promotion here centralizes the handoff between the OpenAI Realtime
+        /// transport layer and the package's existing partial/final recognition callbacks, so
+        /// downstream systems continue to observe the same behavior as other
+        /// <see cref="ISpeechRecognitionSystem"/> implementations.
+        /// </para>
+        /// </remarks>
+        private void ProcessRecognizedSpeech()
         {            
-            while (IsRecognizing)
+            if (!IsRecognizing)
+                return;
+
+            if (!string.IsNullOrEmpty(m_recognizedSpeechPartial))
             {
-                if (!string.IsNullOrEmpty(m_recognizedSpeechPartial))
-                {
-                    OnPartialSpeechRecognized(m_recognizedSpeechPartial, Confidence);
-                    m_recognizedSpeechPartial = null;
-                }
-
-                if (!string.IsNullOrEmpty(m_recognizedSpeech))
-                {
-                    OnSpeechRecognized(m_recognizedSpeech, Confidence);
-                    m_recognizedSpeech = null;
-                }
-
-                yield return null;
+                OnPartialSpeechRecognized(m_recognizedSpeechPartial, Confidence, m_recognizedLanguagePartial);
+                m_recognizedSpeechPartial = null;
+                m_recognizedLanguagePartial = string.Empty;
             }
 
-            checkRecognizedSpeechCoroutine = null;
+            if (!string.IsNullOrEmpty(m_recognizedSpeech))
+            {
+                OnSpeechRecognized(m_recognizedSpeech, Confidence, m_recognizedLanguage);
+                m_recognizedSpeech = null;
+                m_recognizedLanguage = string.Empty;
+            }
         }
 
         /// <summary>
-        /// Gathers microphone audio and prepares for sending.
+        /// Reads newly recorded microphone samples and appends them to the active OpenAI Realtime
+        /// input-audio stream while recognition is running.
         /// </summary>
-        protected IEnumerator SendWebsocketMessages()
-        {            
-            while (isSystemActive)
-            {
-                if (!IsRecognizing || recordingClip == null)
-                {
-                    yield return null;
-                    continue;
-                }
+        /// <remarks>
+        /// <para>
+        /// This method is called from <see cref="SystemUpdate(float)"/> so microphone capture can
+        /// be advanced as part of the normal <see cref="RideSystemMonoBehaviour"/> frame lifecycle.
+        /// </para>
+        /// <para>
+        /// The method compares the current microphone write position against the last transmitted
+        /// offset, extracts only the newly available PCM data, and forwards that chunk to
+        /// <see cref="SendAudioChunk(float[])"/> when enough samples have accumulated to justify
+        /// another websocket append.
+        /// </para>
+        /// </remarks>
+        private void PumpMicrophoneAudio()
+        {
+            if (!isSystemActive || !IsRecognizing || recordingClip == null)
+                return;
 
 #if !UNITY_WEBGL
-                int currentPosition = Microphone.GetPosition(microphoneDevice);
-                if (currentPosition >= 0)
+            int currentPosition = Microphone.GetPosition(microphoneDevice);
+            if (currentPosition >= 0)
+            {
+                int samplesToSend = currentPosition - lastSamplePosition;
+                if (samplesToSend < 0)
+                    samplesToSend += recordingClip.samples;
+
+                if (samplesToSend >= chunkSize)
                 {
-                    int samplesToSend = currentPosition - lastSamplePosition;
-                    if (samplesToSend < 0)
-                        samplesToSend += recordingClip.samples;
-
-                    if (samplesToSend >= chunkSize)
-                    {
-                        SendAudioChunk(samplesToSend);
-                        lastSamplePosition = currentPosition;
-                    }
+                    SendAudioChunk(samplesToSend);
+                    lastSamplePosition = currentPosition;
                 }
-#endif
-
-                yield return null;
             }
-
-            Debug.Log("SendWebsocketMessages coroutine stopped");
-            sendWebsocketMessagesCoroutine = null;
+#endif
         }
 
         /// <summary>
@@ -283,8 +328,15 @@ namespace Ride.SpeechRecognition
             isSystemActive = true;
             // Wait for connection coroutine to complete
             yield return StartCoroutine(ConnectToRealtimeAPI());
+
+            if (!isSystemActive || !isConnected)
+            {
+                Debug.LogWarning("[SpeechRecognitionSystemOpenAI] StartSystem aborted before connection was established.");
+                yield break;
+            }
+
             OnSystemStarted?.Invoke();
-            Debug.Log("Speech Recognition System Started");
+            Debug.Log("[SpeechRecognitionSystemOpenAI] Speech Recognition System Started");
         }
 
         /// <summary>
@@ -373,7 +425,7 @@ namespace Ride.SpeechRecognition
             audioSource.dopplerLevel = 0f;
             audioSource.enabled = true;
 
-            Debug.Log($"AudioSource configured: enabled={audioSource.enabled}, volume={audioSource.volume}");
+            Debug.Log($"[SpeechRecognitionSystemOpenAI] AudioSource configured: enabled={audioSource.enabled}, volume={audioSource.volume}");
         }
         private IEnumerator ConnectToRealtimeAPI()
         {
@@ -384,11 +436,23 @@ namespace Ride.SpeechRecognition
             }
 
 #if !UNITY_WEBGL
-            string url = $"{m_endpoint}?model={model}";
+            var configSystem = Systems.Get<ConfigurationSystemUnity>();
+            string endpoint = configSystem != null ? configSystem.config.openAIRealtime.endpoint : string.Empty;
+            string apiKey = configSystem != null ? configSystem.config.openAIRealtime.endpointKey : string.Empty;
+
+            if (string.IsNullOrWhiteSpace(endpoint) || string.IsNullOrWhiteSpace(apiKey))
+            {
+                Debug.LogError("Please set the OpenAI Realtime endpoint and API key in the RIDE configuration file.");
+                OnError?.Invoke("OpenAI Realtime endpoint or API key is missing.");
+                isSystemActive = false;
+                yield break;
+            }
+
+            string url = $"{endpoint}?model={OpenAIRealtimeModels.Id(model)}";
 
             var headers = new Dictionary<string, string>
             {
-                { "Authorization", $"Bearer {m_apiKey}" }
+                { "Authorization", $"Bearer {apiKey}" }
             };
 
             websocket = new WebSocket(url, headers);
@@ -422,12 +486,13 @@ namespace Ride.SpeechRecognition
             float timeout = 10f;
             float startTime = Time.time;
 
-            while (websocket.State != WebSocketState.Open && (connectTask != null && !connectTask.IsCompleted))
+            while (websocket != null && websocket.State != WebSocketState.Open && (connectTask != null && !connectTask.IsCompleted))
             {
                 if (Time.time - startTime > timeout)
                 {
                     Debug.LogError("Timed out while connecting to Realtime API.");
                     OnError?.Invoke("Timed out while connecting to Realtime API.");
+                    isSystemActive = false;
                     yield break;
                 }
                 yield return null;
@@ -435,23 +500,28 @@ namespace Ride.SpeechRecognition
 
             // Wait briefly after task completes for connection to finalize
             float postWaitStart = Time.time;
-            while (websocket.State != WebSocketState.Open && (Time.time - postWaitStart) < 2f)
+            while (websocket != null && websocket.State != WebSocketState.Open && (Time.time - postWaitStart) < 2f)
             {
                 yield return null;
             }
 
+            if (websocket == null)
+            {
+                isSystemActive = false;
+                yield break;
+            }
+
             if (websocket.State == WebSocketState.Open)
             {
-                Debug.Log("Connected successfully to Realtime API (coroutine version).");
+                Debug.Log("[SpeechRecognitionSystemOpenAI] Connected successfully to Realtime API (coroutine version).");
             }
             else
             {
                 Debug.LogError("WebSocket connection did not open properly.");
                 OnError?.Invoke("WebSocket connection failed.");
+                isSystemActive = false;
             }
 
-            if (sendWebsocketMessagesCoroutine == null)
-                sendWebsocketMessagesCoroutine = StartCoroutine(SendWebsocketMessages());
 #endif
         }
 
@@ -469,7 +539,7 @@ namespace Ride.SpeechRecognition
 
         private void OnWebSocketOpen()
         {
-            Debug.Log("Connected to OpenAI Realtime API");
+            Debug.Log("[SpeechRecognitionSystemOpenAI] Connected to OpenAI Realtime API");
             isConnected = true;
 
             // Send session configuration
@@ -507,14 +577,14 @@ namespace Ride.SpeechRecognition
                             },
                             transcription = new
                             {
-                                model = "whisper-1"
+                                model = OpenAIRealtimeModels.Id(transcriptionModel)
                             },
                             turn_detection = new
                             {
                                 type = "server_vad",
                                 threshold = vadThreshold,
                                 prefix_padding_ms = vadPrefixPaddingMs,
-                                silence_duration_ms = vadSilenceDurationMs
+                                silence_duration_ms = VadSilenceDurationMs
                             }
                         }
                     }
@@ -543,14 +613,14 @@ namespace Ride.SpeechRecognition
                             },
                             transcription = new
                             {
-                                model = "whisper-1"
+                                model = OpenAIRealtimeModels.Id(transcriptionModel)
                             },
                             turn_detection = new
                             {
                                 type = "server_vad",
                                 threshold = vadThreshold,
                                 prefix_padding_ms = vadPrefixPaddingMs,
-                                silence_duration_ms = vadSilenceDurationMs
+                                silence_duration_ms = VadSilenceDurationMs
                             }
                         },
                         output = new
@@ -579,7 +649,7 @@ namespace Ride.SpeechRecognition
                 {
                     case "session.created":
                     case "session.updated":
-                        Debug.Log($"Session {eventType}: {message["session"]?["id"]}");
+                        Debug.Log($"[SpeechRecognitionSystemOpenAI] Session {eventType}: {message["session"]?["id"]}");
                         break;
 
                     case "input_audio_buffer.speech_started":
@@ -622,6 +692,7 @@ namespace Ride.SpeechRecognition
                             OnTranscriptionReceived?.Invoke(currentTranscriptionBuffer);
 
                             m_recognizedSpeechPartial = transcriptStreamDelta;
+                            m_recognizedLanguagePartial = message["language"]?.ToString() ?? m_recognizedLanguagePartial;
 
                             Debug.Log($"Transcription delta: {transcriptStreamDelta} (Total so far: {currentTranscriptionBuffer})");
                         }
@@ -631,6 +702,7 @@ namespace Ride.SpeechRecognition
                         string completedTranscript = message["transcript"]?.ToString();
                         if (!string.IsNullOrEmpty(completedTranscript))
                         {
+                            string detectedLanguage = message["language"]?.ToString() ?? string.Empty;
                             Debug.Log($"Transcription completed: {completedTranscript}");
 
                             // Update buffer with final version (in case deltas were incomplete)
@@ -640,6 +712,7 @@ namespace Ride.SpeechRecognition
                             OnTranscriptionReceived?.Invoke(completedTranscript);
 
                             m_recognizedSpeech = completedTranscript;
+                            m_recognizedLanguage = detectedLanguage;
                         }
                         break;
 
@@ -898,6 +971,23 @@ namespace Ride.SpeechRecognition
             }
         }
 
+        /// <summary>
+        /// Starts playback of the assistant audio stream after enough PCM samples have been buffered.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// This method is called from <see cref="ProcessAudioResponseStreaming(string)"/> once the queued
+        /// assistant audio reaches the configured <see cref="streamingStartBufferSeconds"/> threshold.
+        /// It creates a streaming <see cref="AudioClip"/> backed by <see cref="OnAudioRead(float[])"/>,
+        /// resets playback counters, and begins draining the queued samples through Unity's audio pipeline.
+        /// </para>
+        /// <para>
+        /// The resulting clip uses Unity's streaming clip callback path described by
+        /// <see href="https://docs.unity3d.com/ScriptReference/AudioClip.Create.html">AudioClip.Create</see>.
+        /// Completion is not determined here; that responsibility is delegated to
+        /// <see cref="UpdateStreamingPlaybackMonitor(float)"/>.
+        /// </para>
+        /// </remarks>
         private void StartStreamingPlayback()
         {
             isStreamingAudio = true;
@@ -921,14 +1011,11 @@ namespace Ride.SpeechRecognition
                 // Set callback ready and start playing immediately
                 isAudioCallbackReady = true;
                 audioSource.Play();
+                m_streamingPlaybackMonitorTimer = 0f;
+                m_streamingPlaybackEmptyFrames = 0;
 
                 Debug.Log("Streaming audio playback started");
-
-                // Monitor streaming playback
-                if (monitorStreamingPlaybackCoroutine != null)
-                    StopCoroutine(monitorStreamingPlaybackCoroutine);
-
-                monitorStreamingPlaybackCoroutine = StartCoroutine(MonitorStreamingPlayback());
+                Debug.Log($"Monitoring playback. Required empty frames: {Mathf.CeilToInt(streamingEndBufferSeconds / StreamingPlaybackMonitorIntervalSeconds)}");
             }
         }
 
@@ -969,54 +1056,93 @@ namespace Ride.SpeechRecognition
             }
         }
 
-        private IEnumerator MonitorStreamingPlayback()
+        /// <summary>
+        /// Advances the assistant-audio playback completion monitor during <see cref="SystemUpdate(float)"/>.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// This method is called once per frame from <see cref="SystemUpdate(float)"/>. It converts the
+        /// frame delta time into fixed monitor ticks at <see cref="StreamingPlaybackMonitorIntervalSeconds"/>
+        /// and invokes <see cref="EvaluateStreamingPlaybackMonitor()"/> for each elapsed tick while
+        /// assistant audio is actively streaming.
+        /// </para>
+        /// <para>
+        /// Its purpose is to keep playback-completion logic on the shared RIDE update path rather than
+        /// tying that lifetime behavior to a standalone polling loop.
+        /// </para>
+        /// </remarks>
+        private void UpdateStreamingPlaybackMonitor(float dt)
         {
-            int emptyFrames = 0;
-            int requiredEmptyFrames = Mathf.CeilToInt(streamingEndBufferSeconds / 0.1f);
-
-            Debug.Log($"Monitoring playback. Required empty frames: {requiredEmptyFrames}");
-
-            while (isStreamingAudio)
+            if (!isStreamingAudio)
             {
-                yield return new WaitForSeconds(0.1f);
-
-                int currentQueueSize;
-                lock (audioQueueLock)
-                {
-                    currentQueueSize = streamingAudioQueue.Count;
-                }
-
-                // Check if stream is complete and queue is empty
-                if (audioStreamComplete && currentQueueSize == 0)
-                {
-                    emptyFrames++;
-
-                    if (emptyFrames % 10 == 0) // Log every second
-                    {
-                        float playbackTimeSeconds = streamingPlaybackPosition / (float)sampleRate;
-                        Debug.Log($"Stream complete and queue empty. Empty frames: {emptyFrames}/{requiredEmptyFrames}, Samples played: {streamingPlaybackPosition} ({playbackTimeSeconds:F1}s)");
-                    }
-
-                    // Wait for the configured duration to make sure we're really done
-                    if (emptyFrames > requiredEmptyFrames)
-                    {
-                        float playbackTimeSeconds = streamingPlaybackPosition / (float)sampleRate;
-                        Debug.Log($"Streaming playback complete. Total samples played: {streamingPlaybackPosition} ({playbackTimeSeconds:F1}s)");
-                        StopStreamingPlayback();
-                        break;
-                    }
-                }
-                else
-                {
-                    if (emptyFrames > 0)
-                    {
-                        Debug.Log($"Conditions changed. Queue: {currentQueueSize}, StreamComplete: {audioStreamComplete}. Resetting counter.");
-                    }
-                    emptyFrames = 0;
-                }
+                m_streamingPlaybackMonitorTimer = 0f;
+                m_streamingPlaybackEmptyFrames = 0;
+                return;
             }
 
-            monitorStreamingPlaybackCoroutine = null;
+            m_streamingPlaybackMonitorTimer += dt;
+            while (m_streamingPlaybackMonitorTimer >= StreamingPlaybackMonitorIntervalSeconds)
+            {
+                m_streamingPlaybackMonitorTimer -= StreamingPlaybackMonitorIntervalSeconds;
+                EvaluateStreamingPlaybackMonitor();
+
+                if (!isStreamingAudio)
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// Evaluates whether the active assistant audio stream has fully drained and can be stopped.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// This method is called by <see cref="UpdateStreamingPlaybackMonitor(float)"/> at a fixed polling
+        /// interval. It examines the queued audio sample count together with <see cref="audioStreamComplete"/>
+        /// to determine whether the stream has both finished arriving from OpenAI and finished draining
+        /// through Unity playback.
+        /// </para>
+        /// <para>
+        /// Once the queue has remained empty for the configured end-buffer window, it calls
+        /// <see cref="StopStreamingPlayback()"/> to finalize playback and transition into the post-playback
+        /// state.
+        /// </para>
+        /// </remarks>
+        private void EvaluateStreamingPlaybackMonitor()
+        {
+            int currentQueueSize;
+            lock (audioQueueLock)
+            {
+                currentQueueSize = streamingAudioQueue.Count;
+            }
+
+            int requiredEmptyFrames = Mathf.CeilToInt(streamingEndBufferSeconds / StreamingPlaybackMonitorIntervalSeconds);
+
+            if (audioStreamComplete && currentQueueSize == 0)
+            {
+                m_streamingPlaybackEmptyFrames++;
+
+                if (m_streamingPlaybackEmptyFrames % 10 == 0)
+                {
+                    float playbackTimeSeconds = streamingPlaybackPosition / (float)sampleRate;
+                    Debug.Log($"Stream complete and queue empty. Empty frames: {m_streamingPlaybackEmptyFrames}/{requiredEmptyFrames}, Samples played: {streamingPlaybackPosition} ({playbackTimeSeconds:F1}s)");
+                }
+
+                if (m_streamingPlaybackEmptyFrames > requiredEmptyFrames)
+                {
+                    float playbackTimeSeconds = streamingPlaybackPosition / (float)sampleRate;
+                    Debug.Log($"Streaming playback complete. Total samples played: {streamingPlaybackPosition} ({playbackTimeSeconds:F1}s)");
+                    StopStreamingPlayback();
+                }
+            }
+            else
+            {
+                if (m_streamingPlaybackEmptyFrames > 0)
+                {
+                    Debug.Log($"Conditions changed. Queue: {currentQueueSize}, StreamComplete: {audioStreamComplete}. Resetting counter.");
+                }
+
+                m_streamingPlaybackEmptyFrames = 0;
+            }
         }
 
         private void StopStreamingPlayback()
@@ -1035,7 +1161,8 @@ namespace Ride.SpeechRecognition
             }
 
             streamingPlaybackPosition = 0;
-            monitorStreamingPlaybackCoroutine = null;
+            m_streamingPlaybackMonitorTimer = 0f;
+            m_streamingPlaybackEmptyFrames = 0;
 
             OnAudioFinishedPlaying();
         }
@@ -1048,6 +1175,21 @@ namespace Ride.SpeechRecognition
             websocket.SendText(json);
         }
 
+        /// <summary>
+        /// Finalizes assistant-audio playback state and schedules microphone restart when appropriate.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// This method is called from <see cref="StopStreamingPlayback()"/> after queued assistant audio has
+        /// been fully drained. It clears the assistant-speaking state, raises
+        /// <see cref="OnAudioResponseFinished"/>, and, when the realtime system is still active, schedules
+        /// recognition to resume through <see cref="QueueRecordingRestart()"/>.
+        /// </para>
+        /// <para>
+        /// This is the handoff point between assistant-output playback and the next user-input capture
+        /// cycle in transcript-plus-audio mode.
+        /// </para>
+        /// </remarks>
         private void OnAudioFinishedPlaying()
         {
             Debug.Log($"OnAudioFinishedPlaying called. isPlayingResponse: {isPlayingResponse}, isSystemActive: {isSystemActive}");
@@ -1063,11 +1205,8 @@ namespace Ride.SpeechRecognition
             // Auto-restart recording after agent finishes speaking
             if (isSystemActive)
             {
-                Debug.Log("Starting restart recording coroutine");
-                if (restartRecordingCoroutine != null)
-                    StopCoroutine(restartRecordingCoroutine);
-
-                restartRecordingCoroutine = StartCoroutine(RestartRecordingAfterDelay());
+                Debug.Log($"Queueing recording restart in {postPlaybackDelay}s");
+                QueueRecordingRestart();
             }
             else
             {
@@ -1075,22 +1214,64 @@ namespace Ride.SpeechRecognition
             }
         }
 
-        private IEnumerator RestartRecordingAfterDelay()
+        /// <summary>
+        /// Schedules microphone recording to restart after assistant playback has finished.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// This method is called from <see cref="OnAudioFinishedPlaying()"/> when the system should return
+        /// from assistant output back to user capture. It does not restart recording immediately; instead,
+        /// it records the target resume time derived from <see cref="postPlaybackDelay"/> so the actual
+        /// transition can be evaluated safely from <see cref="UpdatePendingRecordingRestart()"/>.
+        /// </para>
+        /// </remarks>
+        private void QueueRecordingRestart()
         {
-            Debug.Log($"Waiting {postPlaybackDelay}s before restarting recording...");
-            yield return new WaitForSeconds(postPlaybackDelay);
+            m_restartRecordingPending = true;
+            m_restartRecordingAwaitingPlaybackStop = false;
+            m_restartRecordingReadyTime = Time.time + postPlaybackDelay;
+        }
 
-            // Double-check audio is really finished
+        /// <summary>
+        /// Processes any pending microphone-restart request during <see cref="SystemUpdate(float)"/>.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// This method is called once per frame from <see cref="SystemUpdate(float)"/> after
+        /// <see cref="QueueRecordingRestart()"/> has scheduled a resume time. It waits for the configured
+        /// post-playback delay, optionally waits for the <see cref="AudioSource"/> to stop fully, applies a
+        /// short settle window, and then restarts capture through <see cref="StartRecording()"/> if the
+        /// realtime session is still active and ready to listen.
+        /// </para>
+        /// <para>
+        /// Its purpose is to coordinate the transition back into user speech capture without cutting off
+        /// trailing playback or resuming too early.
+        /// </para>
+        /// </remarks>
+        private void UpdatePendingRecordingRestart()
+        {
+            if (!m_restartRecordingPending || Time.time < m_restartRecordingReadyTime)
+                return;
+
             if (audioSource != null && audioSource.isPlaying)
             {
-                Debug.LogWarning("AudioSource is still playing during restart delay - waiting for it to finish");
-                while (audioSource != null && audioSource.isPlaying)
+                if (!m_restartRecordingAwaitingPlaybackStop)
                 {
-                    yield return null;
+                    Debug.LogWarning("AudioSource is still playing during restart delay - waiting for it to finish");
                 }
-                yield return new WaitForSeconds(0.2f);
+
+                m_restartRecordingAwaitingPlaybackStop = true;
+                return;
             }
 
+            if (m_restartRecordingAwaitingPlaybackStop)
+            {
+                m_restartRecordingAwaitingPlaybackStop = false;
+                m_restartRecordingReadyTime = Time.time + RestartRecordingPlaybackSettleSeconds;
+                return;
+            }
+
+            m_restartRecordingPending = false;
             if (!isRecording && !isPlayingResponse && isSystemActive && IsRecognizing)
             {
                 Debug.Log("Restarting recording after agent response");
@@ -1100,8 +1281,6 @@ namespace Ride.SpeechRecognition
             {
                 Debug.Log($"Skipping restart: IsRecognizing={IsRecognizing}, isPlayingResponse={isPlayingResponse}, isSystemActive={isSystemActive}");
             }
-
-            restartRecordingCoroutine = null;
         }
 
         void OnApplicationQuit()
@@ -1116,30 +1295,6 @@ namespace Ride.SpeechRecognition
 
         void Cleanup()
         {
-            if (checkRecognizedSpeechCoroutine != null)
-            {
-                StopCoroutine(checkRecognizedSpeechCoroutine);
-                checkRecognizedSpeechCoroutine = null;
-            }
-
-            if (sendWebsocketMessagesCoroutine != null)
-            {
-                StopCoroutine(sendWebsocketMessagesCoroutine);
-                sendWebsocketMessagesCoroutine = null;
-            }
-
-            if (monitorStreamingPlaybackCoroutine != null)
-            {
-                StopCoroutine(monitorStreamingPlaybackCoroutine);
-                monitorStreamingPlaybackCoroutine = null;
-            }
-
-            if (restartRecordingCoroutine != null)
-            {
-                StopCoroutine(restartRecordingCoroutine);
-                restartRecordingCoroutine = null;
-            }
-
             StopRecording();
 
             if (audioSource != null && audioSource.isPlaying)
@@ -1154,6 +1309,11 @@ namespace Ride.SpeechRecognition
             isPlayingResponse = false;
             isStreamingAudio = false;
             isAudioCallbackReady = false;
+            m_streamingPlaybackMonitorTimer = 0f;
+            m_streamingPlaybackEmptyFrames = 0;
+            m_restartRecordingPending = false;
+            m_restartRecordingAwaitingPlaybackStop = false;
+            m_restartRecordingReadyTime = 0f;
             isSystemActive = false;
             IsRecognizing = false;
             m_recognizedSpeech = null;
@@ -1176,10 +1336,4 @@ namespace Ride.SpeechRecognition
             isConnected = false;
         }
     }
-
-    [Serializable]
-    public class WhisperResponse
-    {
-        public string text;
-    }
-} 
+}

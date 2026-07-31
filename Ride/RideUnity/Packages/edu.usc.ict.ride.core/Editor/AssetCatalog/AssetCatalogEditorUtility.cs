@@ -584,7 +584,11 @@ public static class AssetCatalogEditorUtility
             {
                 assetName = assetName,
                 bundleFileName = bundleName,
-                labels = entry.labels.ToList() // make a copy of the labels
+                description = entry.description,
+                labels = entry.labels.ToList(), // make a copy of the labels
+                attributes = (entry.attributes ?? new List<AssetCatalogAttribute>())
+                    .Select(a => new AssetCatalogAttribute { key = a.key, value = a.value })
+                    .ToList()
             });
 
             string status = File.Exists(bundlePath) ? "REBUILT" : "BUILT";

@@ -1,16 +1,16 @@
 {
   "name": "edu.usc.ict.ride.cognition",
-  "version": "1.0.9798",
+  "version": "1.0.10114",
   "displayName": "RIDE Cognition",
   "description": "This is the USC ICT RIDE Cognition Package",
   "unity": "2022.1",
   "unityRelease": "9f1",
   "dependencies": {
-    "edu.usc.ict.ride.vendor.aws": "1.0.9659",
-    "edu.usc.ict.ride.vendor.cognition": "1.0.9659",
-    "edu.usc.ict.ride.vendor.vhassets": "1.0.9659",
-    "edu.usc.ict.ride.core": "1.0.9798",
-    "edu.usc.ict.ride.core.ui": "1.0.9798"
+    "edu.usc.ict.ride.vendor.aws": "1.0.9915",
+    "edu.usc.ict.ride.vendor.cognition": "1.0.9915",
+    "edu.usc.ict.ride.vendor.vhassets": "1.0.10068",
+    "edu.usc.ict.ride.core": "1.0.10114",
+    "edu.usc.ict.ride.core.ui": "1.0.10114"
   },
   "homepage": "https://ride.ict.usc.edu",
   "documentationUrl": "https://ride.ict.usc.edu",

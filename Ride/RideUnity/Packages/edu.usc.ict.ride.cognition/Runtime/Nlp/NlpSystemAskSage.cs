@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using UnityEngine;
@@ -35,11 +35,23 @@ namespace Ride.NLP
 
         public override void SetSystemPrompt(string prompt)
         {
+            m_initialPrompt = prompt;
+            m_askSageSystemPrompt = prompt;
             if (m_interactionHistory.Count == 0) { m_interactionHistory.Add(new NlpInteraction { input = prompt }); return; }
             else { m_interactionHistory[0] = new NlpInteraction { input = prompt }; }
         }
 
-        public override async void Request(NlpRequest request, Action<NlpResponse> onComplete)
+        public override void ClearHistory()
+        {
+            string prompt = string.Empty;
+            if (m_interactionHistory.Count > 0)
+                prompt = m_interactionHistory[0].input;
+
+            m_interactionHistory.Clear();
+            SetSystemPrompt(prompt);
+        }
+
+        protected override async void RequestInternal(NlpRequest request, Action<NlpResponse> onComplete)
         {
             Stopwatch stopwatch = new Stopwatch();
 

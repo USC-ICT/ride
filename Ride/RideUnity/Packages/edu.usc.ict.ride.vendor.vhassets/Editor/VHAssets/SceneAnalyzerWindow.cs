@@ -569,7 +569,7 @@ public class SceneAnalyzerWindow : EditorWindow
     {
         list.Clear();
         // find the objects
-        T[] components = Editor.FindObjectsByType<T>(FindObjectsSortMode.None);
+        T[] components = VHUtils.FindObjectsByType<T>();
         Stack<GameObject> stack = new Stack<GameObject>();
         for (int i = 0; i < components.Length; i++)
         {

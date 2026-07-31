@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
@@ -1722,7 +1722,7 @@ namespace VHAssets
         /// <param name="startTime">A raw start time value or a sync expression.</param>
         /// <returns>Evaluated time in seconds, or 0 if parsing fails.</returns>
         /// <remarks>
-        /// Handles sync expressions of the format: 'SpeechID:SyncMarker±Offset'.
+        /// Handles sync expressions of the format: 'SpeechID:SyncMarker+/-Offset'.
         /// Matches against m_BMLTimings collected from parsed BML data.
         /// </remarks>
         float ParseEventStartTime(string startTime, out TimingExpressionDebugInfo debugInfo)

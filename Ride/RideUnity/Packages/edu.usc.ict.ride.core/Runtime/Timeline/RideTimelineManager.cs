@@ -42,7 +42,7 @@ namespace Ride.Timeline
 
         public void PopulateDirectorList()
         {
-            m_directors = FindObjectsByType<PlayableDirector>(FindObjectsSortMode.None).ToList();
+            m_directors = RideUtils.FindObjectsByType<PlayableDirector>().ToList();
         }
 
         private void PopulateCharacterList()
@@ -51,7 +51,7 @@ namespace Ride.Timeline
             //List<GameObject> rootObjects = SceneManager.GetActiveScene().GetRootGameObjects().ToList();
             //foreach (GameObject obj in rootObjects)
             //    SearchForComponentRecursive<MecanimCharacter>(obj.transform, m_cutsceneCharacters);
-            m_cutsceneCharacters = FindObjectsByType<MecanimCharacter>(FindObjectsInactive.Include, FindObjectsSortMode.None).ToList();
+            m_cutsceneCharacters = RideUtils.FindObjectsByType<MecanimCharacter>(FindObjectsInactive.Include).ToList();
         }
 
         private void SearchForComponentRecursive<T>(Transform parent, List<T> componentList)
@@ -176,7 +176,7 @@ namespace Ride.Timeline
 
         public List<PlayableDirector> GetAllDirectors()
         {
-            return FindObjectsByType<PlayableDirector>(FindObjectsSortMode.None).ToList();
+            return RideUtils.FindObjectsByType<PlayableDirector>().ToList();
         }
 
         public void ResetDirectors()

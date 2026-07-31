@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
@@ -19,13 +19,23 @@ namespace Ride
     public class NonverbalBehaviorGeneratorSystem : RideSystemMonoBehaviour, INonverbalGeneratorSystem
     {
         private const string StoryPointId = "toolkitsession";
+        private const string GeneratedRulePackDirectoryName = "nvbg";
+        private const string GeneratedRulePackSubdirectoryName = "generated-rules";
 
         private class NvbgInitData
         {
+            public string ProfileKey;
             public string TransformXsl;
             public string RuleXml;
             public string SaliencyMapXml;
             public Dictionary<string, Stream> Streams;
+        }
+
+        private sealed class NvbgRulePack
+        {
+            public string ProfileKey;
+            public string RuleXml;
+            public string SaliencyMapXml;
         }
 
         /// <summary>
@@ -93,9 +103,13 @@ namespace Ride
         public string CharacterId = "Kevin";
         public string IdlePostureId = "ChrGenericMleAdult@IdleStandingUpright01";
         public bool m_launchOnStartup = true;
+        [Tooltip("If enabled, dynamically generated non-English rule files will overwrite existing cached files. Default is off so user edits are preserved.")]
+        public bool m_overwriteCachedGeneratedRulePacks = false;
 
-        private Dictionary<string, Nvbg> m_characters = new Dictionary<string, Nvbg>();
-        private Dictionary<string, Task<Nvbg>> m_characterInitTasks = new Dictionary<string, Task<Nvbg>>();
+        private readonly Dictionary<string, Nvbg> m_contexts = new Dictionary<string, Nvbg>();
+        private readonly Dictionary<string, Task<Nvbg>> m_contextInitTasks = new Dictionary<string, Task<Nvbg>>();
+        private readonly Dictionary<string, string> m_activeContextKeysByCharacter = new Dictionary<string, string>();
+        private readonly HashSet<string> m_missingFallbackWarnings = new HashSet<string>();
 
 
         #region IRideSystem
@@ -136,10 +150,11 @@ namespace Ride
         /// <param name="characterName">Name of the character to generate in NVBG.</param>
         public void StartProcess(string characterName)
         {
-            if (m_characters.ContainsKey(characterName))
+            string activeContextKey = GetActiveContextKey(characterName);
+            if (!string.IsNullOrEmpty(activeContextKey) && m_contexts.ContainsKey(activeContextKey))
                 return;
 
-            CreateCharacter(characterName);
+            CreateCharacter(characterName, NvbgLanguageRouting.Resolve(NvbgLanguageRouting.DefaultEnglishLanguage));
 
             //Timer not needed since Saliency Idle Gaze is not enabled
 
@@ -150,28 +165,39 @@ namespace Ride
         /// Creates a new character with configured options.
         /// </summary>
         /// <param name="characterName">The name of the character to create.</param>
-        private void CreateCharacter(string characterName)
+        private void CreateCharacter(string characterName, NvbgLanguageRoute route)
         {
-            if (m_characters.ContainsKey(characterName))
+            NvbgRulePack rulePack = ResolveRulePack(route);
+            string contextKey = BuildContextKey(characterName, route, rulePack.ProfileKey);
+
+            if (m_contexts.ContainsKey(contextKey))
+            {
+                m_activeContextKeysByCharacter[characterName] = contextKey;
                 return; // already created
+            }
 
-            if (m_characterInitTasks.ContainsKey(characterName))
+            if (m_contextInitTasks.ContainsKey(contextKey))
+            {
+                m_activeContextKeysByCharacter[characterName] = contextKey;
                 return; // already initializing
+            }
 
-            var initData = BuildInitData(); // main thread: safe for TextAsset.text access
+            var initData = BuildInitData(rulePack); // main thread: safe for TextAsset.text access
 
 #if UNITY_WEBGL
-            // WebGL fallback: no real threading → do it synchronously (same behavior as today)
+            // WebGL fallback: no real threading -> do it synchronously (same behavior as today)
             var character = CreateCharacterInternal(characterName, IdlePostureId, initData);
-            m_characters[characterName] = character;
+            m_contexts[contextKey] = character;
+            m_activeContextKeysByCharacter[characterName] = contextKey;
             ProcessLoaded = true;
 #else
             // All other platforms: spin up a background task
             var initTask = Task.Run(() => CreateCharacterInternal(characterName, IdlePostureId, initData));
-            m_characterInitTasks[characterName] = initTask;
+            m_contextInitTasks[contextKey] = initTask;
+            m_activeContextKeysByCharacter[characterName] = contextKey;
 
             // start a coroutine that observes this task and flips ProcessLoaded when done
-            StartCoroutine(WaitForCharacterInit(characterName, initTask));
+            StartCoroutine(WaitForCharacterInit(characterName, contextKey, initTask));
 #endif
         }
 
@@ -181,10 +207,13 @@ namespace Ride
         public void StopProcess()
         {
             ProcessLoaded = false;
-            foreach (var character in m_characters.Values)
+            foreach (var character in m_contexts.Values)
                 character.Dispose();
 
-            m_characters.Clear();
+            m_contexts.Clear();
+            m_contextInitTasks.Clear();
+            m_activeContextKeysByCharacter.Clear();
+            m_missingFallbackWarnings.Clear();
         }
         #endregion
 
@@ -192,7 +221,24 @@ namespace Ride
 
         /// <inheritdoc/>
         public void GetNonverbalBehavior(string characterName, string text, INonverbalGeneratorSystem.NonverbalBehaviorResult resultCallback) =>
-            StartCoroutine(Coroutine(characterName, text, resultCallback));
+            GetNonverbalBehavior(characterName, text, string.Empty, resultCallback);
+
+        /// <summary>
+        /// Generates nonverbal behavior using an NVBG context selected for the specified language.
+        /// </summary>
+        public void GetNonverbalBehavior(string characterName, string text, string languageTag, INonverbalGeneratorSystem.NonverbalBehaviorResult resultCallback) =>
+            StartCoroutine(Coroutine(characterName, text, languageTag, resultCallback));
+
+        /// <summary>
+        /// Starts preparing the NVBG context for the specified language route in the background.
+        /// </summary>
+        public void PrepareLanguageContext(string characterName, string languageTag)
+        {
+            string resolvedCharacterName = string.IsNullOrWhiteSpace(characterName) ? CharacterId : characterName;
+            NvbgLanguageRoute route = NvbgLanguageRouting.Resolve(languageTag);
+            Debug.Log($"[NVBG] PrepareLanguageContext character='{resolvedCharacterName}' requestedLanguage='{languageTag}' normalizedLanguage='{route.NormalizedLanguage}' mode='{route.Mode}'");
+            CreateCharacter(resolvedCharacterName, route);
+        }
 
         //public async Task SetPosture(string characterName, string posture)
 
@@ -208,7 +254,8 @@ namespace Ride
             // which resets all data to the original values.
             // To bypass this, create the Nvbg from scratch everytime we change postures
             IdlePostureId = posture;
-            CreateCharacter(characterName);
+            InvalidateCharacterContexts(characterName);
+            CreateCharacter(characterName, GetCurrentRoute(characterName));
 
             // original code
             //var character = characters[characterName];
@@ -222,12 +269,19 @@ namespace Ride
         /// <returns>Current posture ID string.</returns>
         public async Task<string> GetPosture(string characterName)
         {
-            var character = m_characters[characterName];
+            string contextKey = GetActiveContextKey(characterName);
+            if (string.IsNullOrEmpty(contextKey) || !m_contexts.TryGetValue(contextKey, out Nvbg character))
+            {
+                CreateCharacter(characterName, GetCurrentRoute(characterName));
+                contextKey = GetActiveContextKey(characterName);
+            }
+
+            character = m_contexts[contextKey];
             return await character.GetPostureIdAsync();
         }
 
         // main-thread helper to build the streams
-        private NvbgInitData BuildInitData()
+        private NvbgInitData BuildInitData(NvbgRulePack rulePack)
         {
             //var transformXslFilename = $"{Application.streamingAssetsPath}/nvbg/NVBG_transform.xsl";
             //var ruleXmlFilename = $"{Application.streamingAssetsPath}/nvbg/rule_input_ChrKevin.xml";
@@ -251,14 +305,13 @@ namespace Ride
             }
 
             string transformXsl = m_streams.Find(s => s.fileName == "NVBG_transform.xsl").textAsset.text;
-            string ruleXml      = m_streams.Find(s => s.fileName == "rule_input_ChrKevin.xml").textAsset.text;
-            string saliencyXml  = m_streams.Find(s => s.fileName == "saliency_map_init_kevin.xml").textAsset.text;
 
             return new NvbgInitData
             {
+                ProfileKey      = rulePack.ProfileKey,
                 TransformXsl    = transformXsl,
-                RuleXml         = ruleXml,
-                SaliencyMapXml  = saliencyXml,
+                RuleXml         = rulePack.RuleXml,
+                SaliencyMapXml  = rulePack.SaliencyMapXml,
                 Streams         = streams
             };
         }
@@ -293,46 +346,50 @@ namespace Ride
             return character;
         }
 
-        private IEnumerator WaitForCharacterInit(string characterName, Task<Nvbg> initTask)
+        private IEnumerator WaitForCharacterInit(string characterName, string contextKey, Task<Nvbg> initTask)
         {
             while (!initTask.IsCompleted)
                 yield return null;
 
-            m_characterInitTasks.Remove(characterName);
+            m_contextInitTasks.Remove(contextKey);
 
             if (initTask.IsFaulted)
             {
-                Debug.LogError($"NVBG initialization failed for {characterName}: {initTask.Exception}");
+                Debug.LogError($"NVBG initialization failed for {characterName} ({contextKey}): {initTask.Exception}");
                 yield break;
             }
 
-            m_characters[characterName] = initTask.Result;
+            m_contexts[contextKey] = initTask.Result;
+            m_activeContextKeysByCharacter[characterName] = contextKey;
             ProcessLoaded = true;
         }
 
         /// <summary>
         /// Coroutine that sends a request to the NVBG system and returns the XML result via callback.
         /// </summary>
-        private IEnumerator Coroutine(string characterName, string text, INonverbalGeneratorSystem.NonverbalBehaviorResult resultCallback)
+        private IEnumerator Coroutine(string characterName, string text, string languageTag, INonverbalGeneratorSystem.NonverbalBehaviorResult resultCallback)
         {
              text = text.Replace("&", " and ");
+            NvbgLanguageRoute route = NvbgLanguageRouting.Resolve(languageTag);
+            string contextKey = EnsureContext(characterName, route);
 
             // Ensure character exists / is initialized
-            if (!m_characters.TryGetValue(characterName, out Nvbg character))
+            if (!m_contexts.TryGetValue(contextKey, out Nvbg character))
             {
                 // If we haven't started init yet, start it now
-                if (!m_characterInitTasks.TryGetValue(characterName, out var initTask))
+                if (!m_contextInitTasks.TryGetValue(contextKey, out var initTask))
                 {
-                    CreateCharacter(characterName);
-                    m_characterInitTasks.TryGetValue(characterName, out initTask);
+                    contextKey = EnsureContext(characterName, route);
+                    m_contextInitTasks.TryGetValue(contextKey, out initTask);
                 }
 
                 // If still no task (e.g., WebGL synchronous path), re-check characters
                 if (initTask == null)
                 {
-                    if (!m_characters.TryGetValue(characterName, out character))
+                    if (!m_contexts.TryGetValue(contextKey, out character))
                     {
-                        Debug.LogError($"NVBG character '{characterName}' not created correctly.");
+                        Debug.LogError($"NVBG context '{contextKey}' for '{characterName}' not created correctly.");
+                        resultCallback?.Invoke(string.Empty);
                         yield break;
                     }
                 }
@@ -344,12 +401,14 @@ namespace Ride
 
                     if (initTask.IsFaulted)
                     {
-                        Debug.LogError($"NVBG initialization failed for {characterName}: {initTask.Exception}");
+                        Debug.LogError($"NVBG initialization failed for {characterName} ({contextKey}): {initTask.Exception}");
+                        resultCallback?.Invoke(string.Empty);
                         yield break;
                     }
 
                     character = initTask.Result;
-                    m_characters[characterName] = character;
+                    m_contexts[contextKey] = character;
+                    m_activeContextKeysByCharacter[characterName] = contextKey;
                 }
             }
 
@@ -375,6 +434,14 @@ namespace Ride
             if (!responseTask.IsCompleted)
             {
                 Debug.LogError("NVBG response timed out.");
+                resultCallback?.Invoke(string.Empty);
+                yield break;
+            }
+
+            if (responseTask.IsFaulted)
+            {
+                Debug.LogError($"NVBG response failed: {responseTask.Exception}");
+                resultCallback?.Invoke(string.Empty);
                 yield break;
             }
 
@@ -390,6 +457,151 @@ namespace Ride
             Debug.Log(BuildNvbgScheduleSummary(xmlText));
 
             resultCallback(xmlText);
+        }
+
+        private string EnsureContext(string characterName, NvbgLanguageRoute route)
+        {
+            CreateCharacter(characterName, route);
+            NvbgRulePack rulePack = ResolveRulePack(route);
+            string contextKey = BuildContextKey(characterName, route, rulePack.ProfileKey);
+            m_activeContextKeysByCharacter[characterName] = contextKey;
+            Debug.Log($"[NVBG] Using context character='{characterName}' language='{route.NormalizedLanguage}' mode='{route.Mode}' profile='{rulePack.ProfileKey}' contextKey='{contextKey}'");
+            return contextKey;
+        }
+
+        private NvbgLanguageRoute GetCurrentRoute(string characterName)
+        {
+            if (m_activeContextKeysByCharacter.TryGetValue(characterName, out string contextKey) && !string.IsNullOrWhiteSpace(contextKey))
+            {
+                string[] parts = contextKey.Split('|');
+                if (parts.Length >= 4 && Enum.TryParse(parts[2], ignoreCase: false, out NvbgLanguageMode mode))
+                    return new NvbgLanguageRoute(parts[3], parts[3], mode);
+            }
+
+            return NvbgLanguageRouting.Resolve(NvbgLanguageRouting.DefaultEnglishLanguage);
+        }
+
+        private static string BuildContextKey(string characterName, NvbgLanguageRoute route, string profileKey) =>
+            $"{characterName}|{profileKey}|{route.Mode}|{route.NormalizedLanguage}";
+
+        private string GetActiveContextKey(string characterName)
+        {
+            if (m_activeContextKeysByCharacter.TryGetValue(characterName, out string contextKey) && !string.IsNullOrWhiteSpace(contextKey))
+                return contextKey;
+
+            NvbgRulePack englishRulePack = ResolveRulePack(NvbgLanguageRouting.Resolve(NvbgLanguageRouting.DefaultEnglishLanguage));
+            return BuildContextKey(characterName, NvbgLanguageRouting.Resolve(NvbgLanguageRouting.DefaultEnglishLanguage), englishRulePack.ProfileKey);
+        }
+
+        private void InvalidateCharacterContexts(string characterName)
+        {
+            var contextKeys = new List<string>();
+            foreach (string key in m_contexts.Keys)
+            {
+                if (key.StartsWith(characterName + "|", StringComparison.Ordinal))
+                    contextKeys.Add(key);
+            }
+
+            foreach (string key in contextKeys)
+            {
+                m_contexts[key].Dispose();
+                m_contexts.Remove(key);
+            }
+
+            var taskKeys = new List<string>();
+            foreach (string key in m_contextInitTasks.Keys)
+            {
+                if (key.StartsWith(characterName + "|", StringComparison.Ordinal))
+                    taskKeys.Add(key);
+            }
+
+            foreach (string key in taskKeys)
+                m_contextInitTasks.Remove(key);
+
+            m_activeContextKeysByCharacter.Remove(characterName);
+        }
+
+        private NvbgRulePack ResolveRulePack(NvbgLanguageRoute route)
+        {
+            StreamInfo englishRuleStream = FindConfiguredRuleStream();
+            StreamInfo saliencyStream = FindConfiguredSaliencyStream();
+
+            string englishRuleXml = englishRuleStream?.textAsset?.text;
+            string saliencyXml = saliencyStream?.textAsset?.text;
+
+            if (string.IsNullOrWhiteSpace(englishRuleXml))
+                throw new InvalidOperationException("NVBG rule XML is not configured. Expected a rule_input_*.xml TextAsset in m_streams.");
+
+            if (string.IsNullOrWhiteSpace(saliencyXml))
+                throw new InvalidOperationException("NVBG saliency XML is not configured. Expected a saliency_map_*.xml TextAsset in m_streams.");
+
+            string profileKey = Path.GetFileNameWithoutExtension(englishRuleStream.fileName);
+
+            if (route.IsEnglish)
+            {
+                //Debug.Log($"[NVBG] Using curated English rule pack profile='{profileKey}' language='{route.NormalizedLanguage}'");
+                return new NvbgRulePack
+                {
+                    ProfileKey = profileKey,
+                    RuleXml = englishRuleXml,
+                    SaliencyMapXml = saliencyXml
+                };
+            }
+
+            string generatedRulePackPath = GetGeneratedRulePackPath(profileKey, route.NormalizedLanguage);
+            bool generatedRulePackExists = File.Exists(generatedRulePackPath);
+            if (generatedRulePackExists && !m_overwriteCachedGeneratedRulePacks)
+            {
+                Debug.Log($"[NVBG] Using cached fallback rule pack profile='{profileKey}' language='{route.NormalizedLanguage}' path='{generatedRulePackPath}'");
+                return new NvbgRulePack
+                {
+                    ProfileKey = profileKey,
+                    RuleXml = File.ReadAllText(generatedRulePackPath),
+                    SaliencyMapXml = saliencyXml
+                };
+            }
+
+            if (NvbgFallbackRulePackGenerator.TryGenerate(englishRuleXml, route.NormalizedLanguage, out string generatedRuleXml))
+            {
+                string generatedRulePackDirectory = Path.GetDirectoryName(generatedRulePackPath);
+                if (!string.IsNullOrWhiteSpace(generatedRulePackDirectory))
+                    Directory.CreateDirectory(generatedRulePackDirectory);
+
+                File.WriteAllText(generatedRulePackPath, generatedRuleXml);
+                Debug.Log($"[NVBG] {(generatedRulePackExists ? "Overwrote" : "Generated")} fallback rule pack profile='{profileKey}' language='{route.NormalizedLanguage}' path='{generatedRulePackPath}'");
+
+                return new NvbgRulePack
+                {
+                    ProfileKey = profileKey,
+                    RuleXml = generatedRuleXml,
+                    SaliencyMapXml = saliencyXml
+                };
+            }
+
+            if (m_missingFallbackWarnings.Add(generatedRulePackPath))
+                Debug.LogWarning($"NVBG fallback rule pack not found for language '{route.NormalizedLanguage}'. Falling back to curated English. Expected: {generatedRulePackPath}");
+
+            return new NvbgRulePack
+            {
+                ProfileKey = profileKey,
+                RuleXml = englishRuleXml,
+                SaliencyMapXml = saliencyXml
+            };
+        }
+
+        private static string GetGeneratedRulePackPath(string profileKey, string normalizedLanguage) =>
+            Path.Combine(Application.persistentDataPath, GeneratedRulePackDirectoryName, GeneratedRulePackSubdirectoryName, $"{profileKey}.{normalizedLanguage}.xml");
+
+        private StreamInfo FindConfiguredRuleStream()
+        {
+            StreamInfo configured = m_streams.Find(s => s.fileName.StartsWith("rule_input_", StringComparison.OrdinalIgnoreCase) && s.textAsset != null);
+            return configured ?? m_streams.Find(s => string.Equals(s.fileName, "rule_input_ChrKevin.xml", StringComparison.OrdinalIgnoreCase));
+        }
+
+        private StreamInfo FindConfiguredSaliencyStream()
+        {
+            StreamInfo configured = m_streams.Find(s => s.fileName.StartsWith("saliency_map_", StringComparison.OrdinalIgnoreCase) && s.textAsset != null);
+            return configured ?? m_streams.Find(s => string.Equals(s.fileName, "saliency_map_init_kevin.xml", StringComparison.OrdinalIgnoreCase));
         }
 
         /// <summary>

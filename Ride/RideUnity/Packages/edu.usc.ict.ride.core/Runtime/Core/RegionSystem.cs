@@ -234,7 +234,7 @@ namespace Ride
             yield return new WaitUntil(() => SystemReady());
 
             // Add the regions to the system
-            var regions = FindObjectsByType<UnityRegion>(FindObjectsSortMode.None);
+            var regions = RideUtils.FindObjectsByType<UnityRegion>();
             foreach (UnityRegion ur in regions)
                 ur.rideID = AddRegion(ur.m_points);
 

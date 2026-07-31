@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 
 namespace Ride.Terrain
 {
@@ -207,7 +207,7 @@ namespace Ride.Terrain
         /// </summary>
         /// <param name="lat">Latitude in decimal degrees.</param>
         /// <param name="lng">Longitude in decimal degrees.</param>
-        /// <param name="precision">Optional precision level (0–5) for placement accuracy. Higher values yield finer placement.</param>
+        /// <param name="precision">Optional precision level (0-5) for placement accuracy. Higher values yield finer placement.</param>
         /// <returns>The world-space position corresponding to the given latitude and longitude.</returns>
         RideVector3 ConvertToScenePosition(double lat, double lng, int precision = 0);
 
@@ -215,7 +215,7 @@ namespace Ride.Terrain
         /// Converts a scene/world position into a latitude/longitude coordinate.
         /// </summary>
         /// <param name="scenePosition">The world position to convert.</param>
-        /// <param name="precision">Optional precision level (0–5) to round the result.</param>
+        /// <param name="precision">Optional precision level (0-5) to round the result.</param>
         /// <param name="getCenter">If true, returns the lat/lng for the center of the terrain tile.</param>
         /// <returns>A tuple of (latitude, longitude) in decimal degrees.</returns>
         (double, double) ConvertToLatLng(RideVector3 scenePosition, int precision = 0, bool getCenter = false);

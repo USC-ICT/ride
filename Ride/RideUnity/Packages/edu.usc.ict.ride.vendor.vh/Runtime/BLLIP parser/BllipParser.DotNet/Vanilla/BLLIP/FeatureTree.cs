@@ -314,7 +314,7 @@ namespace BllipParser.DotNet.Vanilla
             {
                 if (cfeats == 1)
                 {
-                    feats = null; // ensure we don’t keep an object around
+                    feats = null; // ensure we don't keep an object around
                 }
                 else  // cfeats > 1
                 {

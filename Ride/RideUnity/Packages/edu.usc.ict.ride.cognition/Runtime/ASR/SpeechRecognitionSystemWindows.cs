@@ -155,7 +155,7 @@ namespace Ride.SpeechRecognition
             m_dictationRecognizer?.Stop();
         }
 
-        /// <summary>Indicates if Unity’s phrase recognition system is supported on this machine.</summary>
+        /// <summary>Indicates if Unity's phrase recognition system is supported on this machine.</summary>
         public bool PhraseRecognitionSystemIsSupported =>
             VHUtils.IsWindows10OrGreater() && UnityEngine.Windows.Speech.PhraseRecognitionSystem.isSupported;
 

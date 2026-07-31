@@ -47,7 +47,7 @@ public class DebugOnScreenLog : DebugLogger
         ContentSizeFitter fitter = m_layout.gameObject.AddComponent<ContentSizeFitter>();
         fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
-        LogCallbackHandler handler = GameObject.FindFirstObjectByType<LogCallbackHandler>();
+        LogCallbackHandler handler = GameObject.FindAnyObjectByType<LogCallbackHandler>();
         if (handler)
             handler.AddCallback(LogCallback);
         else

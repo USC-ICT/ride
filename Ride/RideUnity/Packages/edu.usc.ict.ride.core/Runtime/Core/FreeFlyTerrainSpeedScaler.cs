@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 
 namespace Ride
 {
@@ -98,7 +98,7 @@ namespace Ride
         /// <param name="t">The normalized interpolation value (0 to 1).</param>
         /// <returns>The eased value between <paramref name="from"/> and <paramref name="to"/>.</returns>
         /// <remarks>
-        /// Formula: <c>result = (to - from) * t³ + from</c>
+        /// Formula: <c>result = (to - from) * t^3 + from</c>
         /// </remarks>
         static float CubicEase(float from, float to, float t)
         {

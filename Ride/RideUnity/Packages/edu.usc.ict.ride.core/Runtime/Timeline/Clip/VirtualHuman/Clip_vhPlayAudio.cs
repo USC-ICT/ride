@@ -27,7 +27,7 @@ namespace Ride.Timeline
                 string facefxCurveInfo = m_lipSyncInfo.text;
                 AudioSpeechFile utterance = AudioSpeechFile.CreateAudioSpeechFile(facefxCurveInfo, string.Empty, m_audioClip);
 
-                RideTimelineManager manager = FindFirstObjectByType<RideTimelineManager>();
+                RideTimelineManager manager = FindAnyObjectByType<RideTimelineManager>();
                 var character = manager.GetCharacter(m_characterName);
 
                 character.PlayAudio(utterance);

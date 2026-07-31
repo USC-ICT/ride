@@ -368,6 +368,7 @@ GameObject:
   m_Component:
   - component: {fileID: 478945688}
   - component: {fileID: 478945687}
+  - component: {fileID: 478945689}
   m_Layer: 0
   m_Name: Directional Light
   m_TagString: Untagged
@@ -383,14 +384,14 @@ Light:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 478945686}
   m_Enabled: 1
-  serializedVersion: 11
+  serializedVersion: 13
   m_Type: 1
   m_Color: {r: 1, g: 0.95686275, b: 0.8392157, a: 1}
   m_Intensity: 1
   m_Range: 10
   m_SpotAngle: 30
   m_InnerSpotAngle: 21.80208
-  m_CookieSize: 10
+  m_CookieSize2D: {x: 10, y: 10}
   m_Shadows:
     m_Type: 2
     m_Resolution: -1
@@ -435,7 +436,7 @@ Light:
   m_UseBoundingSphereOverride: 0
   m_UseViewFrustumForShadowCasterCull: 1
   m_ForceVisible: 0
-  m_ShadowRadius: 0
+  m_ShapeRadius: 0
   m_ShadowAngle: 0
   m_LightUnit: 1
   m_LuxAtDistance: 1
@@ -455,6 +456,35 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 50, y: -30, z: 0}
+--- !u!114 &478945689
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 478945686}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 474bcb49853aa07438625e644c072ee6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalLightData
+  m_UsePipelineSettings: 1
+  m_AdditionalLightsShadowResolutionTier: 2
+  m_CustomShadowLayers: 0
+  m_LightCookieSize: {x: 1, y: 1}
+  m_LightCookieOffset: {x: 0, y: 0}
+  m_SoftShadowQuality: 0
+  m_RenderingLayersMask:
+    serializedVersion: 0
+    m_Bits: 1
+  m_ShadowRenderingLayersMask:
+    serializedVersion: 0
+    m_Bits: 1
+  m_Version: 4
+  m_LightLayerMask: 1
+  m_ShadowLayerMask: 1
+  m_RenderingLayers: 1
+  m_ShadowRenderingLayers: 1
 --- !u!1 &492897652
 GameObject:
   m_ObjectHideFlags: 0
@@ -530,6 +560,8 @@ MeshRenderer:
   m_RayTracingAccelStructBuildFlagsOverride: 0
   m_RayTracingAccelStructBuildFlags: 1
   m_SmallMeshCulling: 1
+  m_ForceMeshLod: -1
+  m_MeshLodSelectionBias: 0
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
@@ -551,9 +583,11 @@ MeshRenderer:
   m_AutoUVMaxDistance: 0.5
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
+  m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
+  m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
 --- !u!33 &492897656
 MeshFilter:
@@ -892,11 +926,46 @@ PrefabInstance:
       propertyPath: m_addressableInfos.Array.data[0].filePrefixPath
       value: Test/addressable-test/RIDE/6000.0.27f1/Built-in/StandaloneWindows64
       objectReference: {fileID: 0}
+    - target: {fileID: 1461527716608828929, guid: ec8dafeb11b0e614d887c5c050e1542f,
+        type: 3}
+      propertyPath: m_IsActive
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 2578609142145978574, guid: ec8dafeb11b0e614d887c5c050e1542f,
         type: 3}
       propertyPath: m_Name
       value: RideSystemsCore
       objectReference: {fileID: 0}
+    - target: {fileID: 6306399991063432295, guid: ec8dafeb11b0e614d887c5c050e1542f,
+        type: 3}
+      propertyPath: m_IsActive
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 6917804048181049586, guid: ec8dafeb11b0e614d887c5c050e1542f,
+        type: 3}
+      propertyPath: m_loggersToLoad.Array.size
+      value: 5
+      objectReference: {fileID: 0}
+    - target: {fileID: 6917804048181049586, guid: ec8dafeb11b0e614d887c5c050e1542f,
+        type: 3}
+      propertyPath: 'm_loggersToLoad.Array.data[1]'
+      value: 
+      objectReference: {fileID: 957974384}
+    - target: {fileID: 6917804048181049586, guid: ec8dafeb11b0e614d887c5c050e1542f,
+        type: 3}
+      propertyPath: 'm_loggersToLoad.Array.data[2]'
+      value: 
+      objectReference: {fileID: 957974382}
+    - target: {fileID: 6917804048181049586, guid: ec8dafeb11b0e614d887c5c050e1542f,
+        type: 3}
+      propertyPath: 'm_loggersToLoad.Array.data[3]'
+      value: 
+      objectReference: {fileID: 957974383}
+    - target: {fileID: 6917804048181049586, guid: ec8dafeb11b0e614d887c5c050e1542f,
+        type: 3}
+      propertyPath: 'm_loggersToLoad.Array.data[4]'
+      value: 
+      objectReference: {fileID: 957974381}
     - target: {fileID: 7469554344096456899, guid: ec8dafeb11b0e614d887c5c050e1542f,
         type: 3}
       propertyPath: m_LocalPosition.x
@@ -947,6 +1016,11 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 7534526491838199367, guid: ec8dafeb11b0e614d887c5c050e1542f,
+        type: 3}
+      propertyPath: m_IsActive
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 8733232261636766170, guid: ec8dafeb11b0e614d887c5c050e1542f,
         type: 3}
       propertyPath: m_verboseLogging
@@ -977,11 +1051,64 @@ PrefabInstance:
       propertyPath: m_catalogsToLoad.Array.data[3].catalogJsonFile
       value: 
       objectReference: {fileID: 4900000, guid: 1ce9b44cc407b8445ae089318a6692f6, type: 3}
+    - target: {fileID: 8898141820308611894, guid: ec8dafeb11b0e614d887c5c050e1542f,
+        type: 3}
+      propertyPath: m_IsActive
+      value: 1
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: ec8dafeb11b0e614d887c5c050e1542f, type: 3}
+--- !u!114 &957974381 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 2861965274795863880, guid: ec8dafeb11b0e614d887c5c050e1542f,
+    type: 3}
+  m_PrefabInstance: {fileID: 957974380}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4a640c97fbdb2c649b77bb61b48c34ca, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: USC-ICT.Ride.Core::Ride.LoggerUnityHttp
+--- !u!114 &957974382 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 5998403679799374251, guid: ec8dafeb11b0e614d887c5c050e1542f,
+    type: 3}
+  m_PrefabInstance: {fileID: 957974380}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9052eadaf423315409bdfa87cb042ce8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: USC-ICT.Ride.Core::Ride.LoggerUnityFileCsv
+--- !u!114 &957974383 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 5157490164572885464, guid: ec8dafeb11b0e614d887c5c050e1542f,
+    type: 3}
+  m_PrefabInstance: {fileID: 957974380}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 926a779b01b993349b003c3649eb7b42, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: USC-ICT.Ride.Core::Ride.LoggerUnityFileJsonl
+--- !u!114 &957974384 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 1454673998758850285, guid: ec8dafeb11b0e614d887c5c050e1542f,
+    type: 3}
+  m_PrefabInstance: {fileID: 957974380}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ee8c9ff58a68b2a498df811fc2374215, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: USC-ICT.Ride.Core::Ride.LoggerUnityFile
 --- !u!1 &985445948
 GameObject:
   m_ObjectHideFlags: 0
@@ -1124,6 +1251,12 @@ MonoBehaviour:
   assetNameToLoad: 
   labelsToLoad:
   - SampleCube
+  m_loadOnStart: 0
+  m_placeholderObject: {fileID: 0}
+  m_onAssetLoaded:
+    m_PersistentCalls:
+      m_Calls: []
+  m_logProgress: 1
 --- !u!1 &1198520342
 GameObject:
   m_ObjectHideFlags: 0
@@ -1341,6 +1474,8 @@ MeshRenderer:
   m_RayTracingAccelStructBuildFlagsOverride: 0
   m_RayTracingAccelStructBuildFlags: 1
   m_SmallMeshCulling: 1
+  m_ForceMeshLod: -1
+  m_MeshLodSelectionBias: 0
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
@@ -1362,9 +1497,11 @@ MeshRenderer:
   m_AutoUVMaxDistance: 0.5
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
+  m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
+  m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
 --- !u!33 &1747477702
 MeshFilter:
@@ -1385,7 +1522,7 @@ GameObject:
   - component: {fileID: 1756022708}
   - component: {fileID: 1756022709}
   m_Layer: 0
-  m_Name: SamplesCoreApplicationLogMessageSystem
+  m_Name: SamplesCoreUnityLogBridgeSystem
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1642,7 +1779,7 @@ Transform:
   m_LocalEulerAnglesHint: {x: -90, y: 0, z: 0}
 --- !u!199 &1960199163
 ParticleSystemRenderer:
-  serializedVersion: 6
+  serializedVersion: 7
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
@@ -1661,6 +1798,8 @@ ParticleSystemRenderer:
   m_RayTracingAccelStructBuildFlagsOverride: 0
   m_RayTracingAccelStructBuildFlags: 1
   m_SmallMeshCulling: 1
+  m_ForceMeshLod: -1
+  m_MeshLodSelectionBias: 0
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
@@ -1682,9 +1821,11 @@ ParticleSystemRenderer:
   m_AutoUVMaxDistance: 0.5
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
+  m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
+  m_MaskInteraction: 0
   m_RenderMode: 0
   m_MeshDistribution: 0
   m_SortMode: 0
@@ -1716,7 +1857,6 @@ ParticleSystemRenderer:
   m_MeshWeighting1: 1
   m_MeshWeighting2: 1
   m_MeshWeighting3: 1
-  m_MaskInteraction: 0
 --- !u!198 &1960199164
 ParticleSystem:
   m_ObjectHideFlags: 0
@@ -6488,6 +6628,12 @@ MonoBehaviour:
   assetNameToLoad: 
   labelsToLoad:
   - SampleSphere
+  m_loadOnStart: 0
+  m_placeholderObject: {fileID: 0}
+  m_onAssetLoaded:
+    m_PersistentCalls:
+      m_Calls: []
+  m_logProgress: 1
 --- !u!1 &2021207876
 GameObject:
   m_ObjectHideFlags: 0
@@ -6532,6 +6678,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e476deac94de844479f37b1976f9e656, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  m_fileLogger: {fileID: 957974384}
+  m_jsonlLogger: {fileID: 957974383}
+  m_csvLogger: {fileID: 957974382}
+  m_httpLogger: {fileID: 957974381}
 --- !u!1 &2082482457
 GameObject:
   m_ObjectHideFlags: 0
@@ -6566,7 +6716,7 @@ MonoBehaviour:
   m_configurationSystem: {fileID: 2083781883}
   m_resourceLoader: {fileID: 749754952}
   m_logSystem: {fileID: 2021207878}
-  m_applicationLogMessage: {fileID: 1756022709}
+  m_unityLogBridgeSystem: {fileID: 1756022709}
   m_framesPerSecondCounter: {fileID: 853555342}
   m_debugOnScreenLog: {fileID: 149290551}
   m_audioSystem: {fileID: 904511718}
@@ -6750,6 +6900,12 @@ MonoBehaviour:
   assetNameToLoad: 
   labelsToLoad:
   - SampleSphere
+  m_loadOnStart: 0
+  m_placeholderObject: {fileID: 0}
+  m_onAssetLoaded:
+    m_PersistentCalls:
+      m_Calls: []
+  m_logProgress: 1
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

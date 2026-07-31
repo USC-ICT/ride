@@ -36,6 +36,18 @@ namespace Ride
         bool ReceiveEngineLogMessages { get; set; }
 
         /// <summary>
+        /// Called once by <see cref="LogSystemUnity"/> when this logger is registered.
+        /// Both values are fixed for the lifetime of the session and reset on each Play in the editor.
+        /// </summary>
+        void SetSessionId(string sessionId, string sessionStartUtc);
+
+        /// <summary>
+        /// Logs a fully structured Ride log entry.
+        /// </summary>
+        /// <param name="entry">The entry to write.</param>
+        void Log(LogEntry entry);
+
+        /// <summary>
         /// Logs a message at the default severity level. Accepts any object,
         /// which will be logged using its <c>ToString()</c> representation.
         /// </summary>

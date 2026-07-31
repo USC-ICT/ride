@@ -162,7 +162,7 @@ namespace Ride.UI
             {
                 cnv = transform.GetComponentInChildren<Canvas>();
                 if (cnv == null)
-                    cnv = FindFirstObjectByType<Canvas>();
+                    cnv = FindAnyObjectByType<Canvas>();
 
                 if (cnv == null)
                 {

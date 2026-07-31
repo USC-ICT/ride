@@ -11,7 +11,7 @@ namespace Ride.Samples
         public SamplesCoreConfigurationSystemUnity m_configurationSystem;
         public SamplesCoreResourceLoaderSystem m_resourceLoader;
         public SamplesCoreLogSystemUnity m_logSystem;
-        public SamplesCoreApplicationLogMessageSystem m_applicationLogMessage;
+        public SamplesCoreUnityLogBridgeSystem m_unityLogBridgeSystem;
         public SamplesCoreFramesPerSecondCounter m_framesPerSecondCounter;
         public SamplesCoreDebugOnScreenLogVHAssets m_debugOnScreenLog;
         public SamplesCoreAudioSystemUnity m_audioSystem;
@@ -37,7 +37,7 @@ namespace Ride.Samples
             m_debugMenu.InsertMenu( 3, "Configuration", m_configurationSystem.OnGUIConfiguration);
             m_debugMenu.InsertMenu( 4, "ResourceLoader", m_resourceLoader.OnGUIResourceLoader);
             m_debugMenu.InsertMenu( 5, "Log", m_logSystem.OnGUILogSystem);
-            m_debugMenu.InsertMenu( 6, "ApplicationLog", m_applicationLogMessage.OnGUIApplicationLogMessage);
+            m_debugMenu.InsertMenu( 6, "UnityLogBridge", m_unityLogBridgeSystem.OnGUIUnityLogBridge);
             m_debugMenu.InsertMenu( 7, "FramePerSecond", m_framesPerSecondCounter.OnGUIFramesPerSecond);
             m_debugMenu.InsertMenu( 8, "DebugOnScreenLog", m_debugOnScreenLog.OnGUIDebugOnScreenLog);
             m_debugMenu.InsertMenu( 9, "AudioSystem", m_audioSystem.OnGUIAudioSystem);

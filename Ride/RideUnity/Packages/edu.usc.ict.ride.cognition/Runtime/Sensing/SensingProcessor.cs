@@ -44,11 +44,14 @@ namespace Ride.Sensing
 
         bool m_processing;
         byte[] m_imageData;
+        SensingFrameResponse m_frameResponse;
 
         ISensingEmotionSystem m_sensingEmotionSystem;
         ISensingHeadSystem m_sensingHeadSystem;
         ISensingCharacteristicsSystem m_sensingCharacteristicsSystem;
+        ISensingFrameSystem m_sensingFrameSystem;
 
+        public event Action onFrameProcessed;
         public event Action onEmotionProcessed;
         public event Action onHeadProcessed;
         public event Action onChaaracteristicsProcessed;
@@ -56,6 +59,12 @@ namespace Ride.Sensing
         public Material RenderMaterial => webCam.renderMaterial;
 
         public bool IsProcessing { get { return m_processing; } }
+
+        public SensingFrameResponse frameResponse
+        {
+            get => m_frameResponse;
+            private set => m_frameResponse = value;
+        }
 
         /// <summary>
         /// Assigns a single system that implements all sensing interfaces:
@@ -65,6 +74,10 @@ namespace Ride.Sensing
             m_sensingEmotionSystem = sensingEmotionSystem;
             m_sensingCharacteristicsSystem = sensingCharacteristicsSystem;
             m_sensingHeadSystem = sensingHeadSystem;
+            m_sensingFrameSystem = sensingEmotionSystem as ISensingFrameSystem
+                ?? sensingHeadSystem as ISensingFrameSystem
+                ?? sensingCharacteristicsSystem as ISensingFrameSystem;
+            ClearResponses();
         }
 
         /// <summary>
@@ -72,9 +85,11 @@ namespace Ride.Sensing
         /// </summary>
         public void SetSensingSystems(ISensingSystem sensingSystem)
         {
+            m_sensingFrameSystem = sensingSystem as ISensingFrameSystem;
             m_sensingEmotionSystem = sensingSystem as ISensingEmotionSystem;
             m_sensingCharacteristicsSystem = sensingSystem as ISensingCharacteristicsSystem;
             m_sensingHeadSystem = sensingSystem as ISensingHeadSystem;
+            ClearResponses();
         }
 
         /// <summary>
@@ -119,9 +134,66 @@ namespace Ride.Sensing
         public void ProcessSingleScreenshot(bool saveToDisk = true)
         {
             CaptureScreenshot(saveToDisk);
+
+            if (m_sensingFrameSystem != null)
+            {
+                m_sensingFrameSystem.AnalyzeFrame(m_imageData, OnCompleteFrame);
+                return;
+            }
+
             if (processSetting.HasFlag(ProcessSetting.HEAD)) m_sensingHeadSystem?.AnalyzeHead(m_imageData, OnCompleteHead);
             if (processSetting.HasFlag(ProcessSetting.EMOTION)) m_sensingEmotionSystem?.AnalyzeEmotions(m_imageData, OnCompleteEmotion);
             if (processSetting.HasFlag(ProcessSetting.CHARACTERISTICS)) m_sensingCharacteristicsSystem?.AnalyzeCharacteristics(m_imageData, OnCompleteCharacteristics);
+        }
+
+        /// <summary>
+        /// Called when a provider-neutral frame analysis completes.
+        /// </summary>
+        /// <param name="response">The response containing all provider-supported frame data.</param>
+        void OnCompleteFrame(SensingFrameResponse response)
+        {
+            if (response == null)
+                return;
+
+            frameResponse = response;
+            headResponse = null;
+            emotionResponse = null;
+            characteristicsResponse = null;
+            emotion = "None";
+
+            var face = response.PrimaryFace;
+            if (face == null || !face.hasFace)
+            {
+                onFrameProcessed?.Invoke();
+                return;
+            }
+
+            if (processSetting.HasFlag(ProcessSetting.HEAD)
+                && (SensingFrameConversions.HasCapability(response, SensingCapability.HeadPose)
+                    || SensingFrameConversions.HasCapability(response, SensingCapability.FaceLandmarks)
+                    || SensingFrameConversions.HasCapability(response, SensingCapability.FaceBounds)))
+            {
+                headResponse = SensingFrameConversions.ToHeadResponse(response, face);
+                onHeadProcessed?.Invoke();
+            }
+
+            if (processSetting.HasFlag(ProcessSetting.EMOTION)
+                && SensingFrameConversions.HasCapability(response, SensingCapability.Emotions))
+            {
+                emotionResponse = SensingFrameConversions.ToEmotionResponse(response, face);
+                UpdateEmotion();
+                onEmotionProcessed?.Invoke();
+            }
+
+            if (processSetting.HasFlag(ProcessSetting.CHARACTERISTICS)
+                && SensingFrameConversions.HasCapability(response, SensingCapability.Characteristics)
+                && face.characteristics != null)
+            {
+                characteristicsResponse = face.characteristics;
+                onChaaracteristicsProcessed?.Invoke();
+            }
+
+            onFrameProcessed?.Invoke();
         }
 
         /// <summary>
@@ -153,6 +225,15 @@ namespace Ride.Sensing
         {
             characteristicsResponse = (SensingCharacteristicsResponse)response;
             onChaaracteristicsProcessed?.Invoke();
+        }
+
+        void ClearResponses()
+        {
+            frameResponse = null;
+            emotionResponse = null;
+            headResponse = null;
+            characteristicsResponse = null;
+            emotion = "None";
         }
 
         /// <summary>

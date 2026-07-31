@@ -12,6 +12,7 @@ namespace Ride
         private string m_accessKey = "";
         private string m_secretKey = "";
         private string m_region = "us-west-2";
+        private string m_s3BucketPrefix = "s3://dummy-bucket/addressables";
         private string m_statusMessage = "";
         
         [MenuItem("Ride/Addressables/Build and Sync")]
@@ -31,6 +32,7 @@ namespace Ride
             m_accessKey = EditorGUILayout.TextField("Access Key", m_accessKey);
             m_secretKey = EditorGUILayout.PasswordField("Secret Key", m_secretKey);
             m_region = EditorGUILayout.TextField("Region", m_region);
+            m_s3BucketPrefix = EditorGUILayout.TextField("S3 Prefix", m_s3BucketPrefix);
 
             GUI.enabled = !string.IsNullOrEmpty(m_accessKey) && !string.IsNullOrEmpty(m_secretKey);
             if (GUILayout.Button("Sync Addressables to S3"))
@@ -57,7 +59,7 @@ namespace Ride
                 UnityEngine.Debug.Log("Building Addressables...");
                 AddressableAssetSettings.BuildPlayerContent();
 
-                AddressableSystem system = FindFirstObjectByType<AddressableSystem>();
+                AddressableSystem system = FindAnyObjectByType<AddressableSystem>();
                 if (system != null)
                 {
                     UnityEngine.Debug.Log("RideAddressableSystem: Refreshing asset labels after build.");
@@ -110,7 +112,7 @@ namespace Ride
                 }
 
                 string buildPath = Path.Combine(UnityEngine.Application.persistentDataPath, "Addressables", addressableBuildPath);
-                string s3Bucket = $"s3://ride-owt/Test/addressable-test/{addressableBuildPath.Replace("\\", "/")}/";
+                string s3Bucket = $"{m_s3BucketPrefix}/{addressableBuildPath.Replace("\\", "/")}/";
                 string awsCli = "aws";
                 string syncCommand = $"s3 sync \"{buildPath}\" \"{s3Bucket}\" --delete";
                 UnityEngine.Debug.Log($"Syncing Addressables from {buildPath} to {s3Bucket}");

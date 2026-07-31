@@ -252,7 +252,7 @@ namespace Ride.Samples
 
         private float ComputeNeutralAmountFromVisemes()
         {
-            // Assumption: we treat all viseme weights as sharing the 0–1 budget,
+            // Assumption: we treat all viseme weights as sharing the 0-1 budget,
             // so neutral = 1 - sum(visemeValues), clamped to [0,1].
             float total = 0f;
 

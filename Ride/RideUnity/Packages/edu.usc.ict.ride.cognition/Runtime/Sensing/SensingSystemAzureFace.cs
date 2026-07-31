@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Net.Http;
@@ -9,7 +9,7 @@ namespace Ride.Sensing
 {
     /// <summary>
     /// Microsoft Azure Face-based implementation of <see cref="SensingSystemUnity"/>.
-    /// Supports emotion, head pose, and facial characteristic analysis using Azure’s REST API.
+    /// Supports emotion, head pose, and facial characteristic analysis using Azure's REST API.
     /// </summary>
     public class SensingSystemAzureFace : SensingSystemUnity
     {

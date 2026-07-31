@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
@@ -49,7 +49,7 @@ namespace Ride.Audio
 
         public void FindAllAudioSources()
         {
-            AudioSource[] sources = GameObject.FindObjectsByType<AudioSource>(FindObjectsSortMode.None);
+            AudioSource[] sources = RideUtils.FindObjectsByType<AudioSource>();
             for (int i = 0; i < sources.Length; i++)
             {
                 RideAudioSource source = m_sources.Values.FirstOrDefault(s => s.source == sources[i]);
@@ -184,20 +184,38 @@ namespace Ride.Audio
                 yield break;
             }
 
-            var audioType = AudioType.WAV;
-            string extension = Path.GetExtension(pathOrUrl).ToLowerInvariant();
-            switch (extension)
+            if (TryGetAudioDataUriAudioType(pathOrUrl, out AudioType dataUriAudioType))
             {
-                case ".mp3": audioType = AudioType.MPEG; break;
-                case ".ogg": audioType = AudioType.OGGVORBIS; break;
-                case ".wav": audioType = AudioType.WAV; break;
+                if (dataUriAudioType == AudioType.WAV)
+                {
+                    onComplete?.Invoke(LoadWavDataUri(pathOrUrl));
+                    yield break;
+                }
+
+                using (var dataUriRequest = UnityWebRequestMultimedia.GetAudioClip(pathOrUrl, dataUriAudioType))
+                {
+                    yield return dataUriRequest.SendWebRequest();
+
+                    if (dataUriRequest.result != UnityWebRequest.Result.Success)
+                    {
+                        Debug.LogError($"Failed to load audio data URI: {dataUriRequest.error}");
+                        onComplete?.Invoke(null);
+                        yield break;
+                    }
+
+                    onComplete?.Invoke(DownloadHandlerAudioClip.GetContent(dataUriRequest));
+                    yield break;
+                }
             }
 
+            var audioType = GetAudioTypeFromPath(pathOrUrl);
             string finalUrl;
 
-            if (pathOrUrl.StartsWith("http://") || pathOrUrl.StartsWith("https://"))
+            if (pathOrUrl.StartsWith("http://") ||
+                pathOrUrl.StartsWith("https://") ||
+                pathOrUrl.StartsWith("blob:", StringComparison.OrdinalIgnoreCase))
             {
-                finalUrl = pathOrUrl;  // Remote URL
+                finalUrl = pathOrUrl;  // Remote or browser-managed URL
             }
             else
             {
@@ -216,7 +234,12 @@ namespace Ride.Audio
                         : "file://" + normalizedPath;
             }
 
-            using (var www = UnityWebRequestMultimedia.GetAudioClip(finalUrl, audioType))
+            var downloadHandler = new DownloadHandlerAudioClip(finalUrl, audioType)
+            {
+                compressed = true
+            };
+
+            using (var www = new UnityWebRequest(finalUrl, UnityWebRequest.kHttpVerbGET, downloadHandler, null))
             {
                 yield return www.SendWebRequest();
 
@@ -230,6 +253,123 @@ namespace Ride.Audio
                 var clip = DownloadHandlerAudioClip.GetContent(www);
                 onComplete?.Invoke(clip);
             }
+        }
+
+        private static AudioType GetAudioTypeFromPath(string pathOrUrl)
+        {
+            string extension = Path.GetExtension(pathOrUrl).ToLowerInvariant();
+            switch (extension)
+            {
+                case ".mp3": return AudioType.MPEG;
+                case ".ogg": return AudioType.OGGVORBIS;
+                case ".wav": return AudioType.WAV;
+                default: return AudioType.WAV;
+            }
+        }
+
+        private static bool TryGetAudioDataUriAudioType(string pathOrUrl, out AudioType audioType)
+        {
+            const string dataUriPrefix = "data:audio/";
+            const string base64Marker = ";base64,";
+
+            audioType = AudioType.UNKNOWN;
+
+            if (string.IsNullOrEmpty(pathOrUrl) ||
+                !pathOrUrl.StartsWith(dataUriPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            int mimeStart = dataUriPrefix.Length;
+            int mimeEnd = pathOrUrl.IndexOf(base64Marker, mimeStart, StringComparison.OrdinalIgnoreCase);
+            if (mimeEnd < 0)
+            {
+                return false;
+            }
+
+            string mimeSubtype = pathOrUrl.Substring(mimeStart, mimeEnd - mimeStart);
+            switch (mimeSubtype.ToLowerInvariant())
+            {
+                case "wav":
+                case "x-wav":
+                case "wave":
+                    audioType = AudioType.WAV;
+                    return true;
+                case "mpeg":
+                case "mp3":
+                    audioType = AudioType.MPEG;
+                    return true;
+                case "ogg":
+                case "oggvorbis":
+                    audioType = AudioType.OGGVORBIS;
+                    return true;
+                default:
+                    Debug.LogError($"Unsupported audio data URI type: {mimeSubtype}");
+                    return false;
+            }
+        }
+
+        private static AudioClip LoadWavDataUri(string dataUri)
+        {
+            try
+            {
+                const string prefix = "data:audio/wav;base64,";
+                byte[] wavBytes = Convert.FromBase64String(dataUri.Substring(prefix.Length));
+                return CreatePcm16WavAudioClip(wavBytes, "DataUriWav");
+            }
+            catch (Exception exception)
+            {
+                Debug.LogError($"Failed to load WAV data URI: {exception.Message}");
+                return null;
+            }
+        }
+
+        private static AudioClip CreatePcm16WavAudioClip(byte[] wavBytes, string clipName)
+        {
+            if (wavBytes == null || wavBytes.Length < 44)
+                throw new InvalidDataException("WAV data is too short.");
+
+            int channels = BitConverter.ToInt16(wavBytes, 22);
+            int sampleRate = BitConverter.ToInt32(wavBytes, 24);
+            short bitsPerSample = BitConverter.ToInt16(wavBytes, 34);
+
+            if (channels <= 0 || sampleRate <= 0 || bitsPerSample != 16)
+                throw new InvalidDataException($"Unsupported WAV format. channels={channels}, sampleRate={sampleRate}, bitsPerSample={bitsPerSample}");
+
+            int dataOffset = FindWavDataChunkOffset(wavBytes, out int dataSize);
+            int sampleCount = dataSize / 2;
+            float[] samples = new float[sampleCount];
+
+            for (int i = 0; i < sampleCount; i++)
+            {
+                short sample = BitConverter.ToInt16(wavBytes, dataOffset + i * 2);
+                samples[i] = sample / 32768f;
+            }
+
+            AudioClip clip = AudioClip.Create(clipName, sampleCount / channels, channels, sampleRate, false);
+            clip.SetData(samples, 0);
+            return clip;
+        }
+
+        private static int FindWavDataChunkOffset(byte[] wavBytes, out int dataSize)
+        {
+            int offset = 12;
+            while (offset + 8 <= wavBytes.Length)
+            {
+                string chunkId = System.Text.Encoding.ASCII.GetString(wavBytes, offset, 4);
+                int chunkSize = BitConverter.ToInt32(wavBytes, offset + 4);
+                int dataOffset = offset + 8;
+
+                if (string.Equals(chunkId, "data", StringComparison.Ordinal))
+                {
+                    dataSize = Math.Min(chunkSize, wavBytes.Length - dataOffset);
+                    return dataOffset;
+                }
+
+                offset = dataOffset + chunkSize + (chunkSize % 2);
+            }
+
+            throw new InvalidDataException("WAV data chunk was not found.");
         }
     }
 }

@@ -98,7 +98,7 @@ namespace Ride.TextToSpeech
             StartTextToSpeechGeneration(voice, text);
             StartLipsyncGeneration(voice, text);
 
-            StartCoroutine(WaitForLipsyncedTextToSpeech(resultCallback));
+            StartCoroutine(WaitForLipsyncedTextToSpeech(resultCallback, GetGenerationTimeoutSeconds(text)));
         }
 
         /// <inheritdoc/>
@@ -953,10 +953,10 @@ namespace Ride.TextToSpeech
         /// Coroutine that waits for both TTS and lipsync to complete before invoking the result callback.
         /// </summary>
         /// <param name="resultCallback">Callback with lipsync XML and audio file path.< see cref = "LipsyncedTextToSpeechResult" /></param>
-        IEnumerator WaitForLipsyncedTextToSpeech(LipsyncedTextToSpeechResult resultCallback)
+        IEnumerator WaitForLipsyncedTextToSpeech(LipsyncedTextToSpeechResult resultCallback, float timeoutSeconds)
         {
             float timer = 0;
-            while ((lipsyncProcessing || textToSpeechProcessing) && timer < timeout)
+            while ((lipsyncProcessing || textToSpeechProcessing) && timer < timeoutSeconds)
             {
                 timer += Time.deltaTime;
                 yield return null;

@@ -1,13 +1,12 @@
-using System;
 using System.Collections;
 using UnityEngine;
 
 namespace Ride.Samples
 {
-    public class SamplesCoreApplicationLogMessageSystem : RideMonoBehaviour
+    public class SamplesCoreUnityLogBridgeSystem : RideMonoBehaviour
     {
         DebugMenu m_debugMenu;
-        ApplicationLogMessageSystem m_applicationLogMessage;
+        UnityLogBridgeSystem m_unityLogBridgeSystem;
         string m_receivedMessage;
 
         protected override void Start()
@@ -15,12 +14,12 @@ namespace Ride.Samples
             base.Start();
 
             m_debugMenu = Globals.api.GetSystem<DebugMenu>();
-            m_applicationLogMessage = Globals.api.GetSystem<ApplicationLogMessageSystem>();
+            m_unityLogBridgeSystem = Globals.api.GetSystem<UnityLogBridgeSystem>();
 
-            m_applicationLogMessage.AddCallback((condition, stackTrace, type) => StartCoroutine(OnLogMessageReceivedCoroutine(condition, stackTrace, type)));
+            m_unityLogBridgeSystem.AddCallback((condition, stackTrace, type) => StartCoroutine(OnLogMessageReceivedCoroutine(condition, stackTrace, type)));
         }
 
-        public void OnGUIApplicationLogMessage()
+        public void OnGUIUnityLogBridge()
         {
             if (m_debugMenu.Button("Log"))
                 Debug.Log("This is a Log Info Message");
@@ -35,17 +34,17 @@ namespace Ride.Samples
             m_debugMenu.Label(m_receivedMessage);
         }
 
-        IEnumerator OnLogMessageReceivedCoroutine(string message, string stackTrace, IApplicationLogMessageSystem.LogType type)
+        IEnumerator OnLogMessageReceivedCoroutine(string message, string stackTrace, UnityLogBridgeSystem.LogType type)
         {
             string prefix = "";
             string postfix = "";
             switch (type)
             {
-                case IApplicationLogMessageSystem.LogType.Error:     prefix = "<color=red>"; postfix = "</color>"; break;
-                case IApplicationLogMessageSystem.LogType.Assert:    prefix = "<color=red>"; postfix = "</color>"; break;
-                case IApplicationLogMessageSystem.LogType.Warning:   prefix = "<color=yellow>"; postfix = "</color>"; break;
-                case IApplicationLogMessageSystem.LogType.Log:       prefix = ""; postfix = ""; break;
-                case IApplicationLogMessageSystem.LogType.Exception: prefix = "<color=red>"; postfix = "</color>"; break;
+                case UnityLogBridgeSystem.LogType.Error:     prefix = "<color=red>"; postfix = "</color>"; break;
+                case UnityLogBridgeSystem.LogType.Assert:    prefix = "<color=red>"; postfix = "</color>"; break;
+                case UnityLogBridgeSystem.LogType.Warning:   prefix = "<color=yellow>"; postfix = "</color>"; break;
+                case UnityLogBridgeSystem.LogType.Log:       prefix = ""; postfix = ""; break;
+                case UnityLogBridgeSystem.LogType.Exception: prefix = "<color=red>"; postfix = "</color>"; break;
             }
 
             m_receivedMessage = $"{prefix}{message}{postfix}";

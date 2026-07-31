@@ -34,15 +34,33 @@ namespace Ride.Networking
 
                 //Debug.Log(request.downloadHandler.text);
 
+                string responseText = request.downloadHandler?.text;
+                WebRequestResult mappedResult = MapResult(request.result);
+
                 if (typeof(T) == typeof(string))
                 {
-                    object result = request.downloadHandler.text;
-                    cb?.Invoke(MapResult(request.result), request.error, (T)result);
+                    object result = responseText;
+                    cb?.Invoke(mappedResult, request.error, (T)result);
+                    yield break;
                 }
-                else
+
+                if (mappedResult != WebRequestResult.Success)
                 {
-                    T result = RideIO.JsonDeserialize<T>(request.downloadHandler.text);
-                    cb?.Invoke(MapResult(request.result), request.error, result);
+                    cb?.Invoke(mappedResult, BuildRequestError(request.error, responseText), default);
+                    yield break;
+                }
+
+                try
+                {
+                    T result = RideIO.JsonDeserialize<T>(responseText);
+                    cb?.Invoke(mappedResult, request.error, result);
+                }
+                catch (System.Exception ex)
+                {
+                    cb?.Invoke(
+                        WebRequestResult.DataProcessingError,
+                        BuildDeserializeError(ex, responseText),
+                        default);
                 }
             }
         }
@@ -81,6 +99,25 @@ namespace Ride.Networking
         {
             Debug.LogError($"WebRequesterSystemUnity.MapResult() - unknown result: {result}");
             return WebRequestResult.DataProcessingError;
+        }
+
+        private static string BuildRequestError(string requestError, string responseText)
+        {
+            if (string.IsNullOrEmpty(responseText))
+                return requestError;
+
+            if (string.IsNullOrEmpty(requestError))
+                return responseText;
+
+            return $"{requestError} | Response: {responseText}";
+        }
+
+        private static string BuildDeserializeError(System.Exception ex, string responseText)
+        {
+            if (string.IsNullOrEmpty(responseText))
+                return $"Failed to deserialize response JSON: {ex.Message}";
+
+            return $"Failed to deserialize response JSON: {ex.Message} | Response: {responseText}";
         }
     }
 }

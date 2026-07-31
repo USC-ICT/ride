@@ -260,7 +260,7 @@ namespace Ride.NLP
         /// <returns>URI for AWS Lex to ask user question to</returns>
         public static string GetAWSLexAskUri(string host, string botName, string botAlias)
         {
-            // Example: https://runtime.lex.us-west-2.amazonaws.com/bot/ArnoTest/alias/dev/user/test/text
+            // Example: https://runtime.lex.us-west-2.amazonaws.com/bot/MyBot/alias/dev/user/test/text
             return "https://" + host + "/bot/" + botName + "/alias/" + botAlias + "/user/ridenlpexampleuser/text";
         }
 

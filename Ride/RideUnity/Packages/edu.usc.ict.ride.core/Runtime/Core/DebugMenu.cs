@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -8,34 +8,40 @@ namespace Ride
 {
     /// <summary>
     /// A built-in implementation of <see cref="IDebugMenu"/> that provides runtime-accessible GUI panels for diagnostics,
-    /// configuration, logging, and system introspection in RIDE-based Unity applications.
+    /// configuration, logging, profiling, and system introspection in RIDE-based Unity applications.
     /// 
     /// This class handles:
     /// - Registering and switching between multiple debug menus
     /// - Responsive IMGUI-based layout, with mobile safe area support
     /// - Viewing and scrolling system logs with color-coding
     /// - Real-time system configuration and platform metadata
+    /// - Lightweight profiler-counter capture and display for selected Unity counters
     /// 
     /// It includes default menus for:
     /// <list type="bullet">
-    /// <item><description><b>RideSystems</b> — active <c>IRideSystem</c> instances</description></item>
-    /// <item><description><b>Config</b> — active configuration file and terrain key</description></item>
-    /// <item><description><b>System/System2</b> — Unity, device, and graphics metadata</description></item>
-    /// <item><description><b>iOS</b> — iOS-only hardware and API status (conditionally compiled)</description></item>
+    /// <item><description><b>RideSystems</b> - active <c>IRideSystem</c> instances</description></item>
+    /// <item><description><b>Config</b> - active configuration file and terrain key</description></item>
+    /// <item><description><b>System/System2</b> - Unity, device, graphics, and memory metadata</description></item>
+    /// <item><description><b>Profiler Counters</b> - selected Memory, File, and Asset Loading profiler counters with held peaks</description></item>
+    /// <item><description><b>iOS</b> - iOS-only hardware and API status (conditionally compiled)</description></item>
     /// </list>
+    ///
+    /// Profiler counter names and category ordering reference:
+    /// https://docs.unity3d.com/Manual/profiler-counters-reference.html
     ///
     /// For internal layout utilities, see <see cref="IDebugMenu"/> and related <c>GUILayout</c> documentation:
     /// https://docs.unity3d.com/ScriptReference/GUILayout.html
     /// </summary>
-    public class DebugMenu : RideSystemMonoBehaviour, IDebugMenu
+    public partial class DebugMenu : RideSystemMonoBehaviour, IDebugMenu
     {
         const string OnGuiSystemsName = "RideSystems";
         const string OnGuiConfigName = "Config";
         const string OnGuiSystemName = "System";
         const string OnGuiSystem2Name = "System2";
+        const string OnGuiProfilerCountersName = "Profiler Counters";
         const string OnGuiIOSName = "iOS";
 
-        [SerializeField] ApplicationLogMessageSystem m_applicationLogMessageSystem;
+        [SerializeField] UnityLogBridgeSystem m_unityLogBridgeSystem;
         [SerializeField] FramesPerSecondCounter m_framesPerSecondCounter;
         [SerializeField] bool m_showOnStartup = false;
         [SerializeField] bool m_useSafeArea = true;
@@ -47,13 +53,14 @@ namespace Ride
         [SerializeField] bool m_defaultMenuRideSystemsOn = true;
         [SerializeField] bool m_defaultMenuSystemOn = true;
         [SerializeField] bool m_defaultMenuSystem2On = true;
+        [SerializeField] bool m_defaultMenuProfilerCountersOn = true;
         [SerializeField] bool m_defaultMenuIOSOn = true;
 
         public Action<int> OnSetMenu;
 
         bool m_debugMenuOn = false;
 
-        List<(string name, Action callback)> m_debugMenus = new List<(string, Action)>();
+        List<(string name, Action callback)> m_debugMenus = new();
         int m_debugMenuSelected = 0;
 
         Rect m_debugMenuSize = new Rect(0, 0, 0.4f, 1);  // unit coords (0..1), scaled to screen resolution
@@ -67,16 +74,16 @@ namespace Ride
         ScreenOrientation m_screenOrientation;
 
         bool m_showLog = false;
-        List<string> m_logLines = new List<string>();
+        List<string> m_logLines = new();
         string m_currentLogText = "";
         bool m_currentlogDirty = true;
         int m_maxLogLines = 20000;
         int m_maxLogCharacters = 16300;  // https://stackoverflow.com/questions/57915298/unity-editor-gui-text-size-limit
-        Vector2 m_logScroll = new Vector2();
+        Vector2 m_logScroll = new();
         bool m_logAutoScroll = true;
         bool m_logWrap = true;
 
-        Vector2 m_rideSystemsScroll = new Vector2();
+        Vector2 m_rideSystemsScroll = new();
 
         bool m_terrainKeyCurrentlyChanging = false;
         string m_terrainKeyNew = "";
@@ -107,10 +114,10 @@ namespace Ride
             m_screenFullScreenMode = Screen.fullScreenMode;
             m_screenOrientation = Screen.orientation;
 
-            if (m_applicationLogMessageSystem != null)
-                m_applicationLogMessageSystem.AddCallback(AddLogText);
+            if (m_unityLogBridgeSystem != null)
+                m_unityLogBridgeSystem.AddCallback(AddLogText);
             else
-                AddLogText("Add a ApplicationLogMessageSystem to the DebugMenu.m_applicationLogMessageSystem inspector variable in order to see Console output here.", "", IApplicationLogMessageSystem.LogType.Warning);
+                AddLogText("Add a UnityLogBridgeSystem to the DebugMenu.m_unityLogBridgeSystem inspector variable in order to see Console output here.", "", UnityLogBridgeSystem.LogType.Warning);
 
             ShowMenu(m_showOnStartup);
 
@@ -122,8 +129,27 @@ namespace Ride
                 AddMenu(OnGuiSystemName, OnGUISystem);
             if (m_defaultMenuSystem2On)
                 AddMenu(OnGuiSystem2Name, OnGUISystem2);
+            if (m_defaultMenuProfilerCountersOn)
+                AddMenu(OnGuiProfilerCountersName, OnGUIProfilerCounters);
             if (m_defaultMenuIOSOn && RideUtils.IsIOS())
                 AddMenu(OnGuiIOSName, OnGUIIOS);
+        }
+
+        /// <inheritdoc />
+        public override void SystemUpdate(float dt)
+        {
+            base.SystemUpdate(dt);
+
+            if (m_profilerCountersInitialized && IsProfilerCountersMenuSelected())
+                UpdateProfilerCounterPeaks(dt);
+        }
+
+        /// <inheritdoc />
+        public override void SystemShutdown()
+        {
+            DisposeProfilerCounters();
+
+            base.SystemShutdown();
         }
 
         /// <inheritdoc />
@@ -251,7 +277,16 @@ namespace Ride
         {
             int index = m_debugMenus.FindIndex(m => m.name == name);
             if (index >= 0)
+            {
                 m_debugMenus.RemoveAt(index);
+
+                if (m_debugMenus.Count == 0)
+                    m_debugMenuSelected = 0;
+                else if (index < m_debugMenuSelected)
+                    m_debugMenuSelected--;
+                else if (m_debugMenuSelected >= m_debugMenus.Count)
+                    m_debugMenuSelected = m_debugMenus.Count - 1;
+            }
         }
 
         /// <inheritdoc />
@@ -346,6 +381,7 @@ namespace Ride
                 GuiLabelStyle = new GUIStyle(GUI.skin.label);
                 GuiLabelStyle.padding = new RectOffset(0, 0, 0, 0);
                 GuiLabelStyle.alignment = TextAnchor.MiddleLeft;
+                GuiLabelStyle.richText = true;
             }
 
             if (GuiButtonStyle == null)
@@ -371,13 +407,13 @@ namespace Ride
         }
 
         /// <summary>
-        /// Adds a log entry to the debug menu’s internal log buffer, applying color-coding based on log severity.
-        /// Maintains a fixed-size log window and trims excess characters to fit Unity’s IMGUI limits.
+        /// Adds a log entry to the debug menu's internal log buffer, applying color-coding based on log severity.
+        /// Maintains a fixed-size log window and trims excess characters to fit Unity's IMGUI limits.
         /// </summary>
         /// <param name="logString">The log message.</param>
         /// <param name="stackTrace">The stack trace (optional, not displayed in this view).</param>
         /// <param name="type">The log type (e.g., Error, Warning, Info).</param>
-        void AddLogText(string logString, string stackTrace, IApplicationLogMessageSystem.LogType type)
+        void AddLogText(string logString, string stackTrace, UnityLogBridgeSystem.LogType type)
         {
             string msg = WrapColor(logString, type);
             m_logLines.Add(msg);
@@ -563,7 +599,7 @@ namespace Ride
                 {
                     m_terrainKeyNew = TextField(m_terrainKeyNew);
 
-                    using (new GUILayout.HorizontalScope())
+                    using (Horizontal())
                     {
                         if (Button("Back"))
                             m_terrainKeyCurrentlyChanging = false;
@@ -586,7 +622,7 @@ namespace Ride
                     Label($"OWT Access Key: {config.GetTerrainKey()}");
                     Label($"AWS Region: {config.GetTerrainKeyRegion()}");
 
-                    using (new GUILayout.HorizontalScope())
+                    using (Horizontal())
                     {
                         if (Button("Change"))
                         {
@@ -616,7 +652,7 @@ namespace Ride
             Label(string.Format("{0}x{1}x{2} ({3}) {4:f0}dpi", Screen.width, Screen.height, Screen.currentResolution.refreshRate, VHUtils.GetCommonAspectText((float)Screen.width / Screen.height), Screen.dpi));
 #endif
             Label($"{Screen.fullScreenMode} - {Screen.orientation}");
-            using (new GUILayout.HorizontalScope())
+            using (Horizontal())
             {
                 if (Screen.resolutions.Length > 0)
                 {
@@ -635,7 +671,7 @@ namespace Ride
                 }
             }
 
-            using (new GUILayout.HorizontalScope())
+            using (Horizontal())
             {
                 if (Button("<", 25)) { m_screenFullScreenMode = Enum.IsDefined(typeof(FullScreenMode), m_screenFullScreenMode - 1) ? m_screenFullScreenMode - 1 : Enum.GetValues(typeof(FullScreenMode)).Cast<FullScreenMode>().Max(); }
                 if (Button($"{m_screenFullScreenMode}")) { m_screenFullScreenMode = Enum.IsDefined(typeof(FullScreenMode), m_screenFullScreenMode + 1) ? m_screenFullScreenMode + 1 : Enum.GetValues(typeof(FullScreenMode)).Cast<FullScreenMode>().Min(); }
@@ -643,7 +679,7 @@ namespace Ride
                 if (Button("Set", 60)) { Screen.fullScreenMode = m_screenFullScreenMode; }
             }
 
-            using (new GUILayout.HorizontalScope())
+            using (Horizontal())
             {
                 if (Button("<", 25)) { m_screenOrientation = Enum.IsDefined(typeof(ScreenOrientation), m_screenOrientation - 1) ? m_screenOrientation - 1 : Enum.GetValues(typeof(ScreenOrientation)).Cast<ScreenOrientation>().Max(); }
                 if (Button($"{m_screenOrientation}")) { m_screenOrientation = Enum.IsDefined(typeof(ScreenOrientation), m_screenOrientation + 1) ? m_screenOrientation + 1 : Enum.GetValues(typeof(ScreenOrientation)).Cast<ScreenOrientation>().Min(); }
@@ -653,7 +689,7 @@ namespace Ride
 
             Label($"TargetFR: {Application.targetFrameRate}    vSync: {QualitySettings.vSyncCount}");
 
-            using (new GUILayout.HorizontalScope())
+            using (Horizontal())
             {
                 if (Button("-1")) { Application.targetFrameRate = -1; }
                 if (Button("15")) { Application.targetFrameRate = 15; }
@@ -662,7 +698,7 @@ namespace Ride
                 if (Button("90")) { Application.targetFrameRate = 90; }
             }
 
-            using (var scope = new GUILayout.HorizontalScope())
+            using (Horizontal())
             {
                 if (Button("0")) { QualitySettings.vSyncCount = 0; }
                 if (Button("1")) { QualitySettings.vSyncCount = 1; }
@@ -672,7 +708,7 @@ namespace Ride
             }
 
             Label($"{RideUtils.SceneManagerActiveSceneName()}");
-            using (new GUILayout.HorizontalScope())
+            using (Horizontal())
             {
                 Label("Quality:", 100);
                 if (Button($"{QualitySettings.names[QualitySettings.GetQualityLevel()]}"))
@@ -681,7 +717,7 @@ namespace Ride
             Label($"ColorSpace: {QualitySettings.activeColorSpace}");
 
             Camera camera = Camera.main;
-            Label($"RenderPath: {camera.actualRenderingPath}");
+            Label(camera != null ? $"RenderPath: {camera.actualRenderingPath}" : "RenderPath: No Camera.main");
             Label($"Unity: {Application.unityVersion}");
             Label($"Platform: {Application.platform}");
 
@@ -713,7 +749,7 @@ namespace Ride
             Label($"UserName: {Environment.UserName}");
             Label($"IP: {m_localIp}");
 
-            Label($"MonoHeap: {UnityEngine.Profiling.Profiler.GetMonoUsedSizeLong():N0}");
+            Label($"MonoUsed: {UnityEngine.Profiling.Profiler.GetMonoUsedSizeLong():N0}");
             Label($"TempAllocator: {UnityEngine.Profiling.Profiler.GetTempAllocatorSize():N0}");
             Label($"AllocatedMemory: {UnityEngine.Profiling.Profiler.GetTotalAllocatedMemoryLong():N0}");
             Label($"ReservedMemory: {UnityEngine.Profiling.Profiler.GetTotalReservedMemoryLong():N0}");
@@ -751,11 +787,13 @@ namespace Ride
         /// <param name="text">The original message text.</param>
         /// <param name="type">The log type (Error, Warning, Info).</param>
         /// <returns>The formatted message with rich text color tags.</returns>
-        static string WrapColor(string text, IApplicationLogMessageSystem.LogType type)
+        static string WrapColor(string text, UnityLogBridgeSystem.LogType type) => type switch
         {
-            if (type == IApplicationLogMessageSystem.LogType.Error) return $"<color=red>{text}</color>";
-            if (type == IApplicationLogMessageSystem.LogType.Warning) return $"<color=yellow>{text}</color>";
-            return text;
-        }
+            UnityLogBridgeSystem.LogType.Error or
+            UnityLogBridgeSystem.LogType.Assert or
+            UnityLogBridgeSystem.LogType.Exception => $"<color=red>{text}</color>",
+            UnityLogBridgeSystem.LogType.Warning => $"<color=yellow>{text}</color>",
+            _ => text,
+        };
     }
 }

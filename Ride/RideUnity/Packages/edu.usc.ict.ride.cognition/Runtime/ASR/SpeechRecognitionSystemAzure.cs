@@ -5,6 +5,7 @@ using UnityEngine;
 #if !UNITY_WEBGL
 using Microsoft.CognitiveServices.Speech;
 using Microsoft.CognitiveServices.Speech.Audio;
+using Newtonsoft.Json.Linq;
 #endif
 #if UNITY_ANDROID
 using UnityEngine.Android;
@@ -57,8 +58,25 @@ namespace Ride.SpeechRecognition
 
         private string m_recognizedSpeech;
         private string m_recognizedSpeechPartial;
+        private string m_recognizedLanguage;
+        private string m_recognizedLanguagePartial;
         private SpeechRecognitionType m_currentInputSource = SpeechRecognitionType.MICROPHONE;
         private string m_filePath;
+
+        [Header("Language Identification")]
+#pragma warning disable 0414 // The field '' is assigned but its value is never used
+        [SerializeField] private bool m_enableAutoDetectLanguage = true;
+#pragma warning restore 0414
+        [SerializeField] private string[] m_autoDetectLanguages = new[]
+        {
+            "en-US",
+            "nl-NL",
+            "fr-FR",
+            "de-DE",
+            "es-ES",
+            "it-IT",
+            "pt-PT"
+        };
 
         public SpeechRecognitionType CurrentInputSource => m_currentInputSource;
         public string FilePath => m_filePath;
@@ -86,14 +104,16 @@ namespace Ride.SpeechRecognition
             {
                 if (!string.IsNullOrEmpty(m_recognizedSpeechPartial))
                 {
-                    OnPartialSpeechRecognized(m_recognizedSpeechPartial, Confidence);
+                    OnPartialSpeechRecognized(m_recognizedSpeechPartial, Confidence, m_recognizedLanguagePartial);
                     m_recognizedSpeechPartial = null;
+                    m_recognizedLanguagePartial = null;
                 }
 
                 if (!string.IsNullOrEmpty(m_recognizedSpeech))
                 {
-                    OnSpeechRecognized(m_recognizedSpeech, Confidence);
+                    OnSpeechRecognized(m_recognizedSpeech, Confidence, m_recognizedLanguage);
                     m_recognizedSpeech = null;
+                    m_recognizedLanguage = null;
                 }
             }
         }
@@ -119,7 +139,7 @@ namespace Ride.SpeechRecognition
             {
                 SelectedMicrophone = DEFAULT_MICROPHONE_NAME;
 
-                Debug.Log("[Azure ASR] SetMicrophone called with empty deviceName; using default microphone.");
+                //Debug.Log("[Azure ASR] SetMicrophone called with empty deviceName; using default microphone.");
             }
             else
             {
@@ -170,9 +190,10 @@ namespace Ride.SpeechRecognition
                 return;
 
             m_recognizedSpeechPartial = e.Result.Text;
+            m_recognizedLanguagePartial = TryGetDetectedLanguage(e.Result);
 
             if (!string.IsNullOrEmpty(m_recognizedSpeechPartial))
-                Debug.Log($"[Azure ASR] Recognizing (partial): '{m_recognizedSpeechPartial}'");
+                Debug.Log($"[Azure ASR] Recognizing (partial): language='{(string.IsNullOrWhiteSpace(m_recognizedLanguagePartial) ? "unknown" : m_recognizedLanguagePartial)}' text='{m_recognizedSpeechPartial}'");
         }
 
         /// <summary>
@@ -184,8 +205,9 @@ namespace Ride.SpeechRecognition
                 return;
 
             m_recognizedSpeech = e.Result.Text;
+            m_recognizedLanguage = TryGetDetectedLanguage(e.Result);
 
-            Debug.Log($"[Azure ASR] Recognized (final): Reason={e.Result.Reason}, Text='{m_recognizedSpeech}'");
+            Debug.Log($"[Azure ASR] Recognized (final): Reason={e.Result.Reason}, Language='{(string.IsNullOrWhiteSpace(m_recognizedLanguage) ? "unknown" : m_recognizedLanguage)}', Text='{m_recognizedSpeech}'");
         }
 
         /// <summary>
@@ -237,6 +259,11 @@ namespace Ride.SpeechRecognition
                 speechConfig.SetProperty(
                     PropertyId.Speech_SegmentationSilenceTimeoutMs,
                     ((int)(AutoSilenceTimeoutSeconds * 1000)).ToString());
+                if (m_enableAutoDetectLanguage)
+                {
+                    speechConfig.SetProperty(PropertyId.SpeechServiceConnection_LanguageIdMode, "Continuous");
+                    speechConfig.SetProperty("SpeechServiceConnection_RecognitionEndpointVersion", "2");
+                }
 
                 Debug.Log($"[Azure ASR] StartSpeechRecognitionAsync - InputSource={CurrentInputSource}");
 
@@ -249,7 +276,17 @@ namespace Ride.SpeechRecognition
                     return;
                 }
 
-                m_speechRecognizer = new SpeechRecognizer(speechConfig, audioConfig);
+                AutoDetectSourceLanguageConfig autoDetectConfig = BuildAutoDetectSourceLanguageConfig();
+                if (autoDetectConfig != null)
+                {
+                    Debug.Log($"[Azure ASR] Auto-detect language enabled with candidates: {string.Join(", ", m_autoDetectLanguages)}");
+                    m_speechRecognizer = new SpeechRecognizer(speechConfig, autoDetectConfig, audioConfig);
+                }
+                else
+                {
+                    Debug.Log("[Azure ASR] Auto-detect language disabled. Using Azure recognizer without language identification.");
+                    m_speechRecognizer = new SpeechRecognizer(speechConfig, audioConfig);
+                }
 
                 m_speechRecognizer.Recognizing += OnAzureSpeechPartialRecognizedEvent;
                 m_speechRecognizer.Recognized += OnAzureSpeechRecognizedEvent;
@@ -320,7 +357,7 @@ namespace Ride.SpeechRecognition
                     Debug.Log("[Azure ASR] Forcing default microphone input on Android");
                     return AudioConfig.FromDefaultMicrophoneInput();
 #else
-                    // IMPORTANT: Unity’s Microphone.devices names don’t always match what Azure expects.
+                    // IMPORTANT: Unity's Microphone.devices names don't always match what Azure expects.
                     // Prefer default mic to avoid SPXERR_MIC_NOT_AVAILABLE from mismatched device names.
                     // See SetMicrophone()
                     try
@@ -341,6 +378,101 @@ namespace Ride.SpeechRecognition
                     return AudioConfig.FromDefaultMicrophoneInput();
 #endif
             }
+        }
+
+        private AutoDetectSourceLanguageConfig BuildAutoDetectSourceLanguageConfig()
+        {
+            if (!m_enableAutoDetectLanguage || m_autoDetectLanguages == null || m_autoDetectLanguages.Length == 0)
+                return null;
+
+            string[] candidates = Array.FindAll(m_autoDetectLanguages, language => !string.IsNullOrWhiteSpace(language));
+            if (candidates == null || candidates.Length == 0)
+                return null;
+
+            return AutoDetectSourceLanguageConfig.FromLanguages(candidates);
+        }
+
+        private static string TryGetDetectedLanguage(SpeechRecognitionResult result)
+        {
+            if (result == null)
+                return string.Empty;
+
+            try
+            {
+                AutoDetectSourceLanguageResult detected = AutoDetectSourceLanguageResult.FromResult(result);
+                if (!string.IsNullOrWhiteSpace(detected?.Language))
+                    return detected.Language;
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[Azure ASR] AutoDetectSourceLanguageResult did not expose a language: {e.GetType().Name}: {e.Message}");
+            }
+
+            return TryGetDetectedLanguageFromJson(result);
+        }
+
+        private static string TryGetDetectedLanguageFromJson(SpeechRecognitionResult result)
+        {
+            string jsonResult = result.Properties.GetProperty(PropertyId.SpeechServiceResponse_JsonResult);
+            if (string.IsNullOrWhiteSpace(jsonResult))
+                return string.Empty;
+
+            try
+            {
+                JToken root = JToken.Parse(jsonResult);
+                string language = FindLanguageValue(root);
+                if (!string.IsNullOrWhiteSpace(language))
+                    return language;
+
+                Debug.Log($"[Azure ASR] Language not found in raw Azure JSON result: {jsonResult}");
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[Azure ASR] Failed to parse raw Azure JSON result for language: {e.GetType().Name}: {e.Message}");
+            }
+
+            return string.Empty;
+        }
+
+        private static string FindLanguageValue(JToken token)
+        {
+            if (token == null)
+                return string.Empty;
+
+            if (token is JObject obj)
+            {
+                foreach (JProperty property in obj.Properties())
+                {
+                    if (IsLanguagePropertyName(property.Name))
+                    {
+                        string value = property.Value.Type == JTokenType.String ? property.Value.Value<string>() : null;
+                        if (!string.IsNullOrWhiteSpace(value))
+                            return value;
+                    }
+
+                    string nestedValue = FindLanguageValue(property.Value);
+                    if (!string.IsNullOrWhiteSpace(nestedValue))
+                        return nestedValue;
+                }
+            }
+            else if (token is JArray array)
+            {
+                foreach (JToken item in array)
+                {
+                    string nestedValue = FindLanguageValue(item);
+                    if (!string.IsNullOrWhiteSpace(nestedValue))
+                        return nestedValue;
+                }
+            }
+
+            return string.Empty;
+        }
+
+        private static bool IsLanguagePropertyName(string name)
+        {
+            return string.Equals(name, "Language", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(name, "Locale", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(name, "LanguageId", StringComparison.OrdinalIgnoreCase);
         }
 #endif
 
@@ -401,6 +533,8 @@ namespace Ride.SpeechRecognition
 
             m_recognizedSpeech = null;
             m_recognizedSpeechPartial = null;
+            m_recognizedLanguage = null;
+            m_recognizedLanguagePartial = null;
         }
 
         /// <summary>

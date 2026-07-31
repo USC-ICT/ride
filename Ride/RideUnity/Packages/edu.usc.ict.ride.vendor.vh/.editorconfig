@@ -11,4 +11,5 @@ dotnet_diagnostic.IDE0060.severity = none  # Remove unused parameter '' if it is
 dotnet_diagnostic.IDE0074.severity = none  # Use compound assignment
 dotnet_diagnostic.IDE0075.severity = none  # Conditional expression can be simplified
 dotnet_diagnostic.IDE0090.severity = none  # 'new' expression can be simplified
+dotnet_diagnostic.IDE0130.severity = none  # Namespace "" does not match folder structure, expected ""
 dotnet_diagnostic.IDE1006.severity = none  # Naming rule violation: These words must begin with upper case characters: 

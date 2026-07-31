@@ -2,4 +2,9 @@ root = false
 
 [*.cs]
 dotnet_diagnostic.IDE0044.severity = none  # Make field readonly
+dotnet_diagnostic.IDE0057.severity = none  # "" can be simplified
+dotnet_diagnostic.IDE0059.severity = none  # Unnecessary assignment of a value to ''
 dotnet_diagnostic.IDE0090.severity = none  # 'new' expression can be simplified
+dotnet_diagnostic.IDE0130.severity = none  # Namespace "" does not match folder structure, expected ""
+dotnet_diagnostic.UNT0008.severity = none  # Unity objects should not use null propagation.
+dotnet_diagnostic.UNT0039.severity = none  # Use RequireComponent attribute when self-invoking GetComponent

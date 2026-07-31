@@ -39,7 +39,7 @@ public class BillboardSymbol : MonoBehaviour {
     // Use this for initialization
     void Start ()
     {
-        m_Provider = FindFirstObjectByType<MilSymbolProvider>();
+        m_Provider = FindAnyObjectByType<MilSymbolProvider>();
         RequestTexture();
         UpdateAlpha();
     }

@@ -31,7 +31,7 @@ public static class VHUI
         canvas.sortingOrder = sortingOrder;
 
         // need an event system too if there isn't one
-        if (GameObject.FindFirstObjectByType<EventSystem>() == null)
+        if (GameObject.FindAnyObjectByType<EventSystem>() == null)
         {
             EventSystem eventSystem = GameObject.Instantiate(Resources.Load<EventSystem>("vhAssetsEventSystem"));
             eventSystem.name = eventSystem.name.Replace("(Clone)", "");

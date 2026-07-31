@@ -31,7 +31,7 @@ namespace Ride.SpeechRecognition
             "Auto Silence Timeout (seconds).\n" +
             "After speech has started, recognition will stop if no sound is detected for this duration.\n" +
             "Controls how long pauses between words or sentences are allowed.")]
-        float m_autoSilenceTimeoutSeconds = 1.2f;
+        float m_autoSilenceTimeoutSeconds = 0.7f;
 
         [SerializeField, Min(0f), Tooltip(
             "Initial Silence Timeout (seconds).\n" +
@@ -169,7 +169,7 @@ namespace Ride.SpeechRecognition
         /// </summary>
         /// <param name="result">The partial recognized text.</param>
         /// <param name="confidence">Confidence score.</param>
-        public virtual void OnPartialSpeechRecognized(string result, float confidence = 1)
+        public virtual void OnPartialSpeechRecognized(string result, float confidence = 1, string language = "")
         {
             if (!string.IsNullOrEmpty(result))
             {
@@ -177,7 +177,7 @@ namespace Ride.SpeechRecognition
                 Confidence = confidence;
             }
 
-            PartialSpeechRecognized?.Invoke(this, new SpeechRecognizedEventArgs(result, confidence));
+            PartialSpeechRecognized?.Invoke(this, new SpeechRecognizedEventArgs(result, confidence, language));
         }
 
         /// <summary>
@@ -186,7 +186,7 @@ namespace Ride.SpeechRecognition
         /// </summary>
         /// <param name="result">The final recognized text.</param>
         /// <param name="confidence">Confidence score (default is 1).</param>
-        public virtual void OnSpeechRecognized(string result, float confidence = 1)
+        public virtual void OnSpeechRecognized(string result, float confidence = 1, string language = "")
         {
             if (!string.IsNullOrEmpty(result))
             {
@@ -194,7 +194,7 @@ namespace Ride.SpeechRecognition
                 Confidence = confidence;
             }
 
-            SpeechRecognized?.Invoke(this, new SpeechRecognizedEventArgs(result, confidence));
+            SpeechRecognized?.Invoke(this, new SpeechRecognizedEventArgs(result, confidence, language));
 
             if (!SupportsContinuousRecognition)
                 StopRecognizing();

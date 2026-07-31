@@ -1,8 +1,6 @@
 ﻿using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using UnityEngine;
 
 namespace Ride
@@ -24,15 +22,8 @@ namespace Ride
     /// </list>
     /// </para>
     /// </summary>
-    public class LoggerUnityDebug : LoggerUnity
+    public class LoggerUnityConsole : LoggerUnity
     {
-        /// <inheritdoc/>
-        public override bool ReceiveEngineLogMessages { get; set; }
-
-        /// <summary>Enables or disables event logging via <see cref="LogEvent"/>.</summary>
-        public bool logEvents { get; set; }
-
-
         // Thread-local scope stack to support nested scopes per thread
         [ThreadStatic]
         private static Stack<string> _scopeStack;
@@ -40,14 +31,15 @@ namespace Ride
 
 
         /// <inheritdoc/>
-        public override void Log(object message) => Log(LogType.Information, $"[{DateTime.Now:MM/dd HH:mm:ss}] {message}");
-
-        /// <inheritdoc/>
-        public override void Log(LogType type, object message)
+        [HideInCallstack]
+        public override void Log(LogEntry entry)
         {
-            string formatted = $"{FormatScopePrefix()}{message}";
+            if (!ShouldLog(entry))
+                return;
 
-            switch (type)
+            string formatted = FormatEntry(entry);
+
+            switch (entry.type)
             {
                 case LogType.Trace:
                 case LogType.Debug:
@@ -75,9 +67,6 @@ namespace Ride
         }
 
         /// <inheritdoc/>
-        public override void LogEvent(string eventType, object eventData) { if (logEvents) Log($"{eventType} {eventData}"); }
-
-        /// <inheritdoc/>
         public override bool IsEnabled(LogType type) => type != LogType.None;
 
         /// <inheritdoc/>
@@ -97,11 +86,29 @@ namespace Ride
             if (ScopeStack.Count == 0)
                 return string.Empty;
 
-            var sb = new StringBuilder();
-            sb.Append('[');
-            sb.Append(string.Join(" > ", ScopeStack.Reverse()));
-            sb.Append("] ");
-            return sb.ToString();
+            return $"[{string.Join(" > ", ScopeStack.Reverse())}] ";
+        }
+
+        protected override bool ShouldLog(LogEntry entry)
+        {
+            if (!IsEnabled(entry.type))
+                return false;
+
+            if (entry.source == LogSources.UnityLogBridgeSystem && !ReceiveEngineLogMessages)
+                return false;
+
+            return base.ShouldLog(entry);
+        }
+
+        protected override string FormatEntry(LogEntry entry)
+        {
+            string scope = FormatScopePrefix();
+            if (entry.isEvent)
+                return entry.eventData != null
+                    ? $"{scope}{entry.eventName} {entry.eventData}"
+                    : $"{scope}{entry.eventName}";
+
+            return $"{scope}{entry.message}";
         }
 
         /// <summary>

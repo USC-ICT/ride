@@ -30,7 +30,7 @@ public class CutsceneEventParam
     [HideInInspector]
     public string objDataName = "";
     [HideInInspector]
-    public int objDataInstanceId;
+    public ulong objDataInstanceId;
     [HideInInspector]
     public string objDataAssetPath = "";
     [HideInInspector]
@@ -82,7 +82,7 @@ public class CutsceneEventParam
 
         if (objData != null)
         {
-            objDataInstanceId = objDataIsComponent ? ((Component)objData).gameObject.GetInstanceID() : objData.GetInstanceID();
+            objDataInstanceId = objDataIsComponent ? VHUtils.EntityIdToULong(((Component)objData).gameObject) : VHUtils.EntityIdToULong(objData);
         }
         else
         {
@@ -182,7 +182,7 @@ public class CutsceneEvent : CutsceneTrackItem
     public string TargetGameObjectName = "";
 
     [HideInInspector]
-    public int TargetGameObjectInstanceId;
+    public ulong TargetGameObjectInstanceId;
 
     [HideInInspector]
     public string TargetComponentName = "";
@@ -390,7 +390,7 @@ public class CutsceneEvent : CutsceneTrackItem
         TargetComponent = targetComp;
 
         TargetGameObjectName = TargetGameObject != null ? TargetGameObject.name : "";
-        TargetGameObjectInstanceId = TargetGameObject != null ? TargetGameObject.GetInstanceID() : 0;
+        TargetGameObjectInstanceId = TargetGameObject != null ? VHUtils.EntityIdToULong(TargetGameObject) : 0;
         TargetComponentName = TargetComponent != null ? TargetComponent.GetType().ToString() : "";
     }
 

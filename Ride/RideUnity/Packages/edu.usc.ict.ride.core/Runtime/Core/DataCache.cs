@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
@@ -16,7 +16,7 @@ namespace Ride
     /// This can be useful even for local sources (e.g., caching from spindle disk to SSD).
     /// 
     /// The system uses a simple sequential queue: only one file load or copy is active at a time. Requests are queued and processed in order,
-    /// with optional priority support. This design avoids concurrency complexity and ensures safe, deterministic behavior on Unity’s main thread.
+    /// with optional priority support. This design avoids concurrency complexity and ensures safe, deterministic behavior on Unity's main thread.
     /// </summary>
     public class DataCache : RideSystemMonoBehaviour, IDataCache
     {
