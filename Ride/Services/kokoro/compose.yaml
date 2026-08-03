@@ -1,0 +1,23 @@
+services:
+  kokoro-local-tts:
+    build: .
+    image: vhtoolkit_kokoro_tts
+    container_name: kokoro
+    restart: unless-stopped
+    ports:
+      - "8880:8880"
+    volumes:
+      - kokoro_cache:/root/.cache
+    environment:
+      DEFAULT_VOICE: af_adam
+      SUPPORTED_VOICES: af_heart,af_bella,am_adam,am_michael,bf_emma,bm_george
+      API_TOKEN: ${API_TOKEN}
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8880/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  kokoro_cache:

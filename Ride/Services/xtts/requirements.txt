@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+numpy
+soundfile
+torch==2.5.1
+torchaudio==2.5.1
+TTS==0.22.0
+transformers==4.49.0

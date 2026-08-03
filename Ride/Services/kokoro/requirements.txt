@@ -1,0 +1,5 @@
+fastapi
+uvicorn[standard]
+numpy
+soundfile
+kokoro==0.9.4

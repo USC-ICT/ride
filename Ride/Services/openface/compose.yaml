@@ -1,0 +1,26 @@
+services:
+  openface3:
+    build: .
+    image: vhtoolkit_openface3
+    container_name: openface3
+    restart: unless-stopped
+    ports:
+      - "${OPENFACE_PORT:-5101}:5101"
+    environment:
+      OPENFACE_DEVICE: ${OPENFACE_DEVICE:-auto}
+      OPENFACE_CUDA_DEVICE: ${OPENFACE_CUDA_DEVICE:-0}
+      OPENFACE_MAX_FACES: ${OPENFACE_MAX_FACES:-4}
+      OPENFACE_WEIGHTS_DIR: /models/weights
+      OPENFACE_MODEL_REPOSITORY: ${OPENFACE_MODEL_REPOSITORY:-nutPace/openface_weights}
+      OPENFACE_MODEL_REVISION: ${OPENFACE_MODEL_REVISION:-3844412b54706ed0a930b99589508ed3c101f39e}
+    volumes:
+      - openface3_models:/models
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5101/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 300s
+
+volumes:
+  openface3_models:

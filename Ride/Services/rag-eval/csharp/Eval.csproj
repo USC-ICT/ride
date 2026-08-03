@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <AssemblyName>RagEval</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The REAL package sources under test - no copies. Paths are within this working
+         copy (rag-eval lives under WebServices at the svn_ride_trunk root), so a single
+         checkout is self-contained and the harness always matches the checked-out
+         package code. -->
+    <Compile Include="..\..\..\RideUnity\Packages\edu.usc.ict.ride.abstract\Runtime\Interfaces\Cognition\IKnowledgeSystem.cs" />
+    <Compile Include="..\..\..\RideUnity\Packages\edu.usc.ict.ride.cognition\Runtime\Knowledge\KnowledgeIndex.cs" />
+  </ItemGroup>
+</Project>

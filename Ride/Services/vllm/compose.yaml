@@ -1,0 +1,67 @@
+services:
+  vllm:
+    build: .
+    image: vhtoolkit_vllm_qwen
+    container_name: vllm
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    ipc: host
+    volumes:
+      - ${HF_CACHE_PATH:-~/.cache/huggingface}:/root/.cache/huggingface
+      - vllm_compile_cache:/root/.cache/vllm
+    environment:
+      HF_TOKEN: ${HF_TOKEN}
+      VLLM_MODEL: ${VLLM_MODEL:-microsoft/Phi-4-mini-instruct}
+      VLLM_API_KEY: ${VLLM_API_KEY:-local-dev-token}
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 180s
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # Embeddings server for semantic retrieval, started only in the "rag" profile
+  # (load-with-rag.bat, or COMPOSE_PROFILES=rag). vLLM serves one model per process, so this
+  # is a second container rather than a second endpoint on the first one.
+  vllm-embed:
+    build: .
+    image: vhtoolkit_vllm_qwen
+    container_name: vllm-embed
+    entrypoint: /entrypoint-embed.sh
+    profiles: ["rag"]
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    ipc: host
+    volumes:
+      - ${HF_CACHE_PATH:-~/.cache/huggingface}:/root/.cache/huggingface
+      - vllm_compile_cache:/root/.cache/vllm
+    environment:
+      HF_TOKEN: ${HF_TOKEN}
+      VLLM_EMBED_MODEL: ${VLLM_EMBED_MODEL:-BAAI/bge-small-en-v1.5}
+      VLLM_API_KEY: ${VLLM_API_KEY:-local-dev-token}
+      VLLM_EMBED_GPU_FRACTION: ${VLLM_EMBED_GPU_FRACTION:-0.10}
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 120s
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+volumes:
+  vllm_compile_cache:

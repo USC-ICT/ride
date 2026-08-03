@@ -1,0 +1,5 @@
+fastapi==0.115.6
+huggingface-hub==0.21.0
+openface-test==0.1.26
+pydantic==2.10.4
+uvicorn[standard]==0.34.0
