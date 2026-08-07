@@ -21,7 +21,7 @@ The same RAG pipeline currently serves three purposes, and each is its own datas
 | Use | Data | Where |
 |---|---|---|
 | VHToolkit demo | public | `datasets/vhtoolkit/` (versioned here) |
-| Drone demo (internal) | internal | `../rag-proxy/corpus/` (unversioned, pairs.json next to the documents) |
+| A corpus held elsewhere | whatever it is | any folder, by placing a `pairs.json` beside its documents |
 | VHToolkit Studio | each researcher's own | any folder they point `--dataset` at |
 
 ## How to run
@@ -49,6 +49,95 @@ dotnet run --project csharp/Eval.csproj -- --ollama
 The first `--ollama` run embeds every corpus chunk, so it takes a couple of minutes;
 queries embed one call each.
 
+### Other embedding backends
+
+`--embed-model <name>` selects a different Ollama model. `--embed-prefix` turns on the
+asymmetric task prefixes that some models are trained with, and `--query-prefix` /
+`--doc-prefix` override the prefix strings (either one also implies `--embed-prefix`).
+Prefixes are model-specific and using the wrong ones is worse than using none:
+
+```
+dotnet run --project csharp/Eval.csproj -- --ollama --embed-model embeddinggemma ^
+  --query-prefix "task: search result | query: " --doc-prefix "title: none | text: "
+```
+
+`--openai` embeds through the OpenAI `/v1/embeddings` API with `text-embedding-3-small`,
+matching what `EmbeddingsSystemOpenAI` uses in Unity. The key comes from the
+`OPENAI_API_KEY` environment variable, or from a RIDE configuration file named with
+`--config <ride.json>` (read from `openAIChatGPT.endpointKey`, the same field the Unity
+system reads). No location is searched implicitly and the key is never printed.
+
+### Calibrating the relevance floor
+
+`--floor-sweep` (with `--ollama` or `--openai`) calibrates
+`KnowledgeSettings.minSemanticScore`, the cosine below which a retrieved passage is
+discarded instead of being added to the prompt. It reports three things:
+
+1. Per pair, the cosine of the best chunk belonging to an accepted page - the score a
+   floor must stay below or it drops a correct answer. The minimum across all pairs is the
+   ceiling for any floor.
+2. The top cosine produced by a set of queries the corpus does not cover. A floor is only
+   useful if it sits above these, so the gap between this and (1) is the usable window.
+3. Semantic and hybrid hit@3 at floors from 0.00 to 0.60.
+
+A floor is meaningful only relative to one embedding model's score distribution, so
+re-run this after changing model or provider. Measured 2026-08-06 on the vhtoolkit
+dataset:
+
+| Model | prefixes | semantic | hybrid | usable window |
+|---|---|---|---|---|
+| `text-embedding-3-small` (OpenAI) | n/a | 31/32 | 32/32 | 0.2596 .. 0.3436 |
+| `embeddinggemma` | its own | 32/32 | 32/32 | 0.3239 .. 0.3362 |
+| `embeddinggemma` | none | 31/32 | 32/32 | 0.3293 .. 0.3527 |
+| `nomic-embed-text` | none | 31/32 | 32/32 | 0.5296 .. 0.5411 |
+| `mxbai-embed-large` | none | 31/32 | 32/32 | none |
+| `granite-embedding` | none | 31/32 | 31/32 | none |
+| `bge-m3` | none | 30/32 | 31/32 | none |
+
+Retrieval quality barely separates these; score calibration does. Only OpenAI produces a
+window wide enough to threshold against with any margin. "None" means uncovered queries
+score at least as high as the worst correct passage, so no threshold can separate them.
+
+Note where the numbers live. `KnowledgeSettings` defaults both floors to off, because a
+useful value depends on the corpus and the embedding model. The value an application ships
+belongs on its own settings - for the VHToolkit that is `RideSystemsCognition.prefab`, which
+carries `minSemanticScore: 0.3` from the OpenAI measurement above and is therefore inert on
+the local models. Re-run this sweep for your own corpus rather than inheriting either.
+
+### The lexical floor, measured
+
+`--floor-sweep` also calibrates `minLexicalScore`, and needs no embedding backend for that
+half - run it with no other flags. On the vhtoolkit dataset (2026-08-06) the answer is that
+**no usable lexical floor exists**:
+
+```
+best accepted-page score   min 3.46 | median 11.56 | max 31.34
+top uncovered-query score  7.38
+```
+
+The window is inverted by 3.9, worse than any embedding model. The cause is visible in the
+per-pair output, which prints query word counts alongside scores: a tf-idf sum grows with the
+number of query terms, so score confounds relevance with question length. "What is RIDE?" is
+three words and on topic, scoring 5.70; "How much does a used car cost these days?" is eight
+words and off topic, scoring 7.38. No threshold separates those, because they do not measure
+the same thing.
+
+Worse, a floor here is not merely useless, it is costly:
+
+| floor | lexical hit@3 |
+|---|---|
+| 0 | 30/32 |
+| 4 | 30/32 |
+| 6 | 28/32 |
+| 8 | 26/32 |
+| 10 | 20/32 |
+
+`minLexicalScore` shipped at `8` until 2026-08-06, which dropped four questions the retriever
+otherwise answered - including "What is RIDE?" - while rejecting nothing, since every
+uncovered query already scored below it. It is now `0`. Off-topic rejection on the lexical
+path comes from hybrid retrieval and from `contextPreamble` framing the material as
+reference rather than instruction, not from a threshold.
+
 ### Ollama port notes (read before debugging a failed semantic run)
 
 The harness hardcodes `http://127.0.0.1:11436` - raw Ollama's INTERNAL port in the
@@ -69,17 +158,16 @@ with matters:
 
 ## The vhtoolkit dataset is a snapshot
 
-`datasets/vhtoolkit/corpus/` is a COPY of the knowledge base shipped in
-`svn_vh_branch/VHUnityURP-Internal/Assets/Resources/VHKnowledge` (rewritten to spoken
-prose 2026-07-29), not a live reference. After editing the knowledge base, re-sync
-before re-running:
+`datasets/vhtoolkit/corpus/` is a COPY of the knowledge base the Unity projects ship in
+`Assets/VHShared/Resources/VHKnowledge` (rewritten to spoken prose 2026-07-29), not a live
+reference. After editing the knowledge base, re-sync before re-running - for example, from
+this folder, with the Unity project checked out alongside:
 
 ```
-Copy-Item "..\..\..\svn_vh_branch\VHUnityURP-Internal\Assets\Resources\VHKnowledge\*.txt" datasets\vhtoolkit\corpus\
+Copy-Item "<unity-project>\Assets\VHShared\Resources\VHKnowledge\*.txt" datasets\vhtoolkit\corpus\
 ```
 
-(Assumes the standard workspace layout with `svn_ride_trunk` and `svn_vh_branch`
-checked out side by side; adjust if yours differs.) Renamed or new knowledge files also
+Renamed or new knowledge files also
 need `pairs.json` accept lists updated - accepted pages match by EXACT title, and a
 page's title is its filename without extension.
 
@@ -124,7 +212,7 @@ in favor of package retrieval when Studio's knowledge wire-up lands (plan Phase 
 ## Proxy smoke test
 
 `--proxy-smoke` asks the dataset's first three questions of raw Ollama (11436) and the
-RUNNING rag-proxy (11434) side by side. With a corpus the model cannot know - past its
-training cutoff, or internal material - the raw side visibly confabulates where the
-proxy answers from the documents. Run it with the same dataset the proxy is serving,
-e.g. `--dataset ..\rag-proxy\corpus` for the drone demo.
+RUNNING rag-proxy (11434) side by side. With a corpus the model cannot already know -
+material past its training cutoff, or private to the deployment - the raw side visibly
+confabulates where the proxy answers from the documents. Run it with the same dataset the
+proxy is serving, pointing `--dataset` at that corpus folder.
