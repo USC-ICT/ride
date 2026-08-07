@@ -9,7 +9,7 @@ namespace Ride.NLP
 {
     /// <summary>Selectable Anthropic Claude models for NLP. Model ids live in code (not
     /// RideConfig) - see the dictionary below; mirrors the ChatGPT NLP pattern.</summary>
-    public enum AnthropicModel
+    public enum ClaudeModel
     {
         Fable5   = 10,
         Opus5    = 20,
@@ -20,7 +20,7 @@ namespace Ride.NLP
     /// <summary>
     /// Uses Anthropic Claude (https://www.anthropic.com/api) to provide LLM functionalities.
     /// </summary>
-    public class NlpSystemAnthropic : NlpSystemUnity
+    public class NlpSystemClaude : NlpSystemUnity
     {
         [SerializeField, Range(0f, 1f)] private float m_temperature = 0.3f;
 
@@ -46,25 +46,25 @@ namespace Ride.NLP
             set => m_maxTokens = value;
         }
 
-        [SerializeField] private AnthropicModel m_model = AnthropicModel.Haiku45;
+        [SerializeField] private ClaudeModel m_model = ClaudeModel.Haiku45;
 
-        private readonly Dictionary<AnthropicModel, string> m_modelDictionary = new()
+        private readonly Dictionary<ClaudeModel, string> m_modelDictionary = new()
         {
-            { AnthropicModel.Fable5,  "claude-fable-5"   },
-            { AnthropicModel.Opus5,   "claude-opus-5"    },
-            { AnthropicModel.Sonnet5, "claude-sonnet-5"  },
-            { AnthropicModel.Haiku45, "claude-haiku-4-5" },
+            { ClaudeModel.Fable5,  "claude-fable-5"   },
+            { ClaudeModel.Opus5,   "claude-opus-5"    },
+            { ClaudeModel.Sonnet5, "claude-sonnet-5"  },
+            { ClaudeModel.Haiku45, "claude-haiku-4-5" },
         };
 
-        /// <summary>The Anthropic model id currently selected, e.g. for UI display.</summary>
+        /// <summary>The Claude model id currently selected, e.g. for UI display.</summary>
         public string ModelId => m_modelDictionary[m_model];
 
         /// <summary>Selects which model subsequent requests use.</summary>
-        public void SetActiveModel(AnthropicModel model) => m_model = model;
+        public void SetActiveModel(ClaudeModel model) => m_model = model;
 
 
         /// <summary>
-        /// Requests response based on provided user input for Anthropic. 
+        /// Requests response based on provided user input for Claude. 
         /// </summary>
         /// <param name="request">User input, string question</param>
         /// <param name="onComplete">Delegate to execute on successful request, typically parses JSON response</param>
@@ -72,7 +72,7 @@ namespace Ride.NLP
         { 
             //Prepare parameters for the request
             var messagesList = GetParsedHistory();
-            messagesList.Add(new AnthropicMessage("user", request.content));
+            messagesList.Add(new ClaudeMessage("user", request.content));
 
             //Serialize data for the question
             string data = RideIO.JsonSerialize(new
@@ -119,7 +119,7 @@ namespace Ride.NLP
                 webRequest.result == UnityWebRequest.Result.ProtocolError)
             {
                 string error = string.IsNullOrEmpty(webRequest.error) ? webRequest.result.ToString() : webRequest.error;
-                Debug.LogWarning($"AnthropicSystem.cs::Request() - Failed: {webRequest.result} - {error}");
+                Debug.LogWarning($"NlpSystemClaude.cs::Request() - Failed: {webRequest.result} - {error}");
                 onComplete?.Invoke(new NlpResponse(
                     $"I'm sorry, something went wrong. I'm getting the error: '{error}'"));
                 return;
@@ -127,7 +127,7 @@ namespace Ride.NLP
 
             // Deserialize reponse
             var result = webRequest.downloadHandler.text;
-            var res = RideIO.JsonDeserialize<AnthropicResponse>(result);
+            var res = RideIO.JsonDeserialize<ClaudeResponse>(result);
             string content = res.content != null && res.content.Length > 0 ? res.content[0].text : null;
 
             // An empty response is a real outcome, most often when the answer hit max_tokens.
@@ -135,7 +135,7 @@ namespace Ride.NLP
             // behavior - from stalling on an utterance that never comes.
             if (string.IsNullOrWhiteSpace(content))
             {
-                Debug.LogWarning($"AnthropicSystem.cs::Request() - Empty response content " +
+                Debug.LogWarning($"NlpSystemClaude.cs::Request() - Empty response content " +
                     $"(stop reason '{res.stop_reason}', max tokens {m_maxTokens}).");
                 content = "I'm sorry, I did not receive a text response.";
             }
@@ -175,60 +175,60 @@ namespace Ride.NLP
         /// requests to the AI, ensuring that the AI has the necessary historical context to generate 
         /// appropriate responses.
         /// <returns>List of class that can be serialized into JSON.</returns>
-        private List<AnthropicMessage> GetParsedHistory()
+        private List<ClaudeMessage> GetParsedHistory()
         {
-            List<AnthropicMessage> history = new();
+            List<ClaudeMessage> history = new();
 
             foreach (var interaction in m_interactionHistory)
             {
                 if (interaction.input != null)
-                    history.Add(new AnthropicMessage("user", interaction.input));
+                    history.Add(new ClaudeMessage("user", interaction.input));
 
                 if (interaction.response != null) 
-                    history.Add(new AnthropicMessage("assistant", interaction.response));
+                    history.Add(new ClaudeMessage("assistant", interaction.response));
             }
 
             return history;
         }
 
-        #region AnthropicDataStruct
-        private class AnthropicRequest
+        #region ClaudeDataStruct
+        private class ClaudeRequest
         {
             public int max_tokens { get; set; }
             public string model { get; set; }
-            public AnthropicMessage[] messages { get; set; }    
+            public ClaudeMessage[] messages { get; set; }    
         }
 
-        private class AnthropicMessage
+        private class ClaudeMessage
         {
             public string role { get; set; }
             public string content { get; set; }
-            public AnthropicMessage(string role, string content)
+            public ClaudeMessage(string role, string content)
             {
                 this.role = role;
                 this.content = content;
             }
         }
 
-        private class AnthropicResponse
+        private class ClaudeResponse
         {
-            public AnthropicContent[] content { get; set; }    
+            public ClaudeContent[] content { get; set; }    
             public string id { get; set; }
             public string model { get; set; }
             public string role { get; set; }
             public string stop_reason { get; set; } 
             public string stop_sequence { get; set; }   
             public string type { get; set; }    
-            public AnthropicUsage usage { get; set; }   
+            public ClaudeUsage usage { get; set; }   
         }
 
-        private class AnthropicContent
+        private class ClaudeContent
         {
             public string text { get; set; }    
             public string type { get; set; }    
         }
 
-        private class AnthropicUsage
+        private class ClaudeUsage
         {
             public int input_tokens { get; set; }
             public int output_tokens { get; set; }

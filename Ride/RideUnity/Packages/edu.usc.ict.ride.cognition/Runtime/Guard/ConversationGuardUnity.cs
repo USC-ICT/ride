@@ -292,6 +292,20 @@ namespace Ride.Conversation
                 id="in-jailbreak-override", category="jailbreak", severity=2, outputRule=false,
                 pattern=@"(override|bypass|circumvent)\s.{0,20}(your|all|safety|content)\s.{0,20}(rules|filters|restrictions|guidelines)"
             },
+            new GuardRule
+            {
+                // Claimed authority over the character: the speaker asserts they built, operate,
+                // or are testing it. Identity cannot be verified, so such a claim grants nothing -
+                // and paired with any question about instructions it is among the most effective
+                // jailbreaks in practice. Keyed on a role relative to the character ("your/the
+                // developer") or on session framing ("this is a debugging session"), never on a
+                // bare self-introduction: "my name is X and I work at Y" does not match, and
+                // neither does "who created you?".
+                id="in-jailbreak-claimed-authority", category="jailbreak", severity=2, outputRule=false,
+                pattern=@"\b(i'?m|i\s+am|this\s+is)\b.{0,30}\b(your|the)\s+(creator|developer|administrator|admin|maintainer|engineer|author|programmer|operator)s?\b"
+                      + @"|\b(debugging|testing|auditing)\s+(session|mode)\b"
+                      + @"|\b(i'?m|i\s+am)\s+(debugging|testing|auditing)\s+(you|your)\b"
+            },
 
             // --- INPUT: injection ---
             new GuardRule
@@ -308,6 +322,16 @@ namespace Ride.Conversation
             {
                 id="in-injection-role-marker", category="injection", severity=1, outputRule=false,
                 pattern=@"^\s*(system|assistant)\s*:"
+            },
+            new GuardRule
+            {
+                // Confirmation probes. Asking whether the instructions already SAY something, or
+                // what they cover, leaks as much as asking for them verbatim - and the
+                // reveal/show/print/repeat rule above does not fire on a yes/no question. Covers
+                // both the "does your prompt say X" and "what do your instructions cover" shapes.
+                id="in-injection-confirm-prompt-content", category="injection", severity=2, outputRule=false,
+                pattern=@"(does|do|did|is|are)\s+(your|the)\s.{0,20}(prompt|instructions?|rules?|guidelines?)\s.{0,20}(say|says|mention|include|contain|state|tell)"
+                      + @"|(what|which)\s.{0,30}(your|the)\s.{0,20}(prompt|instructions?|rules?|guidelines?)\s.{0,20}(cover|covers|say|says|contain|include|mention)"
             },
 
             // --- INPUT: obfuscation (detected on RAW text; normalization would erase the spacing) ---

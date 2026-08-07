@@ -10,7 +10,7 @@ namespace Ride.Samples
     {
         private DebugMenu m_debugMenu;
         private NlpSystemChatGPT m_chatGpt;
-        private NlpSystemAnthropic m_anthropic;
+        private NlpSystemClaude m_claude;
         private NlpSystemAWSLex m_awsLex;
         private NlpSystemUnity m_currentLlm;
 
@@ -30,7 +30,7 @@ namespace Ride.Samples
 
             m_debugMenu     = Systems.Get<DebugMenu>();
             m_chatGpt       = Systems.Get<NlpSystemChatGPT>();
-            m_anthropic     = Systems.Get<NlpSystemAnthropic>();
+            m_claude     = Systems.Get<NlpSystemClaude>();
             m_awsLex        = Systems.Get<NlpSystemAWSLex>();
 
             m_currentLlm = m_chatGpt;
@@ -56,7 +56,7 @@ namespace Ride.Samples
             {
                 m_llmMode = nlpMode;
                 if (m_llmMode == 0) m_currentLlm = m_chatGpt;
-                else if (m_llmMode == 1) m_currentLlm = m_anthropic;
+                else if (m_llmMode == 1) m_currentLlm = m_claude;
                 else if (m_llmMode == 2) m_currentLlm = m_awsLex;
             }
 

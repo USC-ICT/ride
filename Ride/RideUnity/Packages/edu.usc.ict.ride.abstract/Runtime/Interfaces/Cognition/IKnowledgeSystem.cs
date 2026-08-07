@@ -60,7 +60,8 @@ namespace Ride.Conversation
 
         // Cap on the total characters of retrieved context attached to a request. Passages
         // are added best-first until the cap; the first passage is truncated rather than
-        // dropped if it alone exceeds the cap.
+        // dropped if it alone exceeds the cap. Sized for a conversational turn; raise it for
+        // longer-form answers, and bear in mind it competes with the prompt for context.
         public int maxContextChars = 2000;
 
         // Weight given to conversation-context terms in the retrieval query (the current
@@ -69,23 +70,20 @@ namespace Ride.Conversation
         // 0 disables context-aware retrieval.
         public float contextQueryWeight = 0.3f;
 
-        // Relevance floors. A retriever always returns its best matches, however weak, so
-        // without a floor a turn that carries no real query ("sure", "you do") still gets
-        // passages attached - whatever the corpus happens to rank first - and the model then
-        // treats that material as the subject. The floors are applied to the LEXICAL and
-        // SEMANTIC scores separately, before hybrid fusion, because fused rank-based scores
-        // cannot express relevance: reciprocal-rank fusion assigns nearly the same value to
-        // the top hit of every query, relevant or not.
+        // Relevance floors, applied to the LEXICAL and SEMANTIC scores separately before
+        // hybrid fusion. A retriever always returns its best matches, however weak, so
+        // without a floor a turn carrying no real query still gets passages attached and the
+        // model may treat that material as the subject. Fused rank-based scores cannot
+        // express relevance, which is why the floors sit before fusion rather than after.
         //
-        // Units differ per scorer and are not comparable with each other:
-        //  - minLexicalScore is a tf-idf sum, unbounded above. Weak conversational matches
-        //    land in the low single digits; a genuine topical match is typically well above.
-        //  - minSemanticScore is a cosine similarity, so roughly -1..1.
-        // Set either to 0 (lexical) or -1 (semantic) to disable that floor. Raise them if
-        // the character volunteers tangential material; lower them if it fails to use the
-        // corpus when it should. Turn on logRetrievals to see the scores you are cutting.
-        public float minLexicalScore = 8f;
-        public float minSemanticScore = 0.25f;
+        // Units differ per scorer and are not comparable with each other: minLexicalScore is
+        // a tf-idf sum, unbounded above; minSemanticScore is a cosine similarity, roughly
+        // -1..1. Both default to off, because a useful floor depends on the corpus and, for
+        // the semantic floor, on the embedding model - it is a measured value for a specific
+        // deployment, not a framework constant. Set them per application, and measure rather
+        // than guess. Turn on logRetrievals to see the scores a floor would cut.
+        public float minLexicalScore = 0f;    // 0 disables the lexical floor
+        public float minSemanticScore = -1f;  // -1 disables the semantic floor
 
         // Log one line per augmented turn (query + retrieved titles/scores) - the first
         // thing to check when a RAG answer surprises you. Cheap; fine to leave on in dev.

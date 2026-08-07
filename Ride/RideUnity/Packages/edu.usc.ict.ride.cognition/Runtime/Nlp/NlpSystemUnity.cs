@@ -11,7 +11,7 @@ namespace Ride.NLP
     /// Derive from this class when building an NLP provider that participates in the RIDE systems lifecycle,
     /// needs access to shared configuration, or wants to store prompt and interaction history in a consistent way.
     /// Use the <see cref="INlpSystem"/> interface when depending on NLP functionality from calling code, and use
-    /// concrete implementations such as <see cref="NlpSystemChatGPT"/>, <see cref="NlpSystemAnthropic"/>,
+    /// concrete implementations such as <see cref="NlpSystemChatGPT"/>, <see cref="NlpSystemClaude"/>,
     /// <see cref="NlpSystemAWSLex"/>, and <see cref="NlpSystemAskSage"/> when selecting a specific backend.
     /// Timing and other request instrumentation are intentionally left to callers and derived classes rather than
     /// being owned by this shared base type.

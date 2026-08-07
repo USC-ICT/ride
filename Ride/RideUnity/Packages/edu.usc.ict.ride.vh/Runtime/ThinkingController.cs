@@ -17,6 +17,13 @@ namespace Ride
         [SerializeField] private float m_enterBlendTime = 1.0f;
         [SerializeField] private float m_exitBlendTime = 1.0f;
 
+        /// <summary>
+        /// Multiplier applied to the exit blend for the next stop only, then reset to 1. Lets a
+        /// caller ease out of thinking behavior more gently than the configured time when the
+        /// character is returning to an idle conversation rather than answering.
+        /// </summary>
+        public float NextExitBlendScale { get; set; } = 1f;
+
         [Header("Gaze Focus Time")]
         [Tooltip("Minimum number of seconds character gazes at a single gaze target.")]
         [SerializeField] private int MinimumGazeFocus = 2;
@@ -59,6 +66,10 @@ namespace Ride
         private System.Random m_Random = new System.Random();
 
         private bool m_isThinking = false;
+
+        /// <summary>Whether thinking nonverbal behavior is currently active.</summary>
+        public bool IsThinking => m_isThinking;
+
         private string m_previousGazeTarget = "";
         private float m_nextGazeTime = 0f;
         private float m_thinkingEngageTime = 0f;
@@ -241,8 +252,10 @@ namespace Ride
 
         private void BeginGazeWeightBlend(bool thinking)
         {
-            m_currentBlendTime = thinking ? m_enterBlendTime : m_exitBlendTime;
+            m_currentBlendTime = thinking ? m_enterBlendTime : m_exitBlendTime * NextExitBlendScale;
             m_currentBlendElapsed = 0f;
+            if (!thinking)
+                NextExitBlendScale = 1f;  // one-shot, so an ordinary stop is unaffected
 
             m_blendStartEyeWeight = m_currentEyeWeight;
             m_blendStartHeadWeight = m_currentHeadWeight;
