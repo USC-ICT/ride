@@ -7,10 +7,24 @@
 // browser interop plugins, even though its primary current use is TTS playback.
 
 mergeInto(LibraryManager.library, {
+    $RideWebGLAudio: {
+        ptrToOffset: function (ptr) {
+            return typeof ptr === "bigint" ? Number(ptr) : ptr;
+        },
+
+        utf8ToString: function (ptr) {
+            return UTF8ToString(RideWebGLAudio.ptrToOffset(ptr));
+        },
+
+        ptrToAbi: function (ptr, samplePtr) {
+            return typeof samplePtr === "bigint" && typeof ptr !== "bigint" ? BigInt(ptr) : ptr;
+        }
+    },
+
     RideWebGLAudio_CreateAudioBlobUrl: function (mimeTypePtr, audioBase64Ptr) {
         try {
-            var mimeType = UTF8ToString(mimeTypePtr);
-            var audioBase64 = UTF8ToString(audioBase64Ptr);
+            var mimeType = RideWebGLAudio.utf8ToString(mimeTypePtr);
+            var audioBase64 = RideWebGLAudio.utf8ToString(audioBase64Ptr);
             var binary = atob(audioBase64);
             var length = binary.length;
             var bytes = new Uint8Array(length);
@@ -23,11 +37,13 @@ mergeInto(LibraryManager.library, {
             var url = URL.createObjectURL(blob);
             var urlLength = lengthBytesUTF8(url) + 1;
             var urlPtr = _malloc(urlLength);
-            stringToUTF8(url, urlPtr, urlLength);
-            return urlPtr;
+            stringToUTF8(url, RideWebGLAudio.ptrToOffset(urlPtr), urlLength);
+            return RideWebGLAudio.ptrToAbi(urlPtr, mimeTypePtr);
         } catch (error) {
             console.error("[Ride WebGL Audio] Failed to create audio blob URL.", error);
-            return 0;
+            return RideWebGLAudio.ptrToAbi(0, mimeTypePtr);
         }
     }
 });
+
+autoAddDeps(LibraryManager.library, "$RideWebGLAudio");

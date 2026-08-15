@@ -57,8 +57,11 @@ namespace Ride.Sensing
         public event Action onChaaracteristicsProcessed;
 
         public Material RenderMaterial => webCam.renderMaterial;
+        public VHWebCam WebCam => webCam;
 
         public bool IsProcessing { get { return m_processing; } }
+        public int captureWidth { get; private set; }
+        public int captureHeight { get; private set; }
 
         public SensingFrameResponse frameResponse
         {
@@ -134,6 +137,8 @@ namespace Ride.Sensing
         public void ProcessSingleScreenshot(bool saveToDisk = true)
         {
             CaptureScreenshot(saveToDisk);
+            if (m_imageData == null || m_imageData.Length == 0)
+                return;
 
             if (m_sensingFrameSystem != null)
             {
@@ -242,8 +247,22 @@ namespace Ride.Sensing
         /// <param name="saveToDisk">If true, writes the file to disk.</param>
         void CaptureScreenshot(bool saveToDisk)
         {
-            Texture2D photo = new Texture2D(webCam.texWidth, webCam.texHeight);
-            photo.SetPixels32(webCam.GetPixels32());
+            int width;
+            int height;
+            Color32[] pixels = webCam.GetOrientedPixels32(out width, out height);
+            if (pixels.Length == 0 || width <= 0 || height <= 0)
+            {
+                m_imageData = null;
+                captureWidth = 0;
+                captureHeight = 0;
+                return;
+            }
+
+            captureWidth = width;
+            captureHeight = height;
+
+            Texture2D photo = new Texture2D(width, height);
+            photo.SetPixels32(pixels);
             photo.Apply();
 
             m_imageData = photo.EncodeToJPG(m_imageQuality); // TODO: test further and perhaps parameterize quality (0 - 100)

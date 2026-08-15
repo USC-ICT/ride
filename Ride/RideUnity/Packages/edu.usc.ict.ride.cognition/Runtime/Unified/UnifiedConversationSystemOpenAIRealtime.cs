@@ -34,13 +34,13 @@ namespace Ride.Conversation
     /// <summary>Maps realtime model selections to their API model ids.</summary>
     public static class OpenAIRealtimeModels
     {
-        private static readonly System.Collections.Generic.Dictionary<OpenAIRealtimeModel, string> s_ids = new()
+        private static readonly Dictionary<OpenAIRealtimeModel, string> s_ids = new()
         {
             { OpenAIRealtimeModel.Realtime21,     "gpt-realtime-2.1"      },
             { OpenAIRealtimeModel.Realtime21Mini, "gpt-realtime-2.1-mini" },
         };
 
-        private static readonly System.Collections.Generic.Dictionary<OpenAIRealtimeTranscriptionModel, string> s_transcriptionIds = new()
+        private static readonly Dictionary<OpenAIRealtimeTranscriptionModel, string> s_transcriptionIds = new()
         {
             { OpenAIRealtimeTranscriptionModel.RealtimeWhisper,     "gpt-realtime-whisper"   },
             { OpenAIRealtimeTranscriptionModel.GPT4oMiniTranscribe, "gpt-4o-mini-transcribe" },
@@ -278,6 +278,15 @@ namespace Ride.Conversation
         }
 
         /// <summary>
+        /// Releases websocket, microphone, and streaming audio resources during system shutdown.
+        /// </summary>
+        public override void SystemShutdown()
+        {
+            Cleanup();
+            base.SystemShutdown();
+        }
+
+        /// <summary>
         /// Selects the microphone device used for realtime audio input.
         /// </summary>
         /// <param name="deviceName">Unity microphone device name, or null to use the default selection.</param>
@@ -452,12 +461,27 @@ namespace Ride.Conversation
 
             string url = $"{m_endpoint}?model={ModelId}";
             LogDebug($"ConnectToRealtimeAPI url='{url}'");
-            var headers = new Dictionary<string, string>
-            {
-                { "Authorization", $"Bearer {m_apiKey}" }
-            };
 
-            m_websocket = new WebSocket(url, headers);
+            if (IsRuntimeWebGL())
+            {
+                var subprotocols = new List<string>
+                {
+                    "realtime",
+                    $"openai-insecure-api-key.{m_apiKey}"
+                };
+
+                m_websocket = new WebSocket(url, subprotocols);
+            }
+            else
+            {
+                var headers = new Dictionary<string, string>
+                {
+                    { "Authorization", $"Bearer {m_apiKey}" }
+                };
+
+                m_websocket = new WebSocket(url, headers);
+            }
+
             m_websocket.OnOpen += OnWebSocketOpen;
             m_websocket.OnMessage += OnWebSocketMessage;
             m_websocket.OnError += OnWebSocketError;
@@ -604,10 +628,7 @@ namespace Ride.Conversation
             });
         }
 
-        private string BuildRealtimeInstructions()
-        {
-            return string.IsNullOrWhiteSpace(m_currentPrompt) ? DefaultInstructions : m_currentPrompt;
-        }
+        private string BuildRealtimeInstructions() => string.IsNullOrWhiteSpace(m_currentPrompt) ? DefaultInstructions : m_currentPrompt;
 
         private void ReplayHistoryForCurrentCharacter()
         {
@@ -812,6 +833,8 @@ namespace Ride.Conversation
 
                     LogDebug("Assistant audio stream marked complete");
                     m_audioStreamComplete = true;
+                    if (IsRuntimeWebGL() && !m_isStreamingAudio && m_outputAudioSource != null)
+                        StartStreamingPlayback();
                     break;
 
                 case "response.audio_transcript.delta":
@@ -1063,7 +1086,7 @@ namespace Ride.Conversation
 
                 m_receivedAssistantAudioSamples += samplesAdded;
 
-                if (!m_isStreamingAudio && m_outputAudioSource != null)
+                if (!IsRuntimeWebGL() && !m_isStreamingAudio && m_outputAudioSource != null)
                 {
                     int requiredSamples = Mathf.CeilToInt(m_streamingStartBufferSeconds * m_sampleRate);
                     if (m_streamingAudioQueue.Count >= requiredSamples)
@@ -1091,6 +1114,8 @@ namespace Ride.Conversation
             source.enabled = true;
         }
 
+        private static bool IsRuntimeWebGL() => RideUtils.IsWebGL() && !RideUtils.IsEditor();
+
         private void StartStreamingPlayback()
         {
             if (m_outputAudioSource == null)
@@ -1112,10 +1137,38 @@ namespace Ride.Conversation
 
             m_outputAudioSource.Stop();
             m_outputAudioSource.clip = null;
-            m_currentClipSamples = m_sampleRate * m_maxStreamingClipSeconds;
-            AudioClip streamingClip = AudioClip.Create("OpenAIRealtimeStreaming", m_currentClipSamples, 1, m_sampleRate, true, OnAudioRead);
-            m_outputAudioSource.clip = streamingClip;
-            m_isAudioCallbackReady = true;
+
+            if (IsRuntimeWebGL())
+            {
+                float[] queuedSamples;
+                lock (m_audioQueueLock)
+                {
+                    queuedSamples = m_streamingAudioQueue.ToArray();
+                    m_streamingAudioQueue.Clear();
+                }
+
+                if (queuedSamples.Length == 0)
+                {
+                    LogDebug("StartStreamingPlayback skipped: no queued audio samples");
+                    m_isStreamingAudio = false;
+                    return;
+                }
+
+                m_currentClipSamples = queuedSamples.Length;
+                AudioClip playbackClip = AudioClip.Create("OpenAIRealtimeWebGL", m_currentClipSamples, 1, m_sampleRate, false);
+                playbackClip.SetData(queuedSamples, 0);
+                m_outputAudioSource.clip = playbackClip;
+                m_assistantAudioStartedEventSent = true;
+                m_pendingAssistantAudioStartedEvent = true;
+            }
+            else
+            {
+                m_currentClipSamples = m_sampleRate * m_maxStreamingClipSeconds;
+                AudioClip streamingClip = AudioClip.Create("OpenAIRealtimeStreaming", m_currentClipSamples, 1, m_sampleRate, true, OnAudioRead);
+                m_outputAudioSource.clip = streamingClip;
+                m_isAudioCallbackReady = true;
+            }
+
             m_outputAudioSource.Play();
             m_isAssistantSpeaking = true;
 
@@ -1168,6 +1221,25 @@ namespace Ride.Conversation
 
         private IEnumerator MonitorStreamingPlayback()
         {
+            if (IsRuntimeWebGL())
+            {
+                while (m_isStreamingAudio)
+                {
+                    yield return null;
+
+                    if (m_outputAudioSource == null || !m_outputAudioSource.isPlaying)
+                    {
+                        StopStreamingPlayback(invokeFinishedEvent: true);
+                        break;
+                    }
+
+                    m_streamingPlaybackPosition = m_outputAudioSource.timeSamples;
+                }
+
+                m_monitorStreamingPlaybackCoroutine = null;
+                yield break;
+            }
+
             int emptyFrames = 0;
             int requiredEmptyFrames = Mathf.CeilToInt(m_streamingEndBufferSeconds / 0.1f);
 
@@ -1335,15 +1407,6 @@ namespace Ride.Conversation
                 Role = role,
                 Text = text
             });
-        }
-
-        /// <summary>
-        /// Releases websocket, microphone, and streaming audio resources during system shutdown.
-        /// </summary>
-        public override void SystemShutdown()
-        {
-            Cleanup();
-            base.SystemShutdown();
         }
 
         private void Cleanup()

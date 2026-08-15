@@ -14,6 +14,14 @@ mergeInto(LibraryManager.library, {
         _loading: false,
         _waiters: [],
 
+        ptrToOffset: function (ptr) {
+            return typeof ptr === "bigint" ? Number(ptr) : ptr;
+        },
+
+        utf8ToString: function (ptr) {
+            return UTF8ToString(RideAzureAsr.ptrToOffset(ptr));
+        },
+
         _getGlobal: function () {
             if (typeof globalThis !== "undefined") return globalThis;
             if (typeof window !== "undefined") return window;
@@ -154,10 +162,10 @@ mergeInto(LibraryManager.library, {
     },
 
     AzureAsr_Start: function (goNamePtr, keyPtr, regionPtr, langPtr) {
-        var goName = UTF8ToString(goNamePtr);
-        var key = UTF8ToString(keyPtr);
-        var region = UTF8ToString(regionPtr);
-        var lang = UTF8ToString(langPtr);
+        var goName = RideAzureAsr.utf8ToString(goNamePtr);
+        var key = RideAzureAsr.utf8ToString(keyPtr);
+        var region = RideAzureAsr.utf8ToString(regionPtr);
+        var lang = RideAzureAsr.utf8ToString(langPtr);
 
         RideAzureAsr.ensureLoaded(goName, function () {
             try {
@@ -184,7 +192,7 @@ mergeInto(LibraryManager.library, {
     },
 
     AzureAsr_Ping: function (goNamePtr) {
-        var goName = UTF8ToString(goNamePtr);
+        var goName = RideAzureAsr.utf8ToString(goNamePtr);
 
         RideAzureAsr.ensureLoaded(goName, function () {
             try {
@@ -203,7 +211,7 @@ mergeInto(LibraryManager.library, {
     },
 
     MicLevel_Start: function (goNamePtr) {
-        var goName = UTF8ToString(goNamePtr);
+        var goName = RideAzureAsr.utf8ToString(goNamePtr);
 
         RideAzureAsr.ensureLoaded(goName, function () {
             try {
