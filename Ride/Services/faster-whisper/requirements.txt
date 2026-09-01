@@ -1,4 +1,0 @@
-fastapi
-faster-whisper==1.2.1
-python-multipart
-uvicorn[standard]
