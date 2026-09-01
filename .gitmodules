@@ -1,0 +1,3 @@
+[submodule "Ride/RideServices"]
+	path = Ride/RideServices
+	url = https://github.com/USC-ICT/ride-services.git
