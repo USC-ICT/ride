@@ -2,7 +2,16 @@ using System.Collections.Generic;
 
 namespace Ride.Movement
 {
-    public enum MovementLeg { Dismounted, Wheeled, Tracked }
+    /// <summary>Identifies the locomotion category used for movement and path planning.</summary>
+    public enum MovementLeg
+    {
+        /// <summary>Movement on foot.</summary>
+        Dismounted,
+        /// <summary>Movement using wheeled vehicles.</summary>
+        Wheeled,
+        /// <summary>Movement using tracked vehicles.</summary>
+        Tracked
+    }
 
     /// <summary>
     /// Interface for movement systems that manage pathfinding and locomotion

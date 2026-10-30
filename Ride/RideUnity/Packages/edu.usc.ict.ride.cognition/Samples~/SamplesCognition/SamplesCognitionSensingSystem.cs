@@ -46,6 +46,7 @@ namespace Ride.Samples
             m_currentSensing = m_awsRekognitionSystem;
             m_webCamIndex = m_vhWebCam.currentDevice;
             m_sensingProcessor.SetSensingSystems(m_currentSensing);
+            SetWebcamPreviewVisible(m_webcamToggle);
         }
 
         /// <summary>
@@ -165,7 +166,20 @@ namespace Ride.Samples
             else if (!m_webcamToggle)
                 StopSensingProcessor();
 
-            m_webcamRawImage.Show(m_webcamToggle);
+            SetWebcamPreviewVisible(m_webcamToggle);
+        }
+
+        /// <summary>
+        /// Shows or hides the full webcam preview group, including the RawImage and overlay siblings.
+        /// </summary>
+        /// <param name="visible">Whether the webcam preview group should be visible.</param>
+        void SetWebcamPreviewVisible(bool visible)
+        {
+            RectTransform previewRoot = GetWebcamPreviewRoot();
+            if (previewRoot != null)
+                previewRoot.gameObject.SetActive(visible);
+
+            m_webcamRawImage.Show(visible);
         }
 
         /// <summary>

@@ -1,10 +1,15 @@
 namespace Ride
 {
+    /// <summary>Specifies how a RIDE camera is positioned and oriented relative to its subject.</summary>
     public enum RideCameraView
     {
+        /// <summary>Locks the camera to its configured transform.</summary>
         Locked,
+        /// <summary>Allows unrestricted camera look control.</summary>
         FreeLook,
+        /// <summary>Orbits the camera around a subject.</summary>
         RotateAround,
+        /// <summary>Orients the camera toward a subject.</summary>
         LookAt
     }
 

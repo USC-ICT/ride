@@ -5,12 +5,20 @@ using Ride;
 using Ride.Examples;
 
 
+/// <summary>Adds basic Timeline playback and global pause controls to the RIDE debug menu.</summary>
+/// <remarks>
+/// The Start action plays the first configured <see cref="PlayableDirector"/>. Pause toggles
+/// <see cref="Time.timeScale"/> for the entire simulation, not only the configured Timeline.
+/// </remarks>
 public class RideTimelineDebugMenu : RideBaseMinimal
 {
+    /// <summary>The directors exposed to the debug UI; the first entry is started by the Start button.</summary>
     [SerializeField] private List<PlayableDirector> DirectorList;
 
+    /// <summary>Whether this menu has paused the simulation by setting the time scale to zero.</summary>
     private bool isPaused = false;
     
+    /// <inheritdoc/>
     protected override void Start()
     {
         base.Start();
@@ -20,6 +28,7 @@ public class RideTimelineDebugMenu : RideBaseMinimal
         ShowDebugMenu(true);
     }
 
+    /// <summary>Draws the Timeline start and pause controls.</summary>
     void OnGUITimeline()
     {
         DrawGUILabel("Timeline Controls: ");

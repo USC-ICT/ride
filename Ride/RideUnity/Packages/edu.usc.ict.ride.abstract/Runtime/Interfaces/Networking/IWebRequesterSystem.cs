@@ -3,22 +3,36 @@ using System.Collections.Generic;
 
 namespace Ride.Networking
 {
+    /// <summary>Describes the completion state of a RIDE web request.</summary>
+    /// <remarks>Values mirror Unity's <c>UnityWebRequest.Result</c> values for adapter compatibility.</remarks>
     public enum WebRequestResult
     {
         // Ref: UnityWebRequest.Result
 
+        /// <summary>The request is still running.</summary>
         InProgress = 0,           // UnityWebRequest.Result.InProgress
+
+        /// <summary>The request completed successfully.</summary>
         Success = 1,              // UnityWebRequest.Result.Success
+
+        /// <summary>The request could not establish or maintain a connection.</summary>
         ConnectionError = 2,      // UnityWebRequest.Result.ConnectionError
+
+        /// <summary>The server returned an HTTP error response.</summary>
         ProtocolError = 3,        // UnityWebRequest.Result.ProtocolError
+
+        /// <summary>The received data could not be processed.</summary>
         DataProcessingError = 4,  // UnityWebRequest.Result.DataProcessingError
     }
 
+    /// <summary>Represents the callback invoked when an asynchronous web request completes.</summary>
+    /// <typeparam name="T">The response payload type.</typeparam>
+    /// <param name="result">The request completion state.</param>
+    /// <param name="error">The transport or processing error, or an empty value when successful.</param>
+    /// <param name="response">The response payload, when available.</param>
     public delegate void OnWebRequestReceived<T>(WebRequestResult result, string error, T response);
 
-    /// <summary>
-    /// System that facilitates making common web requests (e.g., PUT with JSON payloads).
-    /// </summary>
+    /// <summary>Provides JSON PUT requests used by RIDE services such as AWS file storage.</summary>
     public interface IWebRequesterSystem : IRideSystem
     {
         /// <summary>

@@ -7,9 +7,17 @@ using Ride.Timeline;
 using UnityEngine.Timeline;
 
 
+/// <summary>Customizes the duration and Timeline background of virtual-human audio clips.</summary>
+/// <remarks>
+/// The editor keeps a <see cref="Clip_vhPlayAudio"/> Timeline clip aligned with its assigned
+/// <see cref="AudioClip"/> and draws a cyan waveform when the entire audio clip is visible. Cropped
+/// waveform rendering remains intentionally unimplemented as recorded by the retained TODO.
+/// See <a href="https://docs.unity3d.com/Packages/com.unity.timeline@1.8/api/UnityEditor.Timeline.ClipEditor.html">Unity Timeline ClipEditor documentation</a>.
+/// </remarks>
 [CustomTimelineEditor(typeof(Clip_vhPlayAudio))]
 public class RideTimelineEditor_vhPlayAudio : ClipEditor
 {
+    /// <inheritdoc/>
     public override void OnClipChanged(TimelineClip clip)
     {
         base.OnClipChanged(clip);
@@ -23,6 +31,7 @@ public class RideTimelineEditor_vhPlayAudio : ClipEditor
         clip.duration = audioClip.length;
     }
 
+    /// <inheritdoc/>
     public override void DrawBackground(TimelineClip clip, ClipBackgroundRegion region)
     {
         base.DrawBackground(clip, region);
@@ -39,6 +48,10 @@ public class RideTimelineEditor_vhPlayAudio : ClipEditor
         EditorGUI.DrawTextureTransparent(backgroundRegion, waveformTexture);
     }
 
+    /// <summary>Creates a waveform texture for a full, uncropped audio clip region.</summary>
+    /// <param name="audioClip">Audio clip whose samples are rendered.</param>
+    /// <param name="region">Visible Timeline region and dimensions.</param>
+    /// <returns>A generated waveform texture, or <see langword="null"/> when it cannot be rendered.</returns>
     private Texture GetWaveForm(AudioClip audioClip, ClipBackgroundRegion region)
     {
         int width = (int)region.position.width;
@@ -67,7 +80,7 @@ public class RideTimelineEditor_vhPlayAudio : ClipEditor
             s++;
         }
 
-        //Draw background
+        // Fill the texture before drawing the mirrored waveform around its vertical center.
         for (int x = 0; x < width; x++)
         {
             for (int y = 0; y < height; y++)
@@ -76,7 +89,7 @@ public class RideTimelineEditor_vhPlayAudio : ClipEditor
             }
         }
 
-        //Draw waveform
+        // Draw the waveform.
         for (int x = 0; x < waveform.Length; x++)
         {
             for (int y = 0; y <= waveform[x] * ((float)height * 1.5f/*.75f*/); y++)
@@ -92,12 +105,20 @@ public class RideTimelineEditor_vhPlayAudio : ClipEditor
 }
 
 
+/// <summary>Provides audio assignment and preview controls for <see cref="Clip_vhPlayAudio"/> assets.</summary>
+/// <remarks>
+/// Preview uses Unity Editor's internal <c>AudioUtil.PlayPreviewClip</c> method through reflection
+/// because that preview API is not publicly exposed. The reflected method can change between Unity
+/// editor versions and is used only by this editor-only inspector.
+/// </remarks>
 [CustomEditor(typeof(Clip_vhPlayAudio))]
 public class TimelineCustomInspectorEditor_AudioPlay : Editor
 {
+    /// <summary>Serialized virtual-human audio behavior displayed by the inspector.</summary>
     SerializedProperty m_behaviour;
     //SerializedProperty m_audioSource;
 
+    /// <summary>Caches the serialized behavior property when the inspector is enabled.</summary>
     public void OnEnable()
     {
         //m_audioClip = serializedObject.FindProperty("m_audioClip");
@@ -105,11 +126,13 @@ public class TimelineCustomInspectorEditor_AudioPlay : Editor
         m_behaviour = serializedObject.FindProperty("m_behaviour");
     }
 
+    /// <inheritdoc/>
     public override void OnInspectorGUI()
     {
         ExposeParametersToInspector();
     }
 
+    /// <summary>Draws the audio clip field and preview button.</summary>
     private void ExposeParametersToInspector()
     {
         Clip_vhPlayAudio targetScript = (Clip_vhPlayAudio)target;
@@ -124,6 +147,10 @@ public class TimelineCustomInspectorEditor_AudioPlay : Editor
         serializedObject.ApplyModifiedProperties();
     }
 
+    /// <summary>Invokes Unity Editor's internal preview method for an audio clip.</summary>
+    /// <param name="clip">Audio clip to preview.</param>
+    /// <param name="startSample">Sample index at which playback begins.</param>
+    /// <param name="loop">Whether preview playback should loop.</param>
     private void PlayAudioClip(AudioClip clip, int startSample = 0, bool loop = false)
     {
         Assembly unityEditorAssembly = typeof(AudioImporter).Assembly;

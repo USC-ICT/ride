@@ -10,18 +10,36 @@ using Ride;
 using Ride.Timeline;
 using VHAssets;
 
+/// <summary>Expands a virtual-human cutscene clip into synchronized child tracks in the Timeline editor.</summary>
+/// <remarks>
+/// The editor reads BML timing and behavior XML from <see cref="Clip_vhCutscene"/>, then creates
+/// audio, utterance, viseme, body-animation, head-animation, and face-animation tracks beneath the
+/// cutscene's parent track. It also prevents duplicated cutscene clips from generating conflicting
+/// layers. See <a href="https://docs.unity3d.com/Packages/com.unity.timeline@1.8/api/UnityEditor.Timeline.ClipEditor.html">Unity Timeline ClipEditor documentation</a>.
+/// </remarks>
 [CustomTimelineEditor(typeof(Clip_vhCutscene))]
 public class RideTimelineEditor_vhCutscene : ClipEditor
 {
     //private PlayableDirector m_ownerDirector;
+
+    /// <summary>BML time offsets keyed by timestamp identifier.</summary>
     private Dictionary<string, float> m_timestampsDictionary = new Dictionary<string, float>();  //-Key: Timestamp id, Value: time
 
+    /// <summary>Parser used to read BML utterance and lip-sync timing data.</summary>
     private BMLReader m_BMLReader = new BMLReader();
+
+    /// <summary>Most recently parsed utterance and lip-sync timing data.</summary>
     private BMLReader.UtteranceTiming m_UtteranceTiming = new BMLReader.UtteranceTiming();
+
+    /// <summary>Body-animation timestamps already expanded during the current generation pass.</summary>
     private List<string> m_createdBodyAnimationTimestamps = new List<string>(); //Used to keep track of created clips to avoid multiple clip in same timestamp.
+
+    /// <summary>Head-animation timestamps already expanded during the current generation pass.</summary>
     private List<string> m_createdHeadAnimationTimestamps = new List<string>();
 
 
+    /// <inheritdoc/>
+    /// <remarks>Deletes duplicated cutscene clips because each cutscene owns a generated child-track hierarchy.</remarks>
     public override void OnCreate(TimelineClip clip, TrackAsset track, TimelineClip clonedFrom)
     {
         if (clonedFrom != null)  //-There is no need for duplicate Cutscene. Delete cloned clip to avoid conflict.
@@ -32,6 +50,7 @@ public class RideTimelineEditor_vhCutscene : ClipEditor
         }
     }
 
+    /// <inheritdoc/>
     public override void OnClipChanged(TimelineClip clip)
     {
         base.OnClipChanged(clip);
@@ -56,6 +75,8 @@ public class RideTimelineEditor_vhCutscene : ClipEditor
         //AdjustChildClipPosition(clip);
     }
 
+    /// <summary>Realigns generated child clips with the cutscene start and their BML timestamp offsets.</summary>
+    /// <param name="clip">Parent cutscene clip.</param>
     private void AdjustChildClipPosition(TimelineClip clip)
     {
         Clip_vhCutscene clipScript = clip.asset as Clip_vhCutscene;
@@ -100,6 +121,9 @@ public class RideTimelineEditor_vhCutscene : ClipEditor
         }
     }
 
+    /// <summary>Checks whether the cutscene has all assets required to create its child tracks.</summary>
+    /// <param name="clip">Cutscene clip to validate.</param>
+    /// <returns><see langword="true"/> when utterance, BML, audio, and XML assets are assigned.</returns>
     private bool IsEveryVariableSet(TimelineClip clip)
     {
         Clip_vhCutscene clipScript = clip.asset as Clip_vhCutscene;
@@ -112,6 +136,8 @@ public class RideTimelineEditor_vhCutscene : ClipEditor
         return true;
     }
 
+    /// <summary>Parses the cutscene metadata and creates its complete child-track hierarchy.</summary>
+    /// <param name="clip">Cutscene clip whose child tracks are created.</param>
     private void CreateLayer(TimelineClip clip)
     {
         ReadBML(clip.asset as Clip_vhCutscene);
@@ -126,6 +152,8 @@ public class RideTimelineEditor_vhCutscene : ClipEditor
         TimelineEditor.Refresh(RefreshReason.ContentsAddedOrRemoved);
     }
 
+    /// <summary>Creates the child audio track and copies the cutscene's audio and character data.</summary>
+    /// <param name="clip">Parent cutscene clip.</param>
     private void CreateAudioTrack(TimelineClip clip)
     {
         Clip_vhCutscene clipScript = clip.asset as Clip_vhCutscene;
@@ -147,6 +175,8 @@ public class RideTimelineEditor_vhCutscene : ClipEditor
     }
 
 
+    /// <summary>Creates timestamped utterance clips from parsed BML timing entries.</summary>
+    /// <param name="clip">Parent cutscene clip.</param>
     private void CreateUtteranceTrack(TimelineClip clip)
     {
         Clip_vhCutscene clipScript = clip.asset as Clip_vhCutscene;
@@ -190,6 +220,8 @@ public class RideTimelineEditor_vhCutscene : ClipEditor
         public float endTime;
      */
 
+    /// <summary>Creates timestamped viseme clips from parsed BML lip-sync entries.</summary>
+    /// <param name="clip">Parent cutscene clip.</param>
     private void CreateVisemeTrack(TimelineClip clip)
     {
         Clip_vhCutscene clipScript = clip.asset as Clip_vhCutscene;
@@ -223,6 +255,8 @@ public class RideTimelineEditor_vhCutscene : ClipEditor
     }
 
 
+    /// <summary>Creates body-animation clips from animation elements in the cutscene behavior XML.</summary>
+    /// <param name="clip">Parent cutscene clip.</param>
     private void CreateBodyMovementTrack(TimelineClip clip)
     {
         Clip_vhCutscene clipScript = clip.asset as Clip_vhCutscene;
@@ -253,6 +287,8 @@ public class RideTimelineEditor_vhCutscene : ClipEditor
     }
 
 
+    /// <summary>Creates head-movement clips from head elements in the cutscene behavior XML.</summary>
+    /// <param name="clip">Parent cutscene clip.</param>
     private void CreateHeadMovementTrack(TimelineClip clip)
     {
 
@@ -283,6 +319,8 @@ public class RideTimelineEditor_vhCutscene : ClipEditor
         }
     }
 
+    /// <summary>Creates the face-animation child track reserved for facial behavior clips.</summary>
+    /// <param name="clip">Parent cutscene clip.</param>
     private void CreateFaceAnimationTrack(TimelineClip clip)
     {
         Clip_vhCutscene clipScript = clip.asset as Clip_vhCutscene;
@@ -290,6 +328,11 @@ public class RideTimelineEditor_vhCutscene : ClipEditor
     }
 
 
+    /// <summary>Finds or creates a named RIDE Timeline child track.</summary>
+    /// <param name="clip">Cutscene clip that owns the generated hierarchy.</param>
+    /// <param name="trackName">Name of the child track.</param>
+    /// <param name="currTrack">Parent track beneath which the child is created.</param>
+    /// <returns>The existing or newly created child track.</returns>
     private TrackAsset GetChildTrack(TimelineClip clip, string trackName, TrackAsset currTrack)
     {
         TrackAsset track = currTrack.GetChildTracks().FirstOrDefault(x => x.name == trackName);
@@ -304,6 +347,8 @@ public class RideTimelineEditor_vhCutscene : ClipEditor
     }
 
 
+    /// <summary>Parses BML timing data and caches timestamp offsets for generated clips.</summary>
+    /// <param name="clip">Cutscene asset containing the BML lip-sync text.</param>
     private void ReadBML(Clip_vhCutscene clip)
     {
         if (clip.m_behaviour.m_lipSyncInfo == null) { return; }
@@ -314,6 +359,9 @@ public class RideTimelineEditor_vhCutscene : ClipEditor
             m_timestampsDictionary.TryAdd(t.id, t.time);
     }
 
+    /// <summary>Finds the named animation in scene Animator Controllers.</summary>
+    /// <param name="animationName">Animation clip name to find.</param>
+    /// <returns>The animation length clamped to at least one second, or one second when not found.</returns>
     private float GetAnimationLength(string animationName)
     {
         foreach (Animator animator in RideUtils.FindObjectsByType<Animator>())
@@ -329,6 +377,11 @@ public class RideTimelineEditor_vhCutscene : ClipEditor
         return 1f;
     }
 
+    /// <summary>Creates a supported body or head animation clip from the current behavior XML element.</summary>
+    /// <param name="clip">Parent cutscene clip.</param>
+    /// <param name="reader">XML reader positioned on the behavior element.</param>
+    /// <param name="type">Behavior element type being expanded.</param>
+    /// <param name="clipScript">Cutscene asset that owns the generated child tracks.</param>
     private void CreateAnimationClip(TimelineClip clip, XmlTextReader reader, string type, Clip_vhCutscene clipScript)
     {
         switch (type)
@@ -419,6 +472,9 @@ public class RideTimelineEditor_vhCutscene : ClipEditor
 
     }
 
+    /// <summary>Gets the parsed time offset for a BML timestamp identifier.</summary>
+    /// <param name="timestampID">Timestamp identifier to resolve.</param>
+    /// <returns>The time offset in seconds, or <c>-1</c> when the identifier is unknown.</returns>
     public float GetTimeOffset(string timestampID)
     {
         if (m_timestampsDictionary.ContainsKey(timestampID))
@@ -428,19 +484,23 @@ public class RideTimelineEditor_vhCutscene : ClipEditor
 }
 
 
+/// <summary>Provides behavior editing and manual child-track generation for <see cref="Clip_vhCutscene"/>.</summary>
 [CustomEditor(typeof(Clip_vhCutscene))]
 public class ClipInspectorEditor_vhCutscene : Editor
 {
+    /// <summary>Serialized cutscene behavior displayed by the inspector.</summary>
     SerializedProperty m_behaviour;
     //SerializedProperty m_avatar;
     //SerializedProperty m_audioSource;
 
 
+    /// <summary>Caches the serialized cutscene behavior when the inspector is enabled.</summary>
     public void OnEnable()
     {
         m_behaviour = serializedObject.FindProperty("m_behaviour");
     }
 
+    /// <inheritdoc/>
     public override void OnInspectorGUI()
     {
         Clip_vhCutscene targetScript = (Clip_vhCutscene)target;

@@ -1,8 +1,9 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Playables;
 using UnityEngine.Timeline;
-using System.Collections;
-using System.Collections.Generic;
 
 namespace Ride.Timeline
 {
@@ -53,7 +54,7 @@ namespace Ride.Timeline
         }
     }
 
-
+    [Serializable]
     public class RideTimelineBehaviour : PlayableBehaviour
     {
         protected RideTimelineManager m_manager { get; set; }

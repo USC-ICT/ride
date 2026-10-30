@@ -231,7 +231,7 @@ namespace Ride
 
                     var signedUrlOp = RequestSignedURL(catalogFilePath);
                     signedUrlOp.Then(url => { signedCatalogUrl = url; done = true; })
-                               .Catch(error => { Debug.LogError(error); done = true; });
+                               .Catch(error => { done = true; Debug.LogWarning(error); });
 
                     {
                         float startWait = Time.realtimeSinceStartup;
@@ -587,7 +587,7 @@ namespace Ride
                         string remoteBundlePath = Path.Combine(catalog.remotePrefixPath, bundleName).Replace("\\", "/");
                         var urlOp = RequestSignedURL(remoteBundlePath);
                         urlOp.Then(url => { signedUrl = url; done = true; })
-                            .Catch(err => { Debug.LogError(err); done = true; });
+                             .Catch(err => { done = true; Debug.LogWarning(err); });
 
                         float startWait = Time.realtimeSinceStartup;
                         float lastLogSignedUrl = 0f;

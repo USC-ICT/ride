@@ -4,10 +4,11 @@ using Ride.WorldState;
 namespace Ride
 {
     /// <summary>
-    /// Response from <see cref="DrawTrajectoryPath"/>, containing the LineRenderer used for visualization.
+    /// Response from <see cref="IAttackVisualizationSystem.DrawTrajectoryPath"/>, containing the LineRenderer used for visualization.
     /// </summary>
     public class TrajectoryPathResponse : SystemResponse
     {
+        /// <summary>The Unity line renderer used to draw the trajectory.</summary>
         public UnityEngine.LineRenderer lineRenderer;
     }
 
@@ -16,6 +17,7 @@ namespace Ride
     /// </summary>
     public class TrajectoryValidityResponse : SystemResponse
     {
+        /// <summary>Whether the displayed trajectory can reach its intended destination.</summary>
         public bool isValid;
     }
 

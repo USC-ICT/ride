@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using UnityEngine;
 using Ride.AWS;
 
 namespace Ride.NLP
@@ -35,6 +36,7 @@ namespace Ride.NLP
         private string AWSDateTime  { get => DateTimeOffset.UtcNow.ToString("yyyyMMddTHHmmssZ");  }
         private string AWSDate      { get => DateTimeOffset.UtcNow.ToString("yyyyMMdd");}
 
+        [SerializeField, Min(1)] private int m_requestTimeoutSeconds = 20;
         private bool m_processing = false;
         private NlpSentimentResponse m_nlpSentimentResponse = new NlpSentimentResponse("empty");
         private NlpResponse m_nlpQnAAnswer = new NlpResponse("empty");
@@ -95,36 +97,73 @@ namespace Ride.NLP
             System.Diagnostics.Stopwatch stopwatch2 = new System.Diagnostics.Stopwatch();
             m_processing = true; // Locking, since single request provides both QnA Answer and Sentiment analysis
 
-            string uri = AWSLex.GetAWSLexAskUri(m_host_runtime, m_botName, m_botAlias);
+            try
+            {
+                string uri = AWSLex.GetAWSLexAskUri(m_host_runtime, m_botName, m_botAlias);
 
-            var utcNow = DateTimeOffset.UtcNow;
-            string awsDateTime = utcNow.ToString("yyyyMMddTHHmmssZ");
-            string awsDate = utcNow.ToString("yyyyMMdd");
+                var utcNow = DateTimeOffset.UtcNow;
+                string awsDateTime = utcNow.ToString("yyyyMMddTHHmmssZ");
+                string awsDate = utcNow.ToString("yyyyMMdd");
 
-            var strHeadersForAuthorization = new Dictionary<string, string>();
-            strHeadersForAuthorization.Add("x-amz-date", awsDateTime);
-            strHeadersForAuthorization.Add("host", m_host_runtime);
+                var strHeadersForAuthorization = new Dictionary<string, string>();
+                strHeadersForAuthorization.Add("x-amz-date", awsDateTime);
+                strHeadersForAuthorization.Add("host", m_host_runtime);
 
-            string questionJSON = "{\"inputText\": \"" + question + "\"}";
-            string awsAuthorization = RideAWSUtils.GetAWSAuthorizationHeader(uri, questionJSON, System.Net.Http.HttpMethod.Post, m_awsRegion, m_awsAccessKey, m_awsSecretKey, strHeadersForAuthorization, awsDateTime, awsDate, m_awsService);
+                string questionJSON = "{\"inputText\": \"" + question + "\"}";
+                string awsAuthorization = RideAWSUtils.GetAWSAuthorizationHeader(uri, questionJSON, System.Net.Http.HttpMethod.Post, m_awsRegion, m_awsAccessKey, m_awsSecretKey, strHeadersForAuthorization, awsDateTime, awsDate, m_awsService);
 
-            var strHeadersForSending = new Dictionary<string, string>();
-            strHeadersForSending.Add("x-amz-date", awsDateTime);
-            strHeadersForSending.Add("Authorization", awsAuthorization);
+                var strHeadersForSending = new Dictionary<string, string>();
+                strHeadersForSending.Add("x-amz-date", awsDateTime);
+                strHeadersForSending.Add("Authorization", awsAuthorization);
 
-            // Call web service
-            stopwatch2.Start();
-            string response = await RideIO.Post(uri, questionJSON, strHeadersForSending, "application/json", m_host_runtime);
-            TimeSpan ts = stopwatch2.Elapsed;
-            m_responseTime = ts.Milliseconds.ToString() + " ms";
+                // Call web service
+                stopwatch2.Start();
+                Task<string> requestTask = RideIO.Post(uri, questionJSON, strHeadersForSending, "application/json", m_host_runtime);
+                Task completedTask = await Task.WhenAny(requestTask, Task.Delay(m_requestTimeoutSeconds * 1000));
+                if (completedTask != requestTask)
+                {
+                    _ = ObserveRequestCompletion(requestTask);
+                    SetProcessingFailure($"AWS Lex request timed out after {m_requestTimeoutSeconds} seconds.");
+                    return;
+                }
 
-            // Process both QnA Answer and Sentiment Analsysis
-            AWSLex.AWSLexResponse awsResponse = RideIO.JsonDeserializeIgnoreNullAndMissing<AWSLex.AWSLexResponse>(response);
-            m_nlpQnAAnswer = new NlpResponse(awsResponse.message);
-            string[] awsSentimentScores = awsResponse.sentimentResponse.sentimentScore.Split(',', '{', '}', ':', ' '); // Example: {Positive: 0.029292157,Negative: 0.10695917,Neutral: 0.86374426,Mixed: 4.3991945E-6}
-            m_nlpSentimentResponse = new NlpSentimentResponse(response, awsResponse.sentimentResponse.sentimentLabel, Convert.ToDouble(awsSentimentScores[3]), Convert.ToDouble(awsSentimentScores[9]), Convert.ToDouble(awsSentimentScores[6]));
+                string response = await requestTask;
 
-            m_processing = false; // Unlocking
+                // Process both QnA Answer and Sentiment Analsysis
+                AWSLex.AWSLexResponse awsResponse = RideIO.JsonDeserializeIgnoreNullAndMissing<AWSLex.AWSLexResponse>(response);
+                m_nlpQnAAnswer = new NlpResponse(awsResponse.message);
+                string[] awsSentimentScores = awsResponse.sentimentResponse.sentimentScore.Split(',', '{', '}', ':', ' '); // Example: {Positive: 0.029292157,Negative: 0.10695917,Neutral: 0.86374426,Mixed: 4.3991945E-6}
+                m_nlpSentimentResponse = new NlpSentimentResponse(response, awsResponse.sentimentResponse.sentimentLabel, Convert.ToDouble(awsSentimentScores[3]), Convert.ToDouble(awsSentimentScores[9]), Convert.ToDouble(awsSentimentScores[6]));
+            }
+            catch (Exception exception)
+            {
+                SetProcessingFailure($"AWS Lex request failed with {exception.GetType().Name}.");
+            }
+            finally
+            {
+                stopwatch2.Stop();
+                m_responseTime = stopwatch2.Elapsed.Milliseconds.ToString() + " ms";
+                m_processing = false;
+            }
+        }
+
+        private void SetProcessingFailure(string details)
+        {
+            Debug.LogWarning($"[NlpSystemAWSLex] {details}");
+            m_nlpQnAAnswer = new NlpResponse("I'm sorry, I could not complete that request.");
+            m_nlpSentimentResponse = new NlpSentimentResponse(details);
+        }
+
+        private static async Task ObserveRequestCompletion(Task<string> requestTask)
+        {
+            try
+            {
+                await requestTask;
+            }
+            catch
+            {
+                // The caller already reported the timeout; this only observes a later task failure.
+            }
         }
 
         /// <summary>

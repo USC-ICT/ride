@@ -343,8 +343,14 @@ namespace Ride.TextToSpeech
         [Range(0f, 1f)] public float stabilityParameter = 0.9f;
         [Range(0f, 1f)] public float similarityParameter = 0.75f;
 
+        [Tooltip("Log the connection result, the voice and model in use, and how long each synthesis request takes. " +
+                 "Failures and missing voices are always logged.")]
+        [SerializeField] private bool logDiagnostics = false;
+
         [SerializeField] private List<IpaDictionary> ipaDictionaries = new();
         private bool m_ipaDictionariesAudited = false;
+        private string m_lastLoggedVoice;
+        private readonly Dictionary<string, (int count, double totalMs, double msPerChar)> m_timingStats = new();
 
         public class IPAtoFacefxMap
         {
@@ -663,6 +669,8 @@ namespace Ride.TextToSpeech
                     .GroupBy(voiceData => voiceData.voice_id, StringComparer.Ordinal)
                     .Select(group => group.First())
                     .ToList());
+                if (logDiagnostics)
+                    Debug.Log($"[ElevenLabs] Connected through proxy: {AvailableVoices.Count} voices available, model {currentModel} ({GetModelId()}).");
             }
 #else
             using (var www = UnityWebRequest.Get(BaseUrl + "voices"))
@@ -677,12 +685,16 @@ namespace Ride.TextToSpeech
 
                 if (www.result != UnityWebRequest.Result.Success)
                 {
-                    Debug.Log(www.error);
+                    Debug.LogError($"[ElevenLabs] Connection failed (HTTP {www.responseCode}), API key {DescribeApiKey(apiKey)}. " +
+                                   FormatRequestFailure(www, "Voice list request"));
+                    ClearAvailableVoices();
                     yield break;
                 }
 
                 var voiceDataContainer = JsonUtility.FromJson<VoiceDataContainer>(www.downloadHandler.text);
                 SetAvailableVoices(voiceDataContainer.voices);
+                if (logDiagnostics)
+                    Debug.Log($"[ElevenLabs] Connected: {AvailableVoices.Count} voices available, model {currentModel} ({GetModelId()}).");
 
                 //foreach (var voice in AvailableVoices)
                 //    Debug.Log($"Voice Name: {voice.name}, Voice ID: {voice.voice_id}");
@@ -720,6 +732,7 @@ namespace Ride.TextToSpeech
             if (SelectedVoiceIndex != -1 && SelectedVoiceIndex < AvailableVoices.Count)
             {
                 var voiceID = AvailableVoices[SelectedVoiceIndex].voice_id;
+                LogSelectedVoice(AvailableVoices[SelectedVoiceIndex].name, voiceID);
                 //yield return StartCoroutine(GetAudioClip(text, voiceID));
                 yield return StartCoroutine(GetAudioClipWithTimestamps(text, voiceID, requestVersion));
             }
@@ -736,7 +749,14 @@ namespace Ride.TextToSpeech
             yield return StartCoroutine(RequestWebGlGenerateCoroutine(text, voice, requestVersion, resultCallback));
 #else
             if (!string.IsNullOrEmpty(voice))
-                SelectedVoiceIndex = Voices != null ? Voices.IndexOf(voice) : -1;
+            {
+                int requestedIndex = Voices != null ? Voices.IndexOf(voice) : -1;
+                if (requestedIndex >= 0)
+                    SelectedVoiceIndex = requestedIndex;
+                else
+                    Debug.LogWarning($"[ElevenLabs] Voice '{voice}' is not in this account's {AvailableVoices.Count} voices; " +
+                                     $"keeping voice index {SelectedVoiceIndex}.");
+            }
 
             if (SelectedVoiceIndex == -1 || SelectedVoiceIndex >= AvailableVoices.Count)
             {
@@ -785,6 +805,80 @@ namespace Ride.TextToSpeech
             return JsonUtility.ToJson(request);
         }
 
+        /// <summary>
+        /// Logs the voice and model used for synthesis, once per change, so the console shows
+        /// which ElevenLabs voice a character actually speaks with. Only when diagnostics logging is on.
+        /// </summary>
+        /// <param name="voiceName">The display name of the voice.</param>
+        /// <param name="voiceId">The ElevenLabs voice ID.</param>
+        private void LogSelectedVoice(string voiceName, string voiceId)
+        {
+            if (!logDiagnostics)
+                return;
+
+            string current = $"{voiceName}|{voiceId}|{currentModel}";
+            if (current == m_lastLoggedVoice)
+                return;
+
+            m_lastLoggedVoice = current;
+            Debug.Log($"[ElevenLabs] Speaking with voice '{voiceName}' (id {voiceId}), model {currentModel} ({GetModelId()}), " +
+                      $"stability {stabilityParameter}, similarity {similarityParameter}.");
+        }
+
+        /// <summary>
+        /// Logs how long one synthesis request took, as one key=value line per request, and keeps a
+        /// running average per model and text size so models can be compared on similar text. Only
+        /// when diagnostics logging is on.
+        /// </summary>
+        /// <param name="text">The text sent for synthesis.</param>
+        /// <param name="requestMs">Time from sending the request to receiving the full reply.</param>
+        /// <param name="processingMs">Time spent decoding and saving the audio after the reply.</param>
+        /// <param name="success">Whether the request produced audio.</param>
+        private void LogRequestTiming(string text, double requestMs, double processingMs, bool success)
+        {
+            if (!logDiagnostics)
+                return;
+
+            int chars = text != null ? text.Length : 0;
+            string size = chars < 100 ? "short" : chars < 300 ? "medium" : "long";
+            double totalMs = requestMs + processingMs;
+            string line = $"[ElevenLabs timing] model={currentModel} modelId={GetModelId()} result={(success ? "ok" : "failed")} " +
+                          $"chars={chars} size={size} request={requestMs:F0}ms processing={processingMs:F0}ms total={totalMs:F0}ms";
+
+            if (!success || chars == 0)
+            {
+                Debug.Log(line);
+                return;
+            }
+
+            double msPerChar = totalMs / chars;
+            line += $" msPerChar={msPerChar:F1}";
+            if (clipTime > 0f)
+                line += $" audio={clipTime:F2}s realtimeFactor={totalMs / 1000.0 / clipTime:F2}";
+
+            string key = $"{currentModel}/{size}";
+            m_timingStats.TryGetValue(key, out var stats);
+            stats = (stats.count + 1, stats.totalMs + totalMs, stats.msPerChar + msPerChar);
+            m_timingStats[key] = stats;
+            line += $" | {key} avg over {stats.count}: total={stats.totalMs / stats.count:F0}ms msPerChar={stats.msPerChar / stats.count:F1}";
+
+            Debug.Log(line);
+        }
+
+        /// <summary>
+        /// Describes the configured API key for logs without revealing it.
+        /// </summary>
+        /// <param name="apiKey">The configured API key.</param>
+        /// <returns>A short description: missing, the RideConfig placeholder, or its length.</returns>
+        private static string DescribeApiKey(string apiKey)
+        {
+            if (string.IsNullOrWhiteSpace(apiKey))
+                return "is missing from ride.json";
+            if (apiKey.All(c => c == 'X'))
+                return "is still the RideConfig placeholder; set elevenLabs.apiKey in ride.json";
+            return $"is set ({apiKey.Length} characters)";
+        }
+
         private static string FormatRequestFailure(UnityWebRequest www, string operation)
         {
             string responseBody = www.downloadHandler?.text;
@@ -798,6 +892,7 @@ namespace Ride.TextToSpeech
         private string BuildWebGlLambdaRequestJson(string textToSpeak, string voice)
         {
             string voiceId = GetVoiceIdForRequestedVoice(voice);
+            LogSelectedVoice(voice, voiceId);
             var request = new WebGlLambdaRequest
             {
                 text = textToSpeak,
@@ -855,10 +950,13 @@ namespace Ride.TextToSpeech
             {
                 request.method = UnityWebRequest.kHttpVerbPOST;
                 request.SetRequestHeader("Content-Type", "application/json");
+                double requestStart = Time.realtimeSinceStartupAsDouble;
                 yield return request.SendWebRequest();
+                double requestMs = (Time.realtimeSinceStartupAsDouble - requestStart) * 1000.0;
 
                 if (request.result != UnityWebRequest.Result.Success)
                 {
+                    LogRequestTiming(textToSpeak, requestMs, 0.0, false);
                     Debug.LogError(FormatRequestFailure(request, "ElevenLabs WebGL generate request"));
                     FailedTimingRequestVersion = requestVersion;
                     resultCallback?.Invoke(false);
@@ -911,6 +1009,7 @@ namespace Ride.TextToSpeech
                     if (DebugOutputEnabled)
                         Debug.Log($"[ElevenLabs WebGL] Audio delivery=inline/blob, estimatedDuration={clipTime:0.###}s");
 
+                    LogRequestTiming(textToSpeak, requestMs, 0.0, true);
                     resultCallback?.Invoke(true);
                     yield break;
                 }
@@ -1042,19 +1141,26 @@ namespace Ride.TextToSpeech
                 var bodyRaw = System.Text.Encoding.UTF8.GetBytes(postData);
                 www.uploadHandler = new UploadHandlerRaw(bodyRaw);
 
+                double requestStart = Time.realtimeSinceStartupAsDouble;
                 yield return www.SendWebRequest();
+                double requestMs = (Time.realtimeSinceStartupAsDouble - requestStart) * 1000.0;
 
                 if (www.result != UnityWebRequest.Result.Success)
                 {
                     Debug.Log(FormatRequestFailure(www, "ElevenLabs timestamp request"));
+                    LogRequestTiming(textToSpeak, requestMs, 0.0, false);
                     yield break;
                 }
 
+                double processingStart = Time.realtimeSinceStartupAsDouble;
                 var result = JsonUtility.FromJson<ElevenLabsTimestampsResult>(www.downloadHandler.text);
                 ApplyTimestampsResult(result, requestVersion);
 
                 // Convert base64 to audio clip and save
+                var previousClip = LastGeneratedAudioClip;
                 yield return StartCoroutine(DecodeBase64ToAudioClip(result.audio_base64));
+                bool decoded = LastGeneratedAudioClip != null && LastGeneratedAudioClip != previousClip;
+                LogRequestTiming(textToSpeak, requestMs, (Time.realtimeSinceStartupAsDouble - processingStart) * 1000.0, decoded);
             }
         }
 

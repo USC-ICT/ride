@@ -18,22 +18,28 @@ namespace Ride.Terrain
         Custom
     }
 
+    /// <summary>Reports progress while navigation data is loaded or generated.</summary>
     public class LoadNavigationProgress
     {
+        /// <summary>The normalized overall completion value.</summary>
         public float overallProgress;
     }
 
+    /// <summary>Collects the settings used to load or generate navigation data.</summary>
     public class LoadNavigationParams
     {
+        /// <summary>The requested navigation-mesh generation strategy.</summary>
         public NavigationMeshGenerationType navMeshGenType;                 // Type of nav mesh generation
+        /// <summary>The custom navigation-mesh path used when <see cref="navMeshGenType"/> is <see cref="NavigationMeshGenerationType.Custom"/>.</summary>
         public string navMeshPath;                                          // Path to custom nav mesh (only if using custom nav mesh type)
+        /// <summary>The terrain from which tiled or combined navigation data is generated.</summary>
         public ITerrain terrain;                                            // Terrain data for generating nav meshes using terrain
+        /// <summary>The optional progress reporter.</summary>
         public IProgress<LoadNavigationProgress> loadNavigationProgress;    // Progress var
     }
 
-    /// <summary>
-    /// The functionality for loading, managing and altering the navigation system for agents
-    /// </summary>
+    /// <summary>Loads, generates, rebuilds, samples, and modifies navigation data used by RIDE agents.</summary>
+    /// <remarks>Implemented by RIDE Core's navigation system and used by <see cref="ITerrainSystem"/> during terrain loading.</remarks>
     public interface INavigationSystem : IRideSystem
     {
         /// <summary>
@@ -112,6 +118,12 @@ namespace Ride.Terrain
         /// <param name="localScale">Local scale of the obstacle</param>
         void PlaceNavMeshObstacle_Custom(string customMeshPath, RideVector3 position, RideVector3 rotation, RideVector3 localScale);
 
+        /// <summary>Finds the nearest navigable position within a maximum distance.</summary>
+        /// <param name="sourcePosition">The world-space position around which to search.</param>
+        /// <param name="hit">When successful, receives the sampled navigation position and related data.</param>
+        /// <param name="maxDistance">The maximum search distance.</param>
+        /// <param name="areaMask">The navigation-area mask included in the search.</param>
+        /// <returns><see langword="true"/> when a navigable position is found; otherwise, <see langword="false"/>.</returns>
         bool SamplePosition(RideVector3 sourcePosition, out RideNavMeshHit hit, float maxDistance, int areaMask);
     }
 }

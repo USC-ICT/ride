@@ -1,24 +1,27 @@
 namespace Ride.AI.ML
 {
     /// <summary>
-    /// Interface for handling trained machine learning models, typically neural network models.
-    /// This typically covers both inference, a la Barracuda, and loading models a la ONNX
-    /// Corresponds more to NNModel than Model in Unity MLAgents
+    /// Defines loading and saving of a trained machine-learning model associated with a RIDE agent.
+    /// Implementations typically adapt serialized neural-network models used for runtime inference.
     /// </summary>
     public interface IMLModel
     {
         /// <summary>
-        /// Setup the agent to use ML
+        /// Associates the model with a RIDE agent.
         /// </summary>
-        /// <param name="agent"></param>
+        /// <param name="agent">The identifier of the agent that uses the model.</param>
         void Init(RideID agent);
 
         /// <summary>
-        ///  TODO: Convert to RIDEModel
+        /// Loads a model from its serialized representation.
         /// </summary>
-        /// <param name="modelBuffer"></param>
+        /// <param name="modelBuffer">The serialized model bytes.</param>
         public void LoadModel(byte[] modelBuffer);
 
+        /// <summary>
+        /// Serializes the current model.
+        /// </summary>
+        /// <returns>The serialized model bytes.</returns>
         public byte[] SaveModel();
     }
 }

@@ -21,61 +21,88 @@ namespace Ride
     /// Default implementation of <see cref="ISystemAccessSystem"/> used by RIDE to manage global access to systems.
     /// Systems can be registered manually or discovered in the scene and are made globally accessible through
     /// the <see cref="Systems"/> static class (or <see cref="Globals.api"/> for legacy compatibility).
-    ///
-    /// This class maintains mappings for fast O(1) lookup by type or RideID and is typically not accessed directly
-    /// outside of bootstrapping or testing contexts.
     /// </summary>
+    /// <remarks>
+    /// This class maintains mappings for fast O(1) lookup by type or RideID and is typically not accessed directly
+    /// outside bootstrapping or testing contexts. <c>SamplesCoreSystemAccessSystem</c> demonstrates direct lookup.
+    /// </remarks>
     public class SystemAccessSystem : RideSystemMonoBehaviour, ISystemAccessSystem
     {
+        /// <summary>The initial logging implementation installed before other systems register.</summary>
         [SerializeField] private LogSystemUnity m_logSystem;
 
         /// <summary>
         /// Maps each registered system's unique RideID to its instance.
-        /// Used for fast O(1) lookup by ID (e.g., GetSystem<T>(RideID)) and reliable removal.
+        /// Used for fast O(1) lookup by ID (for example, <c>GetSystem&lt;T&gt;(RideID)</c>) and reliable removal.
         /// </summary>
         private readonly Dictionary<RideID, IRideSystem> m_systemsByID = new();
 
         /// <summary>
         /// Caches the first system instance for each interface or concrete type.
-        /// Used by GetSystem<T>() for fast O(1) type-based access (singleton-style).
+        /// Used by <c>GetSystem&lt;T&gt;()</c> for fast O(1) type-based access (singleton-style).
         /// This dictionary assumes only one system is needed per interface for this use case.
         /// </summary>
         private readonly Dictionary<Type, IRideSystem> m_systemsByType = new();
 
+        /// <inheritdoc/>
         public RideID scenario { get; set; }
 
         // ride.core
+        /// <inheritdoc/>
         public IAudioSystem audioSystem => GetSystem<IAudioSystem>();
+        /// <inheritdoc/>
         public IChatSystem chatSystem => GetSystem<IChatSystem>();
+        /// <inheritdoc/>
         public IComponentSystem componentSystem => GetSystem<IComponentSystem>();
+        /// <inheritdoc/>
         public IGameObjectSystem gameObjectSystem => GetSystem<IGameObjectSystem>();
+        /// <inheritdoc/>
         public IInputSystem inputSystem => GetSystem<IInputSystem>();
+        /// <inheritdoc/>
         public ILogSystem logSystem => GetSystem<ILogSystem>();
+        /// <inheritdoc/>
         public INetworkSystem networkSystem => GetSystem<INetworkSystem>();
+        /// <inheritdoc/>
         public IParticleEffectSystem pfxSystem => GetSystem<IParticleEffectSystem>();
+        /// <inheritdoc/>
         public ISessionPlaybackSystem sessionPlaybackSystem => GetSystem<ISessionPlaybackSystem>();
+        /// <inheritdoc/>
         public ISessionRecordingSystem sessionRecordingSystem => GetSystem<ISessionRecordingSystem>();
+        /// <inheritdoc/>
         public IShaderSystem shaderSystem => GetSystem<IShaderSystem>();
 
         // ride.core.ui
+        /// <inheritdoc/>
         public IViewSystem viewSystem => GetSystem<IViewSystem>();
 
         // ride.agents
+        /// <inheritdoc/>
         public IAgentSystem agentSystem => GetSystem<IAgentSystem>();
 
         // ride.simulation
+        /// <inheritdoc/>
         public IAnimationSystem animationSystem => GetSystem<IAnimationSystem>();
+        /// <inheritdoc/>
         public IAttackSystem attackSystem => GetSystem<IAttackSystem>();
+        /// <inheritdoc/>
         public ICameraSystem cameraSystem => GetSystem<ICameraSystem>();
+        /// <inheritdoc/>
         public IEquipmentSystem equipmentSystem => GetSystem<IEquipmentSystem>();
+        /// <inheritdoc/>
         public IGroupSystem groupSystem => GetSystem<IGroupSystem>();
+        /// <inheritdoc/>
         public IMovementSystem movementSystem => GetSystem<IMovementSystem>();
+        /// <inheritdoc/>
         public IScenarioSystem scenarioSystem => GetSystem<IScenarioSystem>();
+        /// <inheritdoc/>
         public IWorldStateSystem worldStateSystem => GetSystem<IWorldStateSystem>();
 
         // ride.terrain
+        /// <inheritdoc/>
         public ITerrainDataModelSystem terrainDataModelSystem => GetSystem<ITerrainDataModelSystem>();
+        /// <inheritdoc/>
         public ITerrainSystem terrainSystem => GetSystem<ITerrainSystem>();
+        /// <inheritdoc/>
         public ITreeSystem treeSystem => GetSystem<ITreeSystem>();
 
         /// <inheritdoc />
@@ -92,7 +119,7 @@ namespace Ride
         {
             base.Start();
 
-            // this alerts the ride api about the entities that are in the scene prior to hitting play
+            // Convert scene-authored bootstrap objects after the global system registry is ready.
             var conversionObjects = RideUtils.FindObjectsByType<ConvertToRide>();
             foreach (var conversionObject in conversionObjects)
                 conversionObject.Convert();

@@ -28,24 +28,24 @@ This affects only the NVBG context selection. It does not reload the visible cha
 
 ### Language propagation
 
-- `D:\RIDE\Codex\svn_ride_trunk\RideUnity\Packages\edu.usc.ict.ride.abstract\Runtime\Interfaces\Cognition\ISpeechRecognitionSystem.cs`
-- `D:\RIDE\Codex\svn_ride_trunk\RideUnity\Packages\edu.usc.ict.ride.cognition\Runtime\ASR\SpeechRecognitionSystemUnity.cs`
+- `edu.usc.ict.ride.abstract`: `Runtime/Interfaces/Cognition/ISpeechRecognitionSystem.cs`
+- `edu.usc.ict.ride.cognition`: `Runtime/ASR/SpeechRecognitionSystemUnity.cs`
 
 ### ASR providers
 
-- `D:\RIDE\Codex\svn_ride_trunk\RideUnity\Packages\edu.usc.ict.ride.cognition\Runtime\ASR\SpeechRecognitionSystemAzure.cs`
-- `D:\RIDE\Codex\svn_ride_trunk\RideUnity\Packages\edu.usc.ict.ride.cognition\Runtime\ASR\SpeechRecognitionSystemOpenAI.cs`
-- `D:\RIDE\Codex\svn_ride_trunk\RideUnity\Packages\edu.usc.ict.ride.cognition\Runtime\ASR\SpeechRecognitionSystemElevenLabs.cs`
+- `edu.usc.ict.ride.cognition`: `Runtime/ASR/SpeechRecognitionSystemAzure.cs`
+- `edu.usc.ict.ride.cognition`: `Runtime/ASR/SpeechRecognitionSystemOpenAI.cs`
+- `edu.usc.ict.ride.cognition`: `Runtime/ASR/SpeechRecognitionSystemElevenLabs.cs`
 
 ### NVBG routing and generation
 
-- `D:\RIDE\Codex\svn_ride_trunk\RideUnity\Packages\edu.usc.ict.ride.vh\Runtime\nvbg\NvbgLanguageRouting.cs`
-- `D:\RIDE\Codex\svn_ride_trunk\RideUnity\Packages\edu.usc.ict.ride.vh\Runtime\NonverbalBehaviorGeneratorSystem.cs`
+- This package: `Runtime/nvbg/NvbgLanguageRouting.cs`
+- This package: `Runtime/NonverbalBehaviorGeneratorSystem.cs`
 
 ### Demo integration
 
-- `D:\RIDE\Codex\VH\VHUnityURP-Internal\Assets\VHShared\Scripts\DemoControllerBase.cs`
-- `D:\RIDE\Codex\VH\VHUnityURP-Internal\Assets\VHShared\Scripts\DebugMenus\DebugMenuASR.cs`
+- VHShared, in the VHToolkit Unity projects: `Assets/VHShared/Scripts/DemoControllerBase.cs`
+- VHShared, in the VHToolkit Unity projects: `Assets/VHShared/Scripts/DebugMenus/DebugMenuASR.cs`
 
 ## Source of truth for English rules
 
@@ -264,7 +264,7 @@ Example:
 Current overwrite behavior:
 
 - runtime generation does not overwrite an existing cached file
-- a cached file is only replaced if something external removes or replaces it, or if future code adds an explicit regenerate command
+- a cached file is only replaced if it is removed or replaced outside the application; delete it to have it generated again
 
 This makes the generated file a stable customization point.
 
@@ -274,7 +274,7 @@ The multilingual fallback is lexical, not a full multilingual parser port.
 
 Translation maps live in:
 
-- `D:\RIDE\Codex\svn_ride_trunk\RideUnity\Packages\edu.usc.ict.ride.vh\Runtime\nvbg\NvbgLanguageRouting.cs`
+- This package: `Runtime/nvbg/NvbgLanguageRouting.cs`
 
 The fallback generator preserves parser markers such as:
 

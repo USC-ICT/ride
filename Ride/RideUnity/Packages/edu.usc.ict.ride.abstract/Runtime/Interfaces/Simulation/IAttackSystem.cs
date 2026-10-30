@@ -10,16 +10,23 @@ namespace Ride.Combat
     [Flags]
     public enum AttackFlags
     {
+        /// <summary>Uses the default attack rules.</summary>
         None = 1,
+        /// <summary>Allows a dead entity to initiate attacks.</summary>
         Dead_Can_Attack = 1,
+        /// <summary>Allows a dead entity to receive damage.</summary>
         Dead_Can_Take_Damage = 1 << 1,
     }
 
+    /// <summary>Specifies optional automated behaviors performed by the attack system.</summary>
     [Flags]
     public enum AttackSystemFlags
     {
+        /// <summary>Disables optional automated attack-system behavior.</summary>
         None = 0,
+        /// <summary>Automatically acquires valid targets.</summary>
         Acquire_Targets = 1,
+        /// <summary>Automatically attacks acquired targets.</summary>
         Auto_Attack = 1 << 1,
     }
 

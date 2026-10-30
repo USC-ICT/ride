@@ -12,12 +12,19 @@ namespace Ride
     [Serializable]
     public class RideTexture : IIdentity
     {
+        /// <inheritdoc/>
         public RideID id { get; set; }
+        /// <inheritdoc/>
         public string name => texture.name;
 
+        /// <summary>The wrapped Unity texture.</summary>
         public UnityEngine.Texture texture;
 
+        /// <summary>Initializes an empty texture wrapper for serialization.</summary>
         public RideTexture() { }
+        /// <summary>Initializes an identified Unity texture wrapper.</summary>
+        /// <param name="_id">The RIDE identifier.</param>
+        /// <param name="_texture">The Unity texture.</param>
         public RideTexture(RideID _id, UnityEngine.Texture _texture)
         {
             id = _id;

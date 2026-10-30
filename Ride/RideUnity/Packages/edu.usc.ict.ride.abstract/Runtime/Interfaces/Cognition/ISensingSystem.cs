@@ -6,6 +6,7 @@ namespace Ride.Sensing
     /// <summary>
     /// Encapsulates a multimodal sensing request (e.g. sending an image or audio clip).
     /// </summary>
+    [Serializable]
     public class SensingRequest : ServiceRequest
     {
         public object request;
@@ -15,6 +16,7 @@ namespace Ride.Sensing
     /// Represents the response returned from a multimodal sensing service.
     /// Typically holds a JSON-formatted string as raw output.
     /// </summary>
+    [Serializable]
     public class SensingResponse : SystemResponse
     {
         public string response;

@@ -128,7 +128,7 @@ public static class AssetCatalogEditorUtility
         {
             groupName = uniqueGroupName,
             localPrefixPath = AssetCatalogUtility.GenerateDefaultLocalPath(uniqueGroupName),
-            remotePrefixPath = AssetCatalogUtility.GenerateDefaultLocalPath(uniqueGroupName),
+            remotePrefixPath = AssetCatalogUtility.GenerateDefaultRemotePath(uniqueGroupName),
             includeInBuild = true
         };
         profile.groups.Add(newGroup);

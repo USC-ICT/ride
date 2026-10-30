@@ -1,5 +1,6 @@
 namespace Ride.IO
 {
+    /// <summary>Identifies an input controller that can be retrieved for a locomotion entity.</summary>
     public interface ILocomotionInputController : IInputController
     {
         /*void AddForward(float power);

@@ -2,8 +2,10 @@
 
 namespace Ride
 {
+    /// <summary>Returns the simulation's pause state after a pause or resume request.</summary>
     public class PauseResponse : SystemResponse
     {
+        /// <summary>Whether the simulation is paused.</summary>
         public bool isPaused;
     }
 
@@ -12,30 +14,22 @@ namespace Ride
     /// </summary>
     public interface IPauseSystem : IRideSystem
     {
-        /// <summary>
-        ///
-        /// </summary>
-        /// <param name="onComplete"></param>
+        /// <summary>Pauses the simulation.</summary>
+        /// <param name="onComplete">Callback invoked with the resulting pause state.</param>
         void PauseSimulation(Action<PauseResponse> onComplete);
 
-        /// <summary>
-        ///
-        /// </summary>
+        /// <summary>Pauses the simulation and selects a UI object for controller navigation.</summary>
         /// <param name="selectedGameObject">If using a controller, this UI gameobject should be selected for navigation.</param>
-        /// <param name="onComplete"></param>
+        /// <param name="onComplete">Callback invoked with the resulting pause state.</param>
         void PauseSimulation(RideID selectedGameObject, Action<PauseResponse> onComplete);
 
-        /// <summary>
-        ///
-        /// </summary>
-        /// <param name="onComplete"></param>
+        /// <summary>Resumes the simulation.</summary>
+        /// <param name="onComplete">Callback invoked with the resulting pause state.</param>
         void ResumeSimulation(Action<PauseResponse> onComplete);
 
-        /// <summary>
-        ///
-        /// </summary>
+        /// <summary>Resumes the simulation and selects a UI object for controller navigation.</summary>
         /// <param name="selectedGameObject">If using a controller, this UI gameobject should be selected for navigation.</param>
-        /// <param name="onComplete"></param>
+        /// <param name="onComplete">Callback invoked with the resulting pause state.</param>
         void ResumeSimulation(RideID selectedGameObject, Action<PauseResponse> onComplete);
     }
 }

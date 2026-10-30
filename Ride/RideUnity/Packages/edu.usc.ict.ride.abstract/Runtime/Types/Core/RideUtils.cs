@@ -32,6 +32,12 @@ namespace Ride
             return visibleObjects.ToArray();
         }
 
+        /// <summary>Filters candidate game objects to those inside a frustum and not occluded from a viewer.</summary>
+        /// <param name="viewerPos">The viewer's world-space position.</param>
+        /// <param name="viewerDirection">The viewer's direction; retained for API compatibility.</param>
+        /// <param name="frustum">The viewing frustum.</param>
+        /// <param name="gameObjects">The candidate objects.</param>
+        /// <returns>The visible game objects.</returns>
         public static GameObject[] GetObjectsInView(RideVector3 viewerPos, RideVector3 viewerDirection, RideFrustum frustum, IEnumerable<GameObject> gameObjects)
         {
             // find all the colliders in the scene and see if there bounds are in the frustum
@@ -45,9 +51,22 @@ namespace Ride
             return visibleObjects.ToArray();
         }
 
+        /// <summary>Gets spatial objects visible from a viewer using the default field-of-view settings.</summary>
+        /// <param name="viewer">The viewing spatial object.</param>
+        /// <param name="objects">The candidate spatial objects.</param>
+        /// <returns>The visible spatial objects.</returns>
         public static IEnumerable<ISpatialObject> GetObjectsInView(ISpatialObject viewer, IEnumerable<ISpatialObject> objects) =>
             GetObjectsInView(60, 1.549296f, 0.3f, 1000f, viewer.position, viewer.rotation, objects);
 
+        /// <summary>Gets spatial objects inside a configured view frustum and not occluded from the viewer.</summary>
+        /// <param name="fov">The vertical field of view in degrees.</param>
+        /// <param name="aspect">The view aspect ratio.</param>
+        /// <param name="near">The near clipping distance.</param>
+        /// <param name="far">The far clipping distance.</param>
+        /// <param name="viewerPos">The viewer's world-space position.</param>
+        /// <param name="viewerRot">The viewer's world-space rotation.</param>
+        /// <param name="objects">The candidate spatial objects.</param>
+        /// <returns>The visible spatial objects.</returns>
         public static IEnumerable<ISpatialObject> GetObjectsInView(float fov, float aspect, float near, float far, RideVector3 viewerPos, RideQuaternion viewerRot, IEnumerable<ISpatialObject> objects)
         {
             // find all the colliders in the scene and see if there bounds are in the frustum
@@ -69,7 +88,8 @@ namespace Ride
         /// <param name="aspect"></param>
         /// <param name="near"></param>
         /// <param name="far"></param>
-        /// <param name="viewer"></param>
+        /// <param name="viewerPos">The viewer's world-space position.</param>
+        /// <param name="viewerRot">The viewer's world-space rotation.</param>
         /// <returns></returns>
         public static VisibleObject[] GetVisibleObjects(float fov, float aspect, float near, float far, RideVector3 viewerPos, RideQuaternion viewerRot)
         {
@@ -120,9 +140,19 @@ namespace Ride
         public static bool IsObjectOccluded(RideVector3 viewerPosition, ISpatialObject testObject) =>
             IsObjectOccluded(viewerPosition, testObject, out _);
 
+        /// <summary>Tests whether an offset point on a spatial object is occluded from a viewer.</summary>
+        /// <param name="viewerPosition">The viewer's world-space position.</param>
+        /// <param name="testObject">The object being tested.</param>
+        /// <param name="offsetPosition">The offset from the object's position to test.</param>
+        /// <returns><see langword="true"/> when another object blocks line of sight; otherwise, <see langword="false"/>.</returns>
         public static bool IsObjectOccluded(RideVector3 viewerPosition, ISpatialObject testObject, RideVector3 offsetPosition) =>
             IsObjectOccluded(viewerPosition, testObject, offsetPosition, out _);
 
+        /// <summary>Tests whether a spatial object is occluded and returns the first object hit.</summary>
+        /// <param name="viewerPosition">The viewer's world-space position.</param>
+        /// <param name="testObject">The object being tested.</param>
+        /// <param name="firstHit">The first spatial object intersecting the line of sight.</param>
+        /// <returns><see langword="true"/> when another object blocks line of sight; otherwise, <see langword="false"/>.</returns>
         public static bool IsObjectOccluded(RideVector3 viewerPosition, ISpatialObject testObject, out ISpatialObject firstHit) =>
             IsObjectOccluded(viewerPosition, testObject, RideVector3.zero, out firstHit);
 
@@ -170,6 +200,10 @@ namespace Ride
 
         #region Raycasting and Hit Tests
 
+        /// <summary>Tests whether the target is the first collider reached from a viewer.</summary>
+        /// <param name="viewerPosition">The viewer's world-space position.</param>
+        /// <param name="testObject">The target spatial object.</param>
+        /// <returns><see langword="true"/> when the target is the first hit; otherwise, <see langword="false"/>.</returns>
         public static bool GetFirstHit(RideVector3 viewerPosition, ISpatialObject testObject)
         {
             RideVector3 dir = testObject.position - viewerPosition;
@@ -239,7 +273,7 @@ namespace Ride
 
         /// <summary>Find the agent id of the closest agent to agent.</summary>
         /// <param name="agent">The agent where distance will be measured to</param>
-        /// <param name="agents">The list of agents to find the closest</param>
+        /// <param name="agents">The agents to search.</param>
         /// <returns>The closest agent</returns>
         public static RideID GetClosestAgent(RideID agent, IEnumerable<RideID> agents)
         {
@@ -250,7 +284,7 @@ namespace Ride
 
         /// <summary>Find the agent id of the closest agent to a position.</summary>
         /// <param name="pos">The agent where distance will be measured to</param>
-        /// <param name="agents">The list of agents to find the closest</param>
+        /// <param name="agentList">The agents to search.</param>
         /// <returns>The closest agent</returns>
         public static RideID ClosestAgentFromPosition(RideVector3 pos, List<RideID> agentList)
         {
@@ -273,6 +307,10 @@ namespace Ride
             return closestAgent;
         }
 
+        /// <summary>Gets members of a team visible to an agent.</summary>
+        /// <param name="agent">The observing agent.</param>
+        /// <param name="team">The team whose members should be tested.</param>
+        /// <returns>The visible agent identifiers.</returns>
         public static IEnumerable<RideID> GetAgentsInSight(RideID agent, Team team)
         {
             var losAgents = new List<RideID>();
@@ -419,8 +457,12 @@ namespace Ride
         /// <returns></returns>
         public static float GetDeltaTime() => Time.deltaTime;
 
+        /// <summary>Gets Unity's smoothed frame duration in seconds.</summary>
+        /// <returns>The smoothed delta time.</returns>
         public static float GetSmoothDeltaTime() => Time.smoothDeltaTime;
 
+        /// <summary>Gets the scale at which game time advances.</summary>
+        /// <returns>The Unity time scale.</returns>
         public static float GetTimeScale() => Time.timeScale;
 
         /// <summary>
@@ -435,6 +477,8 @@ namespace Ride
         /// <returns></returns>
         public static float GetSecondsSinceSceneLoad() => Time.timeSinceLevelLoad;
 
+        /// <summary>Gets unscaled real time elapsed since application startup.</summary>
+        /// <returns>The elapsed real time in seconds.</returns>
         public static float GetRealtimeSinceStartup() => Time.realtimeSinceStartup;
 
         /// <summary>
@@ -505,7 +549,7 @@ namespace Ride
         #region System Information
 
         /// <summary>
-        /// Return the name of the current device running RIDE. Removes '\<' and '\>' characters
+        /// Return the name of the current device running RIDE. Removes '&lt;' and '&gt;' characters.
         /// </summary>
         /// <returns>Device name</returns>
         public static string GetDeviceNameNormalized()
@@ -529,11 +573,23 @@ namespace Ride
         /// </summary>
         /// <returns>User name</returns>
         public static string GetUserName() => string.IsNullOrEmpty(Environment.UserName) ? GetDeviceNameNormalized() : Environment.UserName;
+        /// <summary>Gets the operating-system description reported by Unity.</summary>
+        /// <returns>The operating-system description.</returns>
         public static string GetOS() => SystemInfo.operatingSystem;
+        /// <summary>Gets the number of logical processors reported by Unity.</summary>
+        /// <returns>The processor count.</returns>
         public static int GetNumProcessors() => SystemInfo.processorCount;
+        /// <summary>Gets approximate system memory in decimal gigabytes.</summary>
+        /// <returns>The system memory size.</returns>
         public static float GetSystemMemorySize() => SystemInfo.systemMemorySize / 1000.0f;
+        /// <summary>Gets the graphics-device name reported by Unity.</summary>
+        /// <returns>The graphics-device name.</returns>
         public static string GetGraphicsDeviceName() => SystemInfo.graphicsDeviceName;
+        /// <summary>Gets graphics memory in megabytes as reported by Unity.</summary>
+        /// <returns>The graphics-memory size.</returns>
         public static int GetGraphicsMemorySize() => SystemInfo.graphicsMemorySize;
+        /// <summary>Gets whether the application is running in the Unity Editor.</summary>
+        /// <returns><see langword="true"/> in the Editor; otherwise, <see langword="false"/>.</returns>
         public static bool IsEditor() => Application.isEditor;
 
         /// <summary>
@@ -856,7 +912,7 @@ namespace Ride
         public static string SceneManagerActiveSceneName() => UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
 
         /// <summary>
-        /// Returns the name of the currently active scene in the Unity Editor using <see cref="UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene"/>.
+        /// Returns the name of the currently active scene in the Unity Editor using <c>EditorSceneManager.GetActiveScene</c>.
         /// Returns an empty string outside of the editor.
         /// <para/>
         /// See: https://docs.unity3d.com/ScriptReference/EditorSceneManager.GetActiveScene.html
@@ -897,10 +953,12 @@ namespace Ride
         /// Checks if mesh has at least four distinct vertices.
         /// </summary>
         /// <param name="mesh"></param>
-        /// <param name="go"></param>
         /// <returns>True if mesh has at least four distinct vertices. False otherwise.</returns>
         public static bool IsMeshValid(Mesh mesh) => new HashSet<Vector3>(mesh.vertices).Count >= 4;
 
+        /// <summary>Checks whether every mesh triangle references three distinct valid vertices.</summary>
+        /// <param name="mesh">The mesh to inspect.</param>
+        /// <returns><see langword="true"/> when the triangle indices are valid and nondegenerate; otherwise, <see langword="false"/>.</returns>
         public static bool IsMeshClean(Mesh mesh)
         {
             var vertices = mesh.vertices;  // mesh.vertices creates a new array so cache it.
@@ -987,7 +1045,7 @@ namespace Ride
             //Current Velocity
             RideVector3 velocityFactor = currentVelocity;
 
-            ///COULD ADD WIND VELOCITY HERE IF YOU WANTED TO///
+            // COULD ADD WIND VELOCITY HERE IF YOU WANTED TO
             //Wind Velocity
             //velocityFactor += new RideVector3(2f, 0f, 3f);
 

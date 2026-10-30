@@ -239,150 +239,159 @@ namespace Ride.NLP
         /// <inheritdoc/>
         protected override async void RequestInternal(NlpRequest request, Action<NlpResponse> onComplete)
         {
-            //Prepare parameters for the request
-            Dictionary<string, string> headers = new Dictionary<string, string>
+            NlpResponse qnaAnswer;
+            DateTime startTime = DateTime.Now;
+
+            try
             {
-                { "Authorization", $"Bearer {m_authorizationKey}" }
-            };
+                //Prepare parameters for the request
+                Dictionary<string, string> headers = new Dictionary<string, string>
+                {
+                    { "Authorization", $"Bearer {m_authorizationKey}" }
+                };
 
-            var history = GetParsedHistory();
-            history.Add(new OpenAIMessage { role = "user", content = request.content });
+                var history = GetParsedHistory();
+                history.Add(new OpenAIMessage { role = "user", content = request.content });
 
-            //Serialize question to AI
-            string questionJSON = "";
+                //Serialize question to AI
+                string questionJSON = "";
 
-            switch (m_model)
-            {
-                case ChatGPTModel.GPT4:
-                    OpenAIQuestion question4 = new OpenAIQuestion
-                    {
-                        model = m_modelDictionary[m_model],
-                        messages = history.ToArray(),
-                        temperature = m_temperature,
-                        max_tokens = m_maxTokens,
-                        n = m_answerSize
-                    };
-                    questionJSON = RideIO.JsonSerializeNoObjRef(question4);
-                    break;
-                default: // GPT5_2 and newer: the GPT5+ request format
-                    double temperature = s_defaultTemperatureOnlyModels.Contains(m_model) ? 1 : m_temperature;
-                    if (s_reasoningModels.Contains(m_model))
-                    {
-                        OpenAIQuestionGPT5Reasoning question5Reasoning = new OpenAIQuestionGPT5Reasoning
+                switch (m_model)
+                {
+                    case ChatGPTModel.GPT4:
+                        OpenAIQuestion question4 = new OpenAIQuestion
+                        {
+                            model = m_modelDictionary[m_model],
+                            messages = history.ToArray(),
+                            temperature = m_temperature,
+                            max_tokens = m_maxTokens,
+                            n = m_answerSize
+                        };
+                        questionJSON = RideIO.JsonSerializeNoObjRef(question4);
+                        break;
+                    default: // GPT5_2 and newer: the GPT5+ request format
+                        double temperature = s_defaultTemperatureOnlyModels.Contains(m_model) ? 1 : m_temperature;
+                        if (s_reasoningModels.Contains(m_model))
+                        {
+                            OpenAIQuestionGPT5Reasoning question5Reasoning = new OpenAIQuestionGPT5Reasoning
+                            {
+                                model = m_modelDictionary[m_model],
+                                messages = history.ToArray(),
+                                temperature = temperature,
+                                max_completion_tokens = m_maxTokens,
+                                n = m_answerSize,
+                                reasoning_effort = s_reasoningEffortDictionary[m_reasoningEffort]
+                            };
+                            questionJSON = RideIO.JsonSerializeNoObjRef(question5Reasoning);
+                            break;
+                        }
+
+                        OpenAIQuestionGPT5 question5 = new OpenAIQuestionGPT5
                         {
                             model = m_modelDictionary[m_model],
                             messages = history.ToArray(),
                             temperature = temperature,
                             max_completion_tokens = m_maxTokens,
-                            n = m_answerSize,
-                            reasoning_effort = s_reasoningEffortDictionary[m_reasoningEffort]
+                            n = m_answerSize
                         };
-                        questionJSON = RideIO.JsonSerializeNoObjRef(question5Reasoning);
+                        questionJSON = RideIO.JsonSerializeNoObjRef(question5);
                         break;
-                    }
-
-                    OpenAIQuestionGPT5 question5 = new OpenAIQuestionGPT5
-                    {
-                        model = m_modelDictionary[m_model],
-                        messages = history.ToArray(),
-                        temperature = temperature,
-                        max_completion_tokens = m_maxTokens,
-                        n = m_answerSize
-                    };
-                    questionJSON = RideIO.JsonSerializeNoObjRef(question5);
-                    break;
-            }
-
-            if (RideUtils.IsWebGL() && !RideUtils.IsEditor())
-                m_uri = ConfigurationSystemUnity.GetOpenAIProxyEndpoint();
-
-            //Call web service
-            DateTime startTime = DateTime.Now;
-            using var webRequest = new UnityWebRequest(m_uri, "POST");
-            byte[] bodyRaw = Encoding.UTF8.GetBytes(questionJSON);
-            webRequest.uploadHandler = new UploadHandlerRaw(bodyRaw);
-            webRequest.downloadHandler = new DownloadHandlerBuffer();
-            webRequest.timeout = m_requestTimeoutSeconds;
-            webRequest.SetRequestHeader("Content-Type", "application/json");
-            if (!(RideUtils.IsWebGL() && !RideUtils.IsEditor()))
-                webRequest.SetRequestHeader("Authorization", $"Bearer {m_authorizationKey}");
-
-            var operation = webRequest.SendWebRequest();
-            while (!operation.isDone)
-            {
-                await Task.Yield();
-            }
-            DateTime endTime = DateTime.Now;
-            m_responseTime = (endTime - startTime).TotalMilliseconds + " ms";
-
-            var response = webRequest.downloadHandler.text;
-
-            //Debug.Log($"Web response: {response}");
-
-            //Parse response
-            NlpResponse qnaAnswer;
-            if (webRequest.result == UnityWebRequest.Result.ProtocolError ||
-                webRequest.result == UnityWebRequest.Result.ConnectionError ||
-                webRequest.result == UnityWebRequest.Result.DataProcessingError)
-            {
-                // A request that times out or cannot reach the service arrives here with no
-                // error body to parse, so fall back to the transport error text. The body is
-                // only parsed when there is one: deserializing an empty string throws, because
-                // the error types are structs and so cannot be given a null result.
-                OpenAIErrorMessage openAIErrorMessage = default;
-                if (!string.IsNullOrWhiteSpace(response))
-                {
-                    try
-                    {
-                        openAIErrorMessage = RideIO.JsonDeserialize<OpenAIErrorMessage>(response);
-                    }
-                    catch (Exception exception)
-                    {
-                        Debug.LogWarning($"NlpSystemChatGPT::Request() - Could not parse the error " +
-                            $"response body: {exception.Message}");
-                    }
                 }
 
-                string message = openAIErrorMessage.error.message;
-                if (string.IsNullOrEmpty(message))
-                    message = string.IsNullOrEmpty(webRequest.error) ? webRequest.result.ToString() : webRequest.error;
+                if (RideUtils.IsWebGL() && !RideUtils.IsEditor())
+                    m_uri = ConfigurationSystemUnity.GetOpenAIProxyEndpoint();
 
-                string errorType = openAIErrorMessage.error.type;
-                if (string.IsNullOrEmpty(errorType))
-                    errorType = webRequest.result.ToString();
+                //Call web service
+                using var webRequest = new UnityWebRequest(m_uri, "POST");
+                byte[] bodyRaw = Encoding.UTF8.GetBytes(questionJSON);
+                webRequest.uploadHandler = new UploadHandlerRaw(bodyRaw);
+                webRequest.downloadHandler = new DownloadHandlerBuffer();
+                webRequest.timeout = m_requestTimeoutSeconds;
+                webRequest.SetRequestHeader("Content-Type", "application/json");
+                if (!(RideUtils.IsWebGL() && !RideUtils.IsEditor()))
+                    webRequest.SetRequestHeader("Authorization", $"Bearer {m_authorizationKey}");
 
-                qnaAnswer = new NlpResponse($"I'm sorry, something went wrong. I'm getting the error: " +
-                    $"'{message}', of type '{errorType}'");
-                Debug.LogError($"Error: {message}, type: {errorType}");
-            }
-            else
-            {
-                OpenAIAnswer oaiAnswer = RideIO.JsonDeserialize<OpenAIAnswer>(response);
-                string content = oaiAnswer.choices != null && oaiAnswer.choices.Length > 0
-                    ? oaiAnswer.choices[0].message.content : null;   // Pick first answer for now
-
-                // An empty content string is a real outcome, most often when the response hit
-                // max_completion_tokens (on reasoning models the internal reasoning can consume
-                // the whole budget). Speaking a short line keeps the conversation - and the
-                // character's thinking behavior - from stalling on an utterance that never comes.
-                if (string.IsNullOrWhiteSpace(content))
+                var operation = webRequest.SendWebRequest();
+                while (!operation.isDone)
                 {
-                    string finishReason = oaiAnswer.choices != null && oaiAnswer.choices.Length > 0
-                        ? oaiAnswer.choices[0].finish_reason : "unknown";
-                    Debug.LogWarning($"NlpSystemChatGPT::Request() - Empty response content " +
-                        $"(finish_reason '{finishReason}', max tokens {m_maxTokens}).");
-                    content = "I'm sorry, I did not receive a text response.";
+                    await Task.Yield();
                 }
-                qnaAnswer = new NlpResponse(content);
-            }
+                DateTime endTime = DateTime.Now;
+                m_responseTime = (endTime - startTime).TotalMilliseconds + " ms";
 
-            //Update conversation history
-            NlpInteraction interaction = new();
-            interaction.input = request.content;
-            interaction.response = qnaAnswer.content[0];
-            interaction.inputTimestamp = startTime;
-            interaction.responseTimestamp = endTime;
-            m_interactionHistory.Add(interaction);
+                var response = webRequest.downloadHandler.text;
+
+                //Debug.Log($"Web response: {response}");
+
+                //Parse response
+                if (webRequest.result == UnityWebRequest.Result.ProtocolError ||
+                    webRequest.result == UnityWebRequest.Result.ConnectionError ||
+                    webRequest.result == UnityWebRequest.Result.DataProcessingError)
+                {
+                    // A request that times out or cannot reach the service arrives here with no
+                    // error body to parse, so fall back to the transport error text. The body is
+                    // only parsed when there is one: deserializing an empty string throws, because
+                    // the error types are structs and so cannot be given a null result.
+                    OpenAIErrorMessage openAIErrorMessage = default;
+                    if (!string.IsNullOrWhiteSpace(response))
+                    {
+                        try
+                        {
+                            openAIErrorMessage = RideIO.JsonDeserialize<OpenAIErrorMessage>(response);
+                        }
+                        catch (Exception exception)
+                        {
+                            Debug.LogWarning($"NlpSystemChatGPT::Request() - Could not parse the error " +
+                                $"response body: {exception.Message}");
+                        }
+                    }
+
+                    string message = openAIErrorMessage.error.message;
+                    if (string.IsNullOrEmpty(message))
+                        message = string.IsNullOrEmpty(webRequest.error) ? webRequest.result.ToString() : webRequest.error;
+
+                    string errorType = openAIErrorMessage.error.type;
+                    if (string.IsNullOrEmpty(errorType))
+                        errorType = webRequest.result.ToString();
+
+                    qnaAnswer = new NlpResponse($"I'm sorry, something went wrong. I'm getting the error: " +
+                        $"'{message}', of type '{errorType}'");
+                    Debug.LogWarning($"NlpSystemChatGPT request failed with {errorType} (HTTP {webRequest.responseCode}); returning a fallback response.");
+                }
+                else
+                {
+                    OpenAIAnswer oaiAnswer = RideIO.JsonDeserialize<OpenAIAnswer>(response);
+                    string content = oaiAnswer.choices != null && oaiAnswer.choices.Length > 0
+                        ? oaiAnswer.choices[0].message.content : null;   // Pick first answer for now
+
+                    // An empty content string is a real outcome, most often when the response hit
+                    // max_completion_tokens (on reasoning models the internal reasoning can consume
+                    // the whole budget). Speaking a short line keeps the conversation - and the
+                    // character's thinking behavior - from stalling on an utterance that never comes.
+                    if (string.IsNullOrWhiteSpace(content))
+                    {
+                        string finishReason = oaiAnswer.choices != null && oaiAnswer.choices.Length > 0
+                            ? oaiAnswer.choices[0].finish_reason : "unknown";
+                        Debug.LogWarning($"NlpSystemChatGPT::Request() - Empty response content " +
+                            $"(finish_reason '{finishReason}', max tokens {m_maxTokens}).");
+                        content = "I'm sorry, I did not receive a text response.";
+                    }
+                    qnaAnswer = new NlpResponse(content);
+                }
+
+                //Update conversation history
+                NlpInteraction interaction = new();
+                interaction.input = request.content;
+                interaction.response = qnaAnswer.content[0];
+                interaction.inputTimestamp = startTime;
+                interaction.responseTimestamp = endTime;
+                m_interactionHistory.Add(interaction);
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning($"NlpSystemChatGPT request processing failed with {exception.GetType().Name}; returning a fallback response.");
+                qnaAnswer = new NlpResponse("I'm sorry, I could not complete that request.");
+            }
 
             //Invoke callback on complete
             onComplete?.Invoke(qnaAnswer);

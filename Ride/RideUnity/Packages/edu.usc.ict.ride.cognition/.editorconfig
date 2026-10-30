@@ -2,6 +2,7 @@ root = false
 
 [*.cs]
 dotnet_diagnostic.IDE0017.severity = none  # Object initialization can be simplified
+dotnet_diagnostic.IDE0018.severity = none  # Variable declaration can be inlined
 dotnet_diagnostic.IDE0019.severity = none  # Use pattern matching
 dotnet_diagnostic.IDE0028.severity = none  # Collection initialization can be simplified
 dotnet_diagnostic.IDE0044.severity = none  # Make field readonly

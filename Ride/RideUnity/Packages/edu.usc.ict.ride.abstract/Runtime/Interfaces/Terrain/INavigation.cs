@@ -1,8 +1,6 @@
 ﻿namespace Ride.Terrain
 {
-    /// <summary>
-    /// Navigation data
-    /// </summary>
+    /// <summary>Represents identified navigation-mesh data created and managed by <see cref="INavigationSystem"/>.</summary>
     public interface INavigation : IIdentity
     {
     }

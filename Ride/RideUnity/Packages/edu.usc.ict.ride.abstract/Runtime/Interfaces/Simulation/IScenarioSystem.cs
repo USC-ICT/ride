@@ -20,6 +20,7 @@ namespace Ride.Scenario
         /// <summary>
         /// Serializes the data in the scenario and saves it in the filename which gets created and contains the saved data
         /// </summary>
+        /// <param name="scenarioId">The scenario to save.</param>
         /// <param name="fileName">the name of the file including path to save the data in</param>
         void SaveScenario(RideID scenarioId, string fileName);
 
@@ -47,9 +48,11 @@ namespace Ride.Scenario
         /// <summary>
         /// a convenience wrapper function to Load a scenario from disk using the path toe file which reads in that file and then calls LoadScenario
         /// </summary>
+        /// <param name="scenarioId">The scenario into which the file should be loaded.</param>
         /// <param name="scenarioPath">the path to file to load in, it is a json in the msdl structure</param>
         void LoadScenarioFromFile(RideID scenarioId, string scenarioPath);
 
+        /// <summary>Clears the current scenario and its registered data.</summary>
         void ClearScenario();
 
         /// <summary>
@@ -77,6 +80,7 @@ namespace Ride.Scenario
         /// <summary>
         /// convenience function to convert the data structure Unit to the main AddAgent function and add the agent
         /// </summary>
+        /// <param name="scenarioId">The scenario receiving the agent.</param>
         /// <param name="unit">the unit to be added</param>
         /// <returns>the agent which was created</returns>
         RideID AddAgent(RideID scenarioId, Unit unit);
@@ -99,13 +103,14 @@ namespace Ride.Scenario
         /// <summary>
         /// Removes the agent with the given id from the scenario
         /// </summary>
-        /// <param name="id"></param>
+        /// <param name="agentId">The agent to remove.</param>
         void RemoveAgent(RideID agentId);
 
         /// <summary>
         /// Removes the agent with the given id from the scenario
         /// </summary>
-        /// <param name="id"></param>
+        /// <param name="scenarioId">The scenario containing the agent.</param>
+        /// <param name="agentId">The agent to remove.</param>
         void RemoveAgent(RideID scenarioId, RideID agentId);
 
         /// <summary>
@@ -119,6 +124,7 @@ namespace Ride.Scenario
         /// <summary>
         /// Adds an area of interest to the scenario
         /// </summary>
+        /// <param name="scenarioId">The scenario receiving the waypoint.</param>
         /// <param name="pos"></param>
         /// <param name="radius"></param>
         /// <returns></returns>
@@ -136,6 +142,7 @@ namespace Ride.Scenario
         /// <summary>
         ///  Adds and area of interest to the scenario
         /// </summary>
+        /// <param name="scenarioId">The scenario receiving the waypoint.</param>
         /// <param name="pos"></param>
         /// <param name="flags"></param>
         /// <param name="radius"></param>
@@ -147,16 +154,26 @@ namespace Ride.Scenario
         /// Useful for when you place waypoints in the scene prior to starting the scene
         /// </summary>
         /// <param name="wp"></param>
+        /// <param name="tags">The metadata tags assigned to the waypoint.</param>
         RideID InsertWaypoint(IWaypoint wp, IEnumerable<RideParameter> tags);
 
         /// <summary>
         /// Inserts the waypoint data into the api without creating a visual representation.
         /// Useful for when you place waypoints in the scene prior to starting the scene
         /// </summary>
+        /// <param name="scenarioId">The scenario receiving the waypoint.</param>
         /// <param name="wp"></param>
+        /// <param name="tags">The metadata tags assigned to the waypoint.</param>
         RideID InsertWaypoint(RideID scenarioId, IWaypoint wp, IEnumerable<RideParameter> tags);
 
+        /// <summary>Gets waypoint data from the current scenario.</summary>
+        /// <param name="waypointId">The waypoint identifier.</param>
+        /// <returns>The waypoint data, or <see langword="null"/> when unavailable.</returns>
         IWaypoint GetWaypointData(RideID waypointId);
+        /// <summary>Gets waypoint data from a specified scenario.</summary>
+        /// <param name="scenarioId">The scenario identifier.</param>
+        /// <param name="waypointId">The waypoint identifier.</param>
+        /// <returns>The waypoint data, or <see langword="null"/> when unavailable.</returns>
         IWaypoint GetWaypointData(RideID scenarioId, RideID waypointId);
 
         /// <summary>
@@ -252,9 +269,18 @@ namespace Ride.Scenario
         /// <returns></returns>
         RideID AddOrdnance(RideID scenarioId, string prefabPath, RideVector3 pos, RideQuaternion rot, OrdnanceAppearanceFlags flags, float msd, float msdShielded);
 
+        /// <summary>Gets ordnance data from the current scenario.</summary>
+        /// <param name="ordnanceid">The ordnance identifier.</param>
+        /// <returns>The ordnance data, or <see langword="null"/> when unavailable.</returns>
         IOrdnance GetOrdnanceData(RideID ordnanceid);
+        /// <summary>Gets ordnance data from a specified scenario.</summary>
+        /// <param name="scenarioId">The scenario identifier.</param>
+        /// <param name="ordnanceid">The ordnance identifier.</param>
+        /// <returns>The ordnance data, or <see langword="null"/> when unavailable.</returns>
         IOrdnance GetOrdnanceData(RideID scenarioId, RideID ordnanceid);
 
+        /// <summary>Removes ordnance from the current scenario.</summary>
+        /// <param name="ordnanceid">The ordnance identifier.</param>
         void RemoveOrdnance(RideID ordnanceid);
 
         /// <summary>
@@ -267,6 +293,7 @@ namespace Ride.Scenario
         /// <summary>
         /// Check if all the agents on a team are dead
         /// </summary>
+        /// <param name="scenarioId">The scenario to inspect.</param>
         /// <param name="team">the team to check</param>
         /// <returns>true if all the agents on a team are dead, false if 1 or more are alive with health > 0 </returns>
         bool AreAllAgentsDead(RideID scenarioId, Team team);
@@ -280,6 +307,7 @@ namespace Ride.Scenario
         /// <summary>
         /// Returns an traversable container of all the agents in a scenario
         /// </summary>
+        /// <param name="scenarioId">The scenario to inspect.</param>
         /// <returns>a list of all agents</returns>
         IEnumerable<RideID> GetAgents(RideID scenarioId);
 
@@ -293,6 +321,7 @@ namespace Ride.Scenario
         /// <summary>
         /// gets all the agents on one specific team
         /// </summary>
+        /// <param name="scenarioId">The scenario to inspect.</param>
         /// <param name="team">the team to get the agents on</param>
         /// <returns>all of the agents from the team passed in</returns>
         IEnumerable<RideID> GetAgents(RideID scenarioId, Team team);
@@ -308,6 +337,7 @@ namespace Ride.Scenario
         /// <summary>
         /// Returns all the agents within a certain range
         /// </summary>
+        /// <param name="scenarioId">The scenario to inspect.</param>
         /// <param name="center"></param>
         /// <param name="radius"></param>
         /// <returns></returns>
@@ -365,7 +395,7 @@ namespace Ride.Scenario
         /// Adds metadata of the given object to the entity using the tag
         /// </summary>
         /// <param name="entity">The entity to receive the tag data</param>
-        /// <param name="tag">The id of the value</param>
+        /// <param name="tag">The identifier of the metadata value.</param>
         /// <param name="value">The metadata</param>
         void AddTagToEntity(RideID entity, string tag, object value = null);
 
@@ -373,7 +403,7 @@ namespace Ride.Scenario
         /// Adds metadata of the given object to the entity using the tag
         /// </summary>
         /// <param name="entity">The entity to receive the tag data</param>
-        /// <param name="tag">The id of the value</param>
+        /// <param name="tags">The identifiers of the metadata values.</param>
         /// <param name="value">The metadata</param>
         void AddTagsToEntity(RideID entity, string[] tags, object value = null);
 
@@ -436,6 +466,7 @@ namespace Ride.Scenario
         /// <summary>
         /// Searches all entities in the scenario that have the given tag and are within the given distance
         /// </summary>
+        /// <param name="scenarioId">The scenario to search.</param>
         /// <param name="position">The center point</param>
         /// <param name="tag">The id requirement of the entity within the distance</param>
         /// <param name="distance">The furthest distance from the center point that an entity can be before being ignored</param>

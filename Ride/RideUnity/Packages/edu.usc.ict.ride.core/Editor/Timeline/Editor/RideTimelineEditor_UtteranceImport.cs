@@ -7,32 +7,63 @@ using System;
 using System.IO;
 using UnityEngine.Playables;
 
+/// <summary>Generates virtual-human cutscene Timeline assets from utterance audio and metadata files.</summary>
+/// <remarks>
+/// Opened from <c>Ride/Timeline/Generate Utterance Timeline</c>, this window supports a manually
+/// selected utterance or a batch folder. It matches text, BML lip-sync, and XML behavior assets to
+/// audio clips by name, creates <see cref="TimelineAsset"/> files, and adds a
+/// <see cref="PlayableDirector"/> GameObject for each generated Timeline to the active scene.
+/// See <a href="https://docs.unity3d.com/6000.0/Documentation/ScriptReference/EditorWindow.html">Unity EditorWindow documentation</a>.
+/// </remarks>
 public class RideTimelineEditor_UtteranceImport : EditorWindow
 {
+    /// <summary>Source folder used for batch asset discovery.</summary>
     static string m_importFolderPath;
+
+    /// <summary>Destination folder for generated Timeline assets.</summary>
     static string m_exportFolderPath;
+
+    /// <summary>Validation message for the configured import and export paths.</summary>
     private string m_pathDebugMessage;
 
+    /// <summary>Index of the selected single or batch generation mode.</summary>
     private int m_batchSelected = 0;
+
+    /// <summary>Labels displayed by the generation-mode selection control.</summary>
     private string[] m_batchOptions = new string[] { "Single", "Batch" };
+
+    /// <summary>Audio clip used in single-utterance mode.</summary>
     public AudioClip m_audio;
+
+    /// <summary>Utterance text asset used in single-utterance mode.</summary>
     public TextAsset m_utteranceText;
+
+    /// <summary>BML lip-sync asset used in single-utterance mode.</summary>
     public TextAsset m_lipSyncInfo;
+
+    /// <summary>Behavior XML asset used in single-utterance mode.</summary>
     public TextAsset m_xml;
+
+    /// <summary>Virtual-human character name assigned to generated cutscene clips.</summary>
     public string m_characterName;
 
+    /// <summary>Status message produced by cutscene discovery or generation.</summary>
     private string m_generationDebugMessage;
 
-    /// KEY: name of the cutscene, based on name of audio clip. VALUE: Assets required to create cutscenes.
-    public Dictionary<string, UtteranceElements> m_cutscenes = new Dictionary<string, UtteranceElements>();
+    /// <summary>Required cutscene assets keyed by the matching audio clip name.</summary>
+    private Dictionary<string, UtteranceElements> m_cutscenes = new Dictionary<string, UtteranceElements>();  /// KEY: name of the cutscene, based on name of audio clip. VALUE: Assets required to create cutscenes.
+
+    /// <summary>Timeline assets awaiting instantiation as Playable Directors in the active scene.</summary>
     private List<TimelineAsset> m_createdTimelines = new List<TimelineAsset>();
 
+    /// <summary>Opens the utterance Timeline generation window.</summary>
     [MenuItem("Ride/Timeline/Generate Utterance Timeline")]
     public static void ShowWindow()
     {
         GetWindow<RideTimelineEditor_UtteranceImport>(true, "Generate Utterance Timeline", false);
     }
 
+    /// <summary>Draws the source, destination, generation-mode, asset, and status controls.</summary>
     public void OnGUI()
     {
         var debugTextStyle = new GUIStyle(EditorStyles.label);
@@ -86,6 +117,7 @@ public class RideTimelineEditor_UtteranceImport : EditorWindow
         }
     }
 
+    /// <summary>Adds a non-autoplaying Playable Director for each generated Timeline to the active scene.</summary>
     private void InstantiateInTheScene()
     {
         foreach (var timeline in m_createdTimelines)
@@ -107,6 +139,7 @@ public class RideTimelineEditor_UtteranceImport : EditorWindow
          */
     }
 
+    /// <summary>Builds the set of valid cutscene inputs for the selected single or batch mode.</summary>
     private void PopulateCutsceneList()
     {
         m_cutscenes.Clear();
@@ -153,6 +186,7 @@ public class RideTimelineEditor_UtteranceImport : EditorWindow
         }
     }
 
+    /// <summary>Creates a Timeline asset and virtual-human cutscene clip for every valid utterance.</summary>
     private void CreateDirectorAssets()
     {
         //TODO: Make sure there isn't any director asset with same name already in the directory.
@@ -179,6 +213,13 @@ public class RideTimelineEditor_UtteranceImport : EditorWindow
         }
     }
 
+    /// <summary>Loads assets whose filenames contain the requested extension marker from the batch import folder.</summary>
+    /// <typeparam name="T">Unity asset type to load.</typeparam>
+    /// <param name="fileExtension">
+    /// Filename marker used to distinguish audio, utterance, BML, and XML inputs. BML and XML
+    /// assets may have a physical <c>.txt</c> extension, so matching uses the complete filename.
+    /// </param>
+    /// <returns>Assets of type <typeparamref name="T"/> that match the marker.</returns>
     private static List<T> GetAssetsOfType<T>(string fileExtension) where T : UnityEngine.Object
     {
         List<T> assets = new List<T>();
@@ -206,6 +247,10 @@ public class RideTimelineEditor_UtteranceImport : EditorWindow
         return assets;
     }
 
+    /// <summary>Finds the first text asset whose name contains the audio clip name.</summary>
+    /// <param name="fileName">Audio clip name used as the matching key.</param>
+    /// <param name="assets">Candidate text assets.</param>
+    /// <returns>The first matching text asset, or <see langword="null"/> when none matches.</returns>
     private TextAsset GetMatchingTextAsset(string fileName, List<TextAsset> assets)
     {
         foreach (var asset in assets)
@@ -217,6 +262,8 @@ public class RideTimelineEditor_UtteranceImport : EditorWindow
         return null;
     }
 
+    /// <summary>Validates the export folder and, in batch mode, the import folder.</summary>
+    /// <returns><see langword="true"/> when the required directories exist; otherwise <see langword="false"/>.</returns>
     private bool ArePathsValid()
     {
         if (Directory.Exists(m_importFolderPath) == false && m_batchSelected > 0)
@@ -233,6 +280,9 @@ public class RideTimelineEditor_UtteranceImport : EditorWindow
         return true;
     }
 
+    /// <summary>Checks whether all four assets required to generate an utterance cutscene are present.</summary>
+    /// <param name="elements">Candidate utterance assets.</param>
+    /// <returns><see langword="true"/> when audio, utterance text, BML, and behavior XML are assigned.</returns>
     private bool AreElementsValid(UtteranceElements elements)
     {
         if (elements.m_audio == null || elements.m_utteranceText == null || elements.m_lipSyncInfo == null || elements.m_xml == null)
@@ -244,12 +294,20 @@ public class RideTimelineEditor_UtteranceImport : EditorWindow
         return true;
     }
 
+    /// <summary>Groups the audio and metadata assets required to generate one utterance cutscene.</summary>
     [Serializable]
     public struct UtteranceElements
     {
+        /// <summary>Spoken audio for the utterance.</summary>
         public AudioClip m_audio;
+
+        /// <summary>Text content of the utterance.</summary>
         public TextAsset m_utteranceText;
+
+        /// <summary>BML timing and lip-sync data.</summary>
         public TextAsset m_lipSyncInfo;
+
+        /// <summary>Behavior XML containing animation and nonverbal behavior directives.</summary>
         public TextAsset m_xml;
     }
 }

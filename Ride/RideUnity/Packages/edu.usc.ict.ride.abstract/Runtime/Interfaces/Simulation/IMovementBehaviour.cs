@@ -31,7 +31,8 @@
         /// <summary>
         /// Forces the mover to start moving
         /// </summary>
-        /// <param name="mover"></param>
+        /// <param name="mover">The mover to start.</param>
+        /// <param name="desiredSpeed">The requested movement speed, or a negative value to use the mover's configured speed.</param>
         void StartMovement(IMover mover, float desiredSpeed = -1.0f);
 
         /// <summary>

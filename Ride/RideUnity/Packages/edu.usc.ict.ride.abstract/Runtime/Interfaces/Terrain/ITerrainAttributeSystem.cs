@@ -8,11 +8,17 @@ namespace Ride.Terrain
     /// </summary>
     public enum TerrainType
     {
+        /// <summary>No terrain category has been assigned.</summary>
         NoType,
+        /// <summary>A ground terrain tile.</summary>
         Ground,     // A terrain tile made of the ground.
+        /// <summary>A building mesh separated from a ground terrain tile.</summary>
         Building,   // A building mesh cut from a ground terrain tile.
+        /// <summary>An intact level-of-detail tree.</summary>
         LODTree,    // A SpeedTree that hasn't been broken ever, so it stil has LODs.
+        /// <summary>A trunk or branch fragment from a broken tree.</summary>
         TreeWood,   // A SpeedTree that has broken, so it only uses 1 LOD. This type represents a tree fragment that is either a trunk or branch.
+        /// <summary>A leaf or frond fragment from a broken tree.</summary>
         TreeLeaf    // A SpeedTree that has broken, so it only uses 1 LOD. This type represents a tree fragment that is a leaf or frond.
     }
 
@@ -21,14 +27,20 @@ namespace Ride.Terrain
     /// </summary>
     public enum FragmentType
     {
+        /// <summary>No fragmentation style has been assigned.</summary>
         NoType,
+        /// <summary>Uses volumetric Voronoi-style concrete fragments.</summary>
         Concrete,   // Uses a typical 3D Voronoi appearance.
+        /// <summary>Uses elongated wood-like fragments.</summary>
         Wood        // Uses a 2D Voronoi appearance stretched into 3D to create long thin cells.
     };
 
+    /// <summary>Stores destruction and object-link attributes for a loaded Unity terrain feature.</summary>
     public class UnityTerrainAttribute
     {
+        /// <summary>Gets or sets the feature's terrain category.</summary>
         public TerrainType terrainType { get; set; } = TerrainType.NoType;
+        /// <summary>Gets or sets the feature's fragmentation style.</summary>
         public FragmentType fragmentType { get; set; } = FragmentType.NoType;
 
         /// <summary>

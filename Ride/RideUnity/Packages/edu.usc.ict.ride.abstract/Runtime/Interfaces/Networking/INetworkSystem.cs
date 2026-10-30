@@ -5,19 +5,56 @@ using Ride.Entities;
 
 namespace Ride.Networking
 {
+    /// <summary>Represents a callback invoked after the local client connects to the network.</summary>
     public delegate void OnNetworkConnect();
+
+    /// <summary>Represents a callback invoked after the local client disconnects from the network.</summary>
     public delegate void OnNetworkDisconnect();
+
+    /// <summary>Represents a callback invoked after the local client joins a room.</summary>
     public delegate void OnJoinRoom();
+
+    /// <summary>Represents a callback invoked after the local client leaves a room.</summary>
     public delegate void OnLeaveRoom();
+
+    /// <summary>Represents a callback that associates a RIDE agent with its network view after joining a room.</summary>
+    /// <param name="agent">The RIDE identifier of the agent.</param>
+    /// <param name="view">The network view assigned to the agent.</param>
     public delegate void OnSetupNetworkAgent(RideID agent, INetworkView view);
+
+    /// <summary>Represents a callback invoked when a custom network event is received.</summary>
+    /// <param name="evCode">The application-defined event code.</param>
+    /// <param name="contents">The event payload.</param>
     public delegate void OnNetworkEventRaised(byte evCode, object[] contents);
+
+    /// <summary>Represents a callback invoked when a remote player enters the current room.</summary>
+    /// <param name="player">The player that entered.</param>
     public delegate void OnPlayerEnterRoom(Player player);
+
+    /// <summary>Represents a callback invoked when a remote player leaves the current room.</summary>
+    /// <param name="player">The player that left.</param>
     public delegate void OnPlayerLeaveRoom(Player player);
+
+    /// <summary>Represents a callback invoked when room authority moves to a new master client.</summary>
+    /// <param name="newMasterClient">The new master client.</param>
     public delegate void OnMasterClientSwitched(Player newMasterClient);
+
+    /// <summary>Represents a Fusion room-join callback with backend-independent runner and player handles.</summary>
+    /// <param name="runner">The runner managing the session.</param>
+    /// <param name="player">The player that joined.</param>
     public delegate void OnJoinRoom_Fusion(INetworkRunner runner, IPlayerRef player);
+
+    /// <summary>Represents a Fusion input callback with backend-independent runner and input handles.</summary>
+    /// <param name="runner">The runner requesting input.</param>
+    /// <param name="input">The input container to populate.</param>
     public delegate void OnInput_Fusion(INetworkRunner runner, INetworkInput input);
+
+    /// <summary>Represents a request to spawn a named prefab for a player.</summary>
+    /// <param name="player">The player that will receive authority over the spawned object.</param>
+    /// <param name="prefabName">The registered prefab name.</param>
     public delegate void OnRequestSpawnPrefab(IPlayerRef player, string prefabName);
 
+    /// <summary>Describes the network client's connection and matchmaking state.</summary>
     public enum ClientState
     {
         /// <summary>Peer is created but not used yet.</summary>
@@ -78,9 +115,7 @@ namespace Ride.Networking
         DisconnectingFromNameServer
     }
 
-    /// <summary>
-    /// A player that is represented on the network
-    /// </summary>
+    /// <summary>Describes a player represented in a network room.</summary>
     public class Player
     {
         /// <summary>
@@ -98,6 +133,10 @@ namespace Ride.Networking
         /// </summary>
         public string UserId { get; }
 
+        /// <summary>Initializes a network player description.</summary>
+        /// <param name="actorNumber">The transport-assigned actor number.</param>
+        /// <param name="nickName">The player's display name.</param>
+        /// <param name="userId">The player's user identifier.</param>
         public Player(int actorNumber, string nickName, string userId) { ActorNumber = actorNumber; NickName = nickName; UserId = userId; }
 
 //#if PHOTON_UNITY_NETWORKING
@@ -105,55 +144,117 @@ namespace Ride.Networking
 //#endif
     }
 
+    /// <summary>Describes a discoverable or joined network room and its players.</summary>
     public class Room
     {
+        /// <summary>Gets the room name.</summary>
         public string Name { get; }
+
+        /// <summary>Gets the current number of players in the room.</summary>
         public int PlayerCount { get; }
+
+        /// <summary>Gets the maximum number of players allowed in the room.</summary>
         public int MaxPlayers { get; }
+
+        /// <summary>Gets players keyed by actor number, or <see langword="null"/> when the backend does not expose the roster.</summary>
         public Dictionary<int, Player> Players { get; }  // can be null if this information about the room isn't available.
 
+        /// <summary>Initializes a network room description.</summary>
+        /// <param name="name">The room name.</param>
+        /// <param name="playerCount">The current player count.</param>
+        /// <param name="maxPlayers">The maximum player count.</param>
+        /// <param name="players">The optional roster keyed by actor number.</param>
         public Room(string name, int playerCount, int maxPlayers, Dictionary<int, Player> players) { Name = name; PlayerCount = playerCount; MaxPlayers = maxPlayers; Players = players; }
     }
 
     // needs to match Fusion.GameMode
+    /// <summary>Specifies the Fusion-compatible topology used to create or join a session.</summary>
     public enum GameModeFusion
     {
+        /// <summary>Runs a local single-player simulation.</summary>
         Single = 1,
+
+        /// <summary>Shares state authority among connected peers.</summary>
         Shared,
+
+        /// <summary>Runs as a dedicated server.</summary>
         Server,
+
+        /// <summary>Runs as both server and local client.</summary>
         Host,
+
+        /// <summary>Runs as a client connected to a server or host.</summary>
         Client,
+
+        /// <summary>Hosts a session when none exists; otherwise joins as a client.</summary>
         AutoHostOrClient
     }
 
+    /// <summary>Collects the backend-independent settings used to start a Fusion-compatible session.</summary>
     public struct SessionRequest
     {
+        /// <summary>The RIDE identifier of the requesting user.</summary>
         public RideID UserID;
+
+        /// <summary>The requested network topology.</summary>
         public GameModeFusion GameMode;
+
+        /// <summary>The user's display name.</summary>
         public string DisplayName;
+
+        /// <summary>The session name to create or join.</summary>
         public string SessionName;
+
+        /// <summary>The maximum number of players permitted in the session.</summary>
         public int MaxPlayers;
+
+        /// <summary>The optional custom lobby used for session discovery.</summary>
         public string CustomLobby;
+
+        /// <summary>The optional server or host address.</summary>
         public string IPAddress;
+
+        /// <summary>The optional server or host port.</summary>
         public ushort Port;
     }
 
+    /// <summary>Represents the network-facing operations exposed by a RIDE simulation agent.</summary>
     public interface INetworkAgent
     {
+        /// <summary>
+        /// Notifies the remote agent that an entity received damage.
+        /// </summary>
+        /// <param name="entityId">The damaged entity.</param>
+        /// <param name="damage">The damage amount.</param>
         void SendReceivingDamage(RideID entityId, float damage);
+
+        /// <summary>
+        /// Sends the result of damage inflicted by the agent.
+        /// </summary>
+        /// <param name="attackResult">The attack result to synchronize.</param>
         void SendInflictingDamage(IAttackResult attackResult);
     }
 
 
-    /// <summary>
-    /// Interface that allows functionality for clients to communicate over the network
-    /// </summary>
+    /// <summary>Provides backend-independent connection, room, object, and event networking for RIDE simulations.</summary>
+    /// <remarks>Implemented by RIDE Core network systems and concrete Photon or Fusion adapters.</remarks>
     public interface INetworkSystem : IRideSystem
     {
+        /// <summary>
+        /// Registers the network operations associated with a RIDE agent.
+        /// </summary>
+        /// <param name="id">The agent's RIDE identifier.</param>
+        /// <param name="agent">The network agent implementation.</param>
         void AddNetworkAgent(RideID id, INetworkAgent agent);
 
+        /// <summary>Determines whether a network agent is registered for a RIDE identifier.</summary>
+        /// <param name="id">The RIDE identifier to test.</param>
+        /// <returns><see langword="true"/> when an agent is registered; otherwise, <see langword="false"/>.</returns>
         bool IsNetworkAgent(RideID id);
 
+        /// <summary>Gets the network agent registered for a RIDE identifier.</summary>
+        /// <param name="id">The RIDE identifier to resolve.</param>
+        /// <returns>The registered network agent.</returns>
         INetworkAgent GetNetworkAgent(RideID id);
 
         /// <summary>
@@ -219,8 +320,8 @@ namespace Ride.Networking
         /// <summary>
         /// Calculates and returns the latency of the room in ms
         /// </summary>
-        /// <param name="roomName"></param>
-        /// <returns></returns>
+        /// <param name="roomName">The room to measure.</param>
+        /// <returns>The estimated latency in milliseconds.</returns>
         int CalculateRoomPing(string roomName);
 
         /// <summary>
@@ -256,9 +357,9 @@ namespace Ride.Networking
 
 
         /// <summary>
-        /// Creates a networked session in Fusion environment. (Session is equivalent to room in PUN)
+        /// Creates a networked session using Fusion-compatible settings. A session is equivalent to a room in PUN.
         /// </summary>
-        /// <param name="name">The display name of the room</param>
+        /// <param name="request">The session settings.</param>
         void CreateRoom(SessionRequest request);
 
         /// <summary>
@@ -267,44 +368,43 @@ namespace Ride.Networking
         /// <param name="name">The name of the room to join</param>
         void JoinRoom(string name);
 
-        /// <summary>
-        /// The local player leaves their current rroom
-        /// </summary>
+        /// <summary>Leaves the room currently occupied by the local player.</summary>
         void LeaveRoom();
 
         /// <summary>
-        /// Sets a value on a networ room that is automatically synced over the network
+        /// Sets an integer custom property that is synchronized with the room.
         /// </summary>
         /// <param name="property">The name of the property</param>
-        /// <param name="value">The value of the proptery</param>
+        /// <param name="value">The property value.</param>
         void SetRoomCustomProperty(string property, int value);
 
         /// <summary>
-        /// Sets a value on a networ room that is automatically synced over the network
+        /// Sets a floating-point custom property that is synchronized with the room.
         /// </summary>
         /// <param name="property">The name of the property</param>
-        /// <param name="value">The value of the proptery</param>
+        /// <param name="value">The property value.</param>
         void SetRoomCustomProperty(string property, float value);
 
         /// <summary>
-        /// Sets a value on a networ room that is automatically synced over the network
+        /// Sets a Boolean custom property that is synchronized with the room.
         /// </summary>
         /// <param name="property">The name of the property</param>
-        /// <param name="value">The value of the proptery</param>
+        /// <param name="value">The property value.</param>
         void SetRoomCustomProperty(string property, bool value);
 
         /// <summary>
-        /// Sets a value on a networ room that is automatically synced over the network
+        /// Sets a string custom property that is synchronized with the room.
         /// </summary>
         /// <param name="property">The name of the property</param>
-        /// <param name="value">The value of the proptery</param>
+        /// <param name="value">The property value.</param>
         void SetRoomCustomProperty(string property, string value);
 
         /// <summary>
-        /// Returns a network synced property value of the room
+        /// Returns a synchronized property value from a room.
         /// </summary>
         /// <typeparam name="T">Allowed values: string, int, float, bool</typeparam>
-        /// <param name="property">The name of the property</param>
+        /// <param name="room">The room name.</param>
+        /// <param name="property">The property name.</param>
         /// <returns>The network stored value of the property on the room</returns>
         T GetRoomCustomProperty<T>(string room, string property);
 
@@ -320,17 +420,18 @@ namespace Ride.Networking
         /// <summary>
         /// Create an agent that sends data across the network
         /// </summary>
-        /// <param name="unit"></param>
+        /// <param name="unit">The simulation unit to network.</param>
         /// <returns>Id of the created network agent</returns>
         RideID CreateNetworkObject(Unit unit);
 
         /// <summary>
-        /// Create an object in Fusion Network
+        /// Creates a networked object with authority associated with a backend player reference.
         /// </summary>
-        /// <param name="playerRef">RideID assigned to PlayerRef (Fusion only)</param>
-        /// <param name="position"></param>
-        /// <param name="rotation"></param>
-        /// <returns></returns>
+        /// <param name="playerRef">The backend player reference that receives authority.</param>
+        /// <param name="objectName">The registered prefab name.</param>
+        /// <param name="position">The world position.</param>
+        /// <param name="rotation">The world rotation.</param>
+        /// <returns>The RIDE identifier of the created network entity.</returns>
         RideID CreateNetworkObject(IPlayerRef playerRef, string objectName, RideVector3 position, RideQuaternion rotation);
 
         /// <summary>
@@ -344,23 +445,23 @@ namespace Ride.Networking
         RideID CreateNetworkRoomObject(string objectName, RideVector3 position, RideQuaternion rotation);
 
         /// <summary>
-        /// Performs TSS setup on the networked agent
+        /// Performs RIDE setup on a networked agent.
         /// </summary>
-        /// <param name="agent"></param>
-        /// <returns></returns>
+        /// <param name="agent">The simulation agent to configure.</param>
+        /// <returns>The RIDE identifier assigned to the networked agent.</returns>
         RideID SetupNetworkObject(IAgent agent);
 
         /// <summary>
         /// Returns the RideID associated with the network player id.
         /// </summary>
         /// <param name="playerId">The network player id</param>
-        /// <returns>The RideID. RideID.NULL if not found</returns>
+        /// <returns>The associated RIDE identifier, or <see cref="RideID.Null"/> when no mapping exists.</returns>
         RideID GetRideIDFromPlayer(int playerId);
 
         /// <summary>
-        /// Returns the unique network player id associated with the TSSid
+        /// Returns the unique network player identifier associated with a RIDE identifier.
         /// </summary>
-        /// <param name="agent">The tssid of the network player</param>
+        /// <param name="agent">The RIDE identifier of the network player.</param>
         /// <returns>The network player id</returns>
         int GetPlayerFromRideID(RideID agent);
 
@@ -375,14 +476,14 @@ namespace Ride.Networking
         /// Tests if there is a RideID associated with the network view id
         /// </summary>
         /// <param name="view">The network view id</param>
-        /// <returns></returns>
+        /// <returns><see langword="true"/> when a mapping exists; otherwise, <see langword="false"/>.</returns>
         bool DoesRideIDViewMappingExist(int view);
 
         /// <summary>
         /// The RideID associated with the view id
         /// </summary>
-        /// <param name="view"></param>
-        /// <returns></returns>
+        /// <param name="view">The network view identifier.</param>
+        /// <returns>The associated RIDE identifier, or <see cref="RideID.Null"/> when no mapping exists.</returns>
         //#if FUSION_NETWORKING
         //        int GetRideIDFromView(NetworkId viewId);
         //#else
@@ -401,15 +502,15 @@ namespace Ride.Networking
         /// Dispatch an event across the network
         /// </summary>
         /// <param name="evCode">Range 1 - 199 inclusive.  See NetworkEventCodes</param>
-        /// <param name="raiseEventOptions"></param>
-        /// <param name="sendOptions">Information about who to send it to</param>
-        /// <param name="content">The data you want to send</param>
+        /// <param name="raiseEventOptions">The target and caching options for the event.</param>
+        /// <param name="sendOptions">The delivery guarantees to use.</param>
+        /// <param name="content">The event payload.</param>
         void RaiseEvent(byte evCode, RaiseEventOptions raiseEventOptions, SendOptions sendOptions, object[] content);
 
         /// <summary>
         /// The current amount of network time that has passed. This time is mostly identical across all connected clients
         /// </summary>
-        /// <returns></returns>
+        /// <returns>The synchronized network time in seconds.</returns>
         double GetNetworkTime();
 
         /// <summary>
@@ -438,11 +539,10 @@ namespace Ride.Networking
         /// </summary>
         OnJoinRoom_Fusion onJoinRoom_Fusion { get; set; }
 
+        /// <summary>Gets or sets Fusion input listeners invoked when the runner requests local input.</summary>
         OnInput_Fusion onInput_Fusion { get; set; }
 
-        /// <summary>
-        /// Listeners that are invoked after successfully joining a network room via CreateRoom() or JoinRoom()
-        /// </summary>
+        /// <summary>Gets or sets listeners invoked after successfully leaving a network room.</summary>
         OnLeaveRoom onLeaveRoom { get; set; }
 
         /// <summary>
@@ -450,9 +550,7 @@ namespace Ride.Networking
         /// </summary>
         OnSetupNetworkAgent onSetupNetworkAgent { get; set; }
 
-        /// <summary>
-        /// Listeners that are invoked after successfully joining a network room via RaiseEvent()
-        /// </summary>
+        /// <summary>Gets or sets listeners invoked when a custom network event is received.</summary>
         OnNetworkEventRaised onEventRaised { get; set; }
 
         /// <summary>
@@ -493,9 +591,7 @@ namespace Ride.Networking
         PlayerRef GetLocalPlayer();
 #endif
 
-        /// <summary>
-        /// Intended for Fusion only. Register existing players in current room
-        /// </summary>
+        /// <summary>Registers existing players in the current room for Fusion-compatible implementations.</summary>
         void RegisterExistingPlayers();
 
         /// <summary>

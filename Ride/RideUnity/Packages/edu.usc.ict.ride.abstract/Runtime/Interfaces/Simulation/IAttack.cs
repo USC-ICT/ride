@@ -13,9 +13,12 @@
     /// <summary>Data associated with an attack</summary>
     public struct Attack : IAttack
     {
+        /// <inheritdoc/>
         public RideVector3 position { get; set; }
+        /// <inheritdoc/>
         public AttackFlags flags { get; set; }
 
+        /// <summary>Represents an attack with default position and flags.</summary>
         public static readonly Attack None = new Attack();
     }
 }

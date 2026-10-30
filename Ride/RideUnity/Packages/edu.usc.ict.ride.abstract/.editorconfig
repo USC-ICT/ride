@@ -12,5 +12,6 @@ dotnet_diagnostic.IDE0090.severity = none  # 'new' expression can be simplified
 dotnet_diagnostic.IDE0130.severity = none  # Namespace "" does not match folder structure, expected ""
 dotnet_diagnostic.IDE0251.severity = none  # Member can be made 'readonly'
 dotnet_diagnostic.IDE1006.severity = none  # Naming rule violation: These words must begin with upper case characters:
+dotnet_diagnostic.UAC1001.severity = none  # Field '' type '' is skipped by serialization (missing the [Serializable] attribute). Refer to the Serialization rules analyzer reference.
 dotnet_diagnostic.UNT0026.severity = none  # GetComponent allocates even if no component is found.
 dotnet_diagnostic.UNT0028.severity = none  # Compared to 'RaycastAll', 'RaycastNonAlloc' is not allocating memory.

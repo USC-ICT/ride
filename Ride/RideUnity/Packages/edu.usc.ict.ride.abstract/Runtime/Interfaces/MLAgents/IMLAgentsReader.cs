@@ -1,29 +1,29 @@
 namespace Ride.AI.ML
 {
+    /// <summary>
+    /// Defines runtime policy selection for a Unity ML-Agents-backed agent.
+    /// Implementations use it to switch trained models and alternate between heuristic and inference behavior.
+    /// </summary>
     public interface IMLAgentsReader
     {
         /// <summary>
-        /// Setup the agent to use ML
+        /// Associates the policy reader with a RIDE agent.
         /// </summary>
-        /// <param name="agent"></param>
+        /// <param name="agent">The identifier of the agent whose policy is managed.</param>
         void Init(RideID agent);
 
         //Note: Unity: Use Unity.Barracuda.NNModel; Or make RideNNModel or convert from byte[]
 
         /// <summary>
-        /// Change policy to a new model
+        /// Changes the agent's policy to a registered trained model.
         /// </summary>
-        /// <param name="newModel"></param>
+        /// <param name="newModel">The identifier of the model to activate.</param>
         public void ChangePolicy(RideID newModel);
 
-        /// <summary>
-        /// Change behavior to act on a heuristic, which can be simple or complex
-        /// </summary>
+        /// <summary>Changes the agent to use its hand-authored heuristic behavior.</summary>
         public void ChangeToHeuristicBehaviorType();
 
-        /// <summary>
-        /// Change behavior to be inference-based where the decisions are made via a trained model
-        /// </summary>
+        /// <summary>Changes the agent to make decisions by running inference with its active trained model.</summary>
         public void ChangeToInferenceBehaviorType();
 
         ///// <summary>

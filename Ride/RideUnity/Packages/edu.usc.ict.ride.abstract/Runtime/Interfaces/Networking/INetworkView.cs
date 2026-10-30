@@ -1,26 +1,18 @@
 ﻿namespace Ride.Networking
 {
+    /// <summary>Specifies the reliability and ordering guarantees used when sending a network message.</summary>
     public enum DeliveryMode
     {
-        //
-        // Summary:
-        //     The operation/message gets sent just once without acknowledgement or repeat.
-        //     The sequence (order) of messages is guaranteed.
+        /// <summary>Sends once without acknowledgement while preserving message order.</summary>
         Unreliable = 0,
-        //
-        // Summary:
-        //     The operation/message asks for an acknowledgment. It's resent until an ACK arrived.
-        //     The sequence (order) of messages is guaranteed.
+
+        /// <summary>Resends until acknowledged while preserving message order.</summary>
         Reliable = 1,
-        //
-        // Summary:
-        //     The operation/message gets sent once (unreliable) and might arrive out of order.
-        //     Best for your own sequencing (e.g. for streams).
+
+        /// <summary>Sends once without acknowledgement or ordering guarantees.</summary>
         UnreliableUnsequenced = 2,
-        //
-        // Summary:
-        //     The operation/message asks for an acknowledgment. It's resent until an ACK arrived
-        //     and might arrive out of order. Best for your own sequencing (e.g. for streams).
+
+        /// <summary>Resends until acknowledged without enforcing message order.</summary>
         ReliableUnsequenced = 3
     }
 
@@ -75,35 +67,24 @@
         MasterClient = 2,
     }
 
-    /// <summary>
-    /// GameObjects can be instantiated as "networked GameObjects" with a NetworkView component. It identifies the object and the owner (or controller).
-    /// The player who's in control, updates everyone else.
-    /// Typically, you would add a NetworkView to a prefab, select the Observed component for it and use TSSNetwork.Instantiate to create an instance.
-    /// The observed component of a NetworkView is in charge of writing (and reading) the state of the networked object several times a second.
-    /// To do so, a script must implement INetworkObservable, which defines OnNetworkSerializeView
-    /// </summary>
+    /// <summary>Provides backend-independent ownership, identity, RPC, and custom-property access for a networked object.</summary>
+    /// <remarks>Used by RIDE network agents and implemented by adapters such as Photon and Fusion network views.</remarks>
     public interface INetworkView
     {
-        /// <summary>
-        /// true if this is the local client
-        /// </summary>
+        /// <summary>Gets whether the local client owns or controls this network view.</summary>
         bool isMine { get; }
 
-        /// <summary>
-        /// The network view id (this is unique)
-        /// </summary>
+        /// <summary>Gets the unique network view identifier.</summary>
         //dynamic viewId { get; }
         int viewId { get; }
 
 
-        /// <summary>
-        /// The network actor id (this is unique)
-        /// </summary>
+        /// <summary>Gets the unique actor identifier that owns this view.</summary>
         int actorId { get; }
 
 //#if !FUSION_NETWORKING
         /// <summary>
-        /// Remote Procedural call. This allows you to call a function on a connected client
+        /// Invokes a remote procedure on the clients selected by <paramref name="target"/>.
         /// </summary>
         /// <param name="function">The name of the function on the remote machine</param>
         /// <param name="target">The receiver that will call the function</param>
@@ -111,7 +92,7 @@
         void RPC(string function, RpcTarget target, params object[] parameters);
 
         /// <summary>
-        /// Remote Procedural call. This allows you to call a function on a connected client
+        /// Invokes a remote procedure on a specific player.
         /// </summary>
         /// <param name="function">The name of the function on the remote machine</param>
         /// <param name="targetPlayer">The receiving player that will call the function</param>
@@ -120,35 +101,35 @@
 
 
         /// <summary>
-        /// Sets a value on this view that is automatically synced over the network
+        /// Sets an integer custom property that is synchronized with this view.
         /// </summary>
         /// <param name="property">The name of the property</param>
-        /// <param name="value">The value of the proptery</param>
+        /// <param name="value">The property value.</param>
         void SetCustomProperty(string property, int value);
 
         /// <summary>
-        /// Sets a value on this view that is automatically synced over the network
+        /// Sets a floating-point custom property that is synchronized with this view.
         /// </summary>
         /// <param name="property">The name of the property</param>
-        /// <param name="value">The value of the proptery</param>
+        /// <param name="value">The property value.</param>
         void SetCustomProperty(string property, float value);
 
         /// <summary>
-        /// Sets a value on this view that is automatically synced over the network
+        /// Sets a Boolean custom property that is synchronized with this view.
         /// </summary>
         /// <param name="property">The name of the property</param>
-        /// <param name="value">The value of the proptery</param>
+        /// <param name="value">The property value.</param>
         void SetCustomProperty(string property, bool value);
 
         /// <summary>
-        /// Sets a value on this view that is automatically synced over the network
+        /// Sets a string custom property that is synchronized with this view.
         /// </summary>
         /// <param name="property">The name of the property</param>
-        /// <param name="value">The value of the proptery</param>
+        /// <param name="value">The property value.</param>
         void SetCustomProperty(string property, string value);
 
         /// <summary>
-        /// Returns a network synced property value of the view
+        /// Gets a synchronized custom property from this view.
         /// </summary>
         /// <typeparam name="T">Allowed values: string, int, float, bool</typeparam>
         /// <param name="property">The name of the property</param>
@@ -156,17 +137,25 @@
         T GetCustomProperty<T>(string property);
 
         /// <summary>
-        /// Returns a network synced property value of the view if it exists
+        /// Attempts to get a synchronized custom property from this view.
         /// </summary>
         /// <typeparam name="T">Allowed values: string, int, float, bool</typeparam>
         /// <param name="property">The name of the property</param>
-        /// <param name="value">The network stored value of the property</param>
-        /// <returns>Returns true if property exists, false if it does not</returns>
+        /// <param name="value">When this method returns, contains the stored property value if found.</param>
+        /// <returns><see langword="true"/> if the property exists; otherwise, <see langword="false"/>.</returns>
         bool TryGetCustomProperty<T>(string property, out T value);
 //#elif FUSION_NETWORKING
+        /// <summary>
+        /// Assigns this view to a simulation team.
+        /// </summary>
+        /// <param name="team">The team to assign.</param>
         void SetTeam(Team team);
         //#endif
 
+        /// <summary>
+        /// Registers a request for the specified player to join the room represented by this view.
+        /// </summary>
+        /// <param name="playerRef">The backend player-reference identifier.</param>
         void RegisterRoomJoinRequest(int playerRef);
     }
 }

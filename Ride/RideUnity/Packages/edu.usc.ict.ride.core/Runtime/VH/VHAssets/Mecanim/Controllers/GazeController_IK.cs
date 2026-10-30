@@ -1,5 +1,8 @@
 using UnityEngine;
 using Ride;
+#if UNITY_EDITOR
+using UnityEditor.Animations;
+#endif
 
 namespace VHAssets
 {
@@ -88,6 +91,11 @@ namespace VHAssets
             base.InitializeLoadedAsset();
 
             EnsureAnimator();
+
+#if UNITY_EDITOR
+            WarnIfAnimatorIKPassDisabled();
+#endif
+
             EnsureGazeOrigin();
 
             if (m_GazeTarget != null)
@@ -158,6 +166,41 @@ namespace VHAssets
             if (m_Animator == null)
                 Debug.LogError($"No animator found in hierarchy of {name}. Gaze won't work");
         }
+
+#if UNITY_EDITOR
+        /// <summary>
+        /// Warns when the assigned Animator Controller has no layer configured to run an IK pass.
+        /// </summary>
+        /// <remarks>
+        /// Unity exposes the IK Pass setting only through the Editor-only
+        /// <see cref="AnimatorControllerLayer.iKPass"/> API. This validation therefore cannot
+        /// run in a player build. It also cannot be performed from <c>OnAnimatorIK</c>, because
+        /// Unity invokes that callback only after an Animator layer already has IK Pass enabled.
+        /// </remarks>
+        private void WarnIfAnimatorIKPassDisabled()
+        {
+            if (m_Animator == null)
+                return;
+
+            // AnimatorOverrideController does not expose layers directly, so inspect its base
+            // controller. The loop also handles nested override controllers.
+            RuntimeAnimatorController runtimeController = m_Animator.runtimeAnimatorController;
+            while (runtimeController is AnimatorOverrideController overrideController)
+                runtimeController = overrideController.runtimeAnimatorController;
+
+            AnimatorController animatorController = runtimeController as AnimatorController;
+            if (animatorController == null)
+                return;
+
+            foreach (AnimatorControllerLayer layer in animatorController.layers)
+            {
+                if (layer.iKPass)
+                    return;
+            }
+
+            Debug.LogWarning($"GazeController_IK ({name}): Animator Controller '{animatorController.name}' has no layer with IK Pass enabled. Animator IK gaze will not run.", this);
+        }
+#endif
 
         /// <summary>
         /// Ensures that a transform is assigned as the origin used for vertical

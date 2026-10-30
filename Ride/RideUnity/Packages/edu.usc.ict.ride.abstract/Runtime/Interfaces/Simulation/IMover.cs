@@ -95,6 +95,7 @@ namespace Ride.Movement
         /// </summary>
         bool isLoaded { get; set; }
 
+        /// <summary>Gets or sets the active movement leg used by locomotion and animation logic.</summary>
         MovementLeg Leg { get; set; }
     }
 }

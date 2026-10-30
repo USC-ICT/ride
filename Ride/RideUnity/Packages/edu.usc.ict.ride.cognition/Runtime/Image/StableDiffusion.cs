@@ -1,4 +1,5 @@
-﻿
+﻿using System;
+
 namespace Ride.GenerativeAI
 {
     /// <summary>
@@ -9,18 +10,19 @@ namespace Ride.GenerativeAI
         /// <summary>
         /// Stability AI Stable Diffusion request data struct
         /// </summary>
-        [System.Serializable]
+        [Serializable]
         public struct StableDiffusionRequest
         {
             public int cfg_scale;
             public string clip_guidance_preset;
             public int height;
-            public int width;            
+            public int width;
             public int samples;
             public int steps;
-            public SDTextPrompts[] text_prompts;           
+            public SDTextPrompts[] text_prompts;
         }
 
+        [Serializable]
         public struct SDTextPrompts
         {
             public string text;
@@ -30,12 +32,13 @@ namespace Ride.GenerativeAI
         /// <summary>
         /// Stability AI Stable Diffusion response data struct
         /// </summary>
-        [System.Serializable]
+        [Serializable]
         public struct StableDiffusionResponse
         {
             public SDArtifact[] artifacts;
         }
 
+        [Serializable]
         public struct SDArtifact
         {
             public string base64;

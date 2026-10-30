@@ -1,5 +1,6 @@
 ﻿namespace Ride.Entities
 {
+    /// <summary>Identifies the ammunition dimensions accepted by a weapon or magazine.</summary>
     public enum AmmunitionSize
     {
         size556x45mm,
@@ -23,16 +24,22 @@
         size125mm,          // 125mm smoothbore gun (used by T80U tanks)
     }
 
+    /// <summary>Represents an ammunition magazine consumed by attack and weapon systems.</summary>
     public interface IMagazine : IItem
     {
+        /// <summary>Gets the ammunition size stored by the magazine.</summary>
         AmmunitionSize ammoSize { get; }
 
+        /// <summary>Gets the maximum number of rounds held by the magazine.</summary>
         int capacity { get; }
 
+        /// <summary>Gets or sets the current number of rounds.</summary>
         int ammoCount { get; set; }
 
+        /// <summary>Gets the mass of an individual round.</summary>
         float roundMass { get; }
 
+        /// <summary>Gets the round's armor-piercing effectiveness.</summary>
         float armorPiercingRating { get; }
     }
 }

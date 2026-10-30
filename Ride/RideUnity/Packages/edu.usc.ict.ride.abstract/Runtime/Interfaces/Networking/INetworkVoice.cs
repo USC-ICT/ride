@@ -1,12 +1,12 @@
 namespace Ride.Networking
 {
-    /// <summary>Interface for using voice communication.</summary>
+    /// <summary>Controls network voice capture and transmission for implementations such as RIDE Core's <c>NetworkVoice</c>.</summary>
     public interface INetworkVoice
     {
-        /// <summary>Get/Set the whether you are recording or not.</summary>
+        /// <summary>Gets or sets whether microphone recording is enabled.</summary>
         bool isRecording { get; set; }
 
-        /// <summary>Get/Set whether you are transmitting audio.</summary>
+        /// <summary>Gets or sets whether recorded audio may be transmitted.</summary>
         bool transmitEnabled { get; set; }
 
         /// <summary>True if the recorder is transmitting right now.</summary>
@@ -18,19 +18,19 @@ namespace Ride.Networking
         /// <summary>Highest microphone volume recorded over the last 0.5 seconds.</summary>
         float currentPeakVolume { get; }
 
-        /// <summary>Members listening to the same channel will hear each other.</summary>
+        /// <summary>Gets or sets the voice channel; members on the same channel can hear one another.</summary>
         byte channel { get; set; }
 
         /// <summary>Voice data will be recorded when the input is greater than or equal to this value. Range [0 - 1].</summary>
         float detectionThreshold { get; set; }
 
-        /// <summary>Get/set if voice detection is used.</summary>
+        /// <summary>Gets or sets whether voice-activity detection controls transmission.</summary>
         bool isVoiceDetectionEnabled { get; set; }
 
-        /// <summary>Name of the device that will do the recording.</summary>
+        /// <summary>Gets or sets the name of the microphone used for recording.</summary>
         string microphoneDeviceName { get; set; }
 
-        /// <summary>Get/Sets the microphone network id for steaming.</summary>
+        /// <summary>Gets or sets the network identifier of the microphone stream.</summary>
         int deviceId { get; set; }
 
         /// <summary>Start streaming voice data from the current device.</summary>

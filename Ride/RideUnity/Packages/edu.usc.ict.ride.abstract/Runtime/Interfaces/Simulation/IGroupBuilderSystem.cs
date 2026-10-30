@@ -60,6 +60,13 @@ namespace Ride.Entities
         /// <returns>The ID of the group the member was added to.</returns>
         RideID AddMember(RideID group, RideID memberId, int memberRank, string memberTitle);
 
+        /// <summary>Adds a named member to a group with a rank and title.</summary>
+        /// <param name="group">The group identifier.</param>
+        /// <param name="memberId">The member identifier.</param>
+        /// <param name="memberName">The member display name.</param>
+        /// <param name="memberRank">The member's authority rank.</param>
+        /// <param name="memberTitle">The member's role within the group.</param>
+        /// <returns>The identifier of the group receiving the member.</returns>
         RideID AddMember(RideID group, RideID memberId, string memberName, int memberRank, string memberTitle);
 
         /// <summary>

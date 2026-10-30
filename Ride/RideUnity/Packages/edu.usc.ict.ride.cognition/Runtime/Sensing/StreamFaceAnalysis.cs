@@ -7,13 +7,14 @@ using System.Text;
 using UnityEngine;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-[Serializable]
+
 public class VHSensingData
 {
     public Dictionary<string, float> emotion;
     public float age;
     public string dominant_gender;
 }
+
 public enum VHEmotion
 {
     Angry,
@@ -45,7 +46,7 @@ public class StreamFaceAnalysis : MonoBehaviour
     public String age;
     [HideInInspector]
     public String gender;
-    [HideInInspector]
+    [NonSerialized]
     public VHSensingData sensingDataRaw;
 
     //Path to the VHSensing python env and script

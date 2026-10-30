@@ -36,6 +36,7 @@ namespace Ride.NLP
     {
         private const string DefaultModel = "gpt-4o-mini";
         private const float DefaultMinimumConfidence = 0.45f;
+        [SerializeField, Min(1)] private int m_requestTimeoutSeconds = 20;
         private static LanguageDetectionSettings s_settings = LanguageDetectionSettings.Default;
 
         public static LanguageDetectionSettings Settings
@@ -60,11 +61,28 @@ namespace Ride.NLP
                 details = "not run",
             };
 
+            try
+            {
+                result = await DetectLanguageRequestAsync(text, inputSource, result);
+            }
+            catch (Exception exception)
+            {
+                result.details = $"{exception.GetType().Name}: {exception.Message}";
+                Debug.LogWarning($"[LanguageDetection OpenAI] Request processing failed with {exception.GetType().Name}.");
+            }
+
+            onComplete?.Invoke(result);
+        }
+
+        private async Task<LanguageDetectionResult> DetectLanguageRequestAsync(
+            string text,
+            string inputSource,
+            LanguageDetectionResult result)
+        {
             if (string.IsNullOrWhiteSpace(text))
             {
                 result.details = "empty text";
-                onComplete?.Invoke(result);
-                return;
+                return result;
             }
 
             bool isWebGL = RideUtils.IsWebGL() && !RideUtils.IsEditor();
@@ -74,15 +92,13 @@ namespace Ride.NLP
             if (string.IsNullOrWhiteSpace(uri))
             {
                 result.details = "OpenAI endpoint missing";
-                onComplete?.Invoke(result);
-                return;
+                return result;
             }
 
             if (!isWebGL && string.IsNullOrWhiteSpace(apiKey))
             {
                 result.details = "OpenAI key missing";
-                onComplete?.Invoke(result);
-                return;
+                return result;
             }
 
             var messages = new[]
@@ -115,6 +131,7 @@ namespace Ride.NLP
             byte[] bodyRaw = Encoding.UTF8.GetBytes(payload);
             webRequest.uploadHandler = new UploadHandlerRaw(bodyRaw);
             webRequest.downloadHandler = new DownloadHandlerBuffer();
+            webRequest.timeout = m_requestTimeoutSeconds;
             webRequest.SetRequestHeader("Content-Type", "application/json");
             if (!isWebGL)
                 webRequest.SetRequestHeader("Authorization", $"Bearer {apiKey}");
@@ -128,16 +145,14 @@ namespace Ride.NLP
             {
                 result.details = string.IsNullOrWhiteSpace(response) ? webRequest.error : response;
                 Debug.LogWarning($"[LanguageDetection OpenAI] Request failed: {result.details}");
-                onComplete?.Invoke(result);
-                return;
+                return result;
             }
 
             if (!TryParseLanguageResponse(response, out string language, out float confidence, out string details))
             {
                 result.details = details;
                 Debug.LogWarning($"[LanguageDetection OpenAI] Failed to parse response: {details}");
-                onComplete?.Invoke(result);
-                return;
+                return result;
             }
 
             result.language = NormalizeLanguage(language);
@@ -148,7 +163,7 @@ namespace Ride.NLP
                 result.confidence >= GetMinimumConfidence();
 
             Debug.Log($"[LanguageDetection OpenAI] source='{inputSource}' language='{(string.IsNullOrWhiteSpace(result.language) ? "unknown" : result.language)}' confidence={result.confidence:F2} success={result.success}");
-            onComplete?.Invoke(result);
+            return result;
         }
 
         private static bool TryParseLanguageResponse(string response, out string language, out float confidence, out string details)

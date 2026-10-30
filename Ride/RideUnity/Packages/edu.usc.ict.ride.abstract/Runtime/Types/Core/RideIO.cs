@@ -27,7 +27,11 @@ namespace Ride
         /// <returns>The combined path that uses the operating system appropriate slash</returns>
         public static string PathCombine(params string[] paths) => Path.Combine(paths).Replace("\\", "/");
 
+        /// <summary>Gets the Unity application's data-folder path.</summary>
+        /// <returns>The application data path.</returns>
         public static string ApplicationDataPath() => UnityEngine.Application.dataPath;
+        /// <summary>Gets the Unity application's persistent-data path.</summary>
+        /// <returns>The persistent data path.</returns>
         public static string ApplicationPersistentDataPath() => UnityEngine.Application.persistentDataPath;
 
         #endregion
@@ -278,6 +282,10 @@ namespace Ride
             }
         }
 
+        /// <summary>Sends a Unity web request without explicit timeout or retry limits.</summary>
+        /// <param name="uri">The request URI.</param>
+        /// <param name="onComplete">Callback invoked with the response text, or <see langword="null"/> on failure.</param>
+        /// <returns>The request coroutine.</returns>
         public static IEnumerator Request(string uri, Action<string> onComplete)
         {
             yield return Request(uri, onComplete, -1, -1);
@@ -286,6 +294,7 @@ namespace Ride
         /// <summary>
         /// Checks if a file exists in S3.
         /// </summary>
+        /// <param name="behaviour">The Unity behavior used to run the request coroutine.</param>
         /// <param name="path">The path of the file. It should start with 's3://'.</param>
         /// <param name="onComplete">Action that passes a bool. True if the input path exists in S3. False if it doesn't, or if there was an error.</param>
         /// <returns></returns>
@@ -455,8 +464,8 @@ namespace Ride
         /// </summary>
         /// <param name="uri">The parameterized url</param>
         /// <param name="data">http body</param>
-        /// <param name="contentType">http content type i.e. text/plain; charset=UTF-8</param></param>
-        /// <returns></returns>
+        /// <param name="contentType">http content type i.e. text/plain; charset=UTF-8</param>
+        /// <returns>The response body.</returns>
         public static Task<string> Post(string uri, string data, string contentType) =>
             SendHttpAsync(HttpMethod.Post, uri, data, null, contentType);
 
@@ -500,6 +509,13 @@ namespace Ride
             }
         }
 
+        /// <summary>Sends an HTTP PUT request asynchronously with an explicit host header.</summary>
+        /// <param name="uri">The parameterized URL.</param>
+        /// <param name="data">The HTTP request body.</param>
+        /// <param name="headers">The HTTP request headers.</param>
+        /// <param name="contentType">The HTTP content type.</param>
+        /// <param name="host">The host header value.</param>
+        /// <returns>The response body.</returns>
         public static Task<string> PutAsync(string uri, string data, Dictionary<string, string> headers, string contentType, string host) =>
             SendHttpAsync(HttpMethod.Put, uri, data, headers, contentType, host);
 
@@ -534,13 +550,17 @@ namespace Ride
         /// Sends an http(s) DELETE request asynchronously
         /// </summary>
         /// <param name="uri">The parameterized url</param>
-        /// <param name="data">http body</param>
         /// <param name="headers">http headers</param>
-        /// <param name="contentType">http content type i.e. text/plain; charset=UTF-8</param>
         /// <returns>Response from request</returns>
         public static Task<string> DeleteAsync(string uri, Dictionary<string, string> headers) =>
             SendHttpAsync(HttpMethod.Delete, uri, null, headers);
 
+        /// <summary>Sends an HTTP PATCH request asynchronously.</summary>
+        /// <param name="uri">The parameterized URL.</param>
+        /// <param name="data">The HTTP request body.</param>
+        /// <param name="headers">The HTTP request headers.</param>
+        /// <param name="contentType">The HTTP content type.</param>
+        /// <returns>The response body.</returns>
         public static Task<string> PatchAsync(string uri, string data, Dictionary<string, string> headers, string contentType) =>
             SendHttpAsync(new HttpMethod("PATCH"), uri, data, headers, contentType);
 

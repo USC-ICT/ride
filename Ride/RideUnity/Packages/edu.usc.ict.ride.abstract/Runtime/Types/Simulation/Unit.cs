@@ -4,144 +4,96 @@ using Ride.Movement;
 
 namespace Ride
 {
-    /// <summary>
-    /// Represents the team affiliation of a unit.
-    /// </summary>
+    /// <summary>Represents the team affiliation of a unit.</summary>
     public enum Team
     {
+        /// <summary>Blue or friendly team.</summary>
         Blue,
+
+        /// <summary>Red or opposing team.</summary>
         Red,
+
+        /// <summary>Civilian or noncombatant team.</summary>
         Civilian
     }
 
-    /// <summary>
-    /// Represents a simulated scenario entity with position, attributes, team alignment,
-    /// prefab identity, optional items, and movement behavior.
-    ///
-    /// Units are commonly spawned from scenario definitions and serve as core agents
-    /// or interactive objects in both gameplay and simulation layers. Each unit has
-    /// spatial properties (position, rotation), health and stamina, team identity,
-    /// and can be customized via prefab overrides or SIDC-based symbology.
-    ///
-    /// This class is serialized as part of scenario data and instantiated into live
-    /// GameObjects at runtime by system logic or scenario loaders.
-    /// </summary>
+    /// <summary>Describes a serializable simulated unit and its initial state.</summary>
+    /// <remarks>
+    /// <see cref="Ride.Scenario.IScenarioSystem"/> and <see cref="IAgentSystem"/> use this model when creating
+    /// agents from scenario definitions. It contains engine-independent identity, transform,
+    /// team, health, equipment, symbology, and movement configuration data.
+    /// </remarks>
     [Serializable]
     public class Unit : IIdentity
     {
         /// <inheritdoc/>
         public RideID id { get; set; }
 
-        /// <summary>
-        /// The display name of the unit. Usually matches the prefab name.
-        /// </summary>
+        /// <summary>Display name of the unit, which usually matches its prefab name.</summary>
         public string name { get; set; }
 
-        /// <summary>
-        /// The prefab used to instantiate the unit in Unity.
-        /// </summary>
+        /// <summary>Prefab used to instantiate the unit in Unity.</summary>
         public string prefab;
 
-        /// <summary>
-        /// An optional unit classification (e.g., type ID). Not used in core systems.
-        /// </summary>
+        /// <summary>Optional unit classification identifier that is not interpreted by core systems.</summary>
         public int type;
 
-        /// <summary>
-        /// The initial world position of the unit.
-        /// </summary>
+        /// <summary>Initial world position of the unit.</summary>
         public RideVector3 pos;
 
-        /// <summary>
-        /// The initial world rotation of the unit. Defaults to identity.
-        /// </summary>
+        /// <summary>Initial world rotation of the unit.</summary>
         public RideQuaternion rot = RideQuaternion.identity;
 
-        /// <summary>
-        /// The team affiliation of the unit (Blue, Red, Civilian).
-        /// </summary>
+        /// <summary>Team affiliation of the unit.</summary>
         public Team team;
 
-        /// <summary>
-        /// Inventory bin ID used by pathfinding or inventory logic.
-        /// 13 = default weight; 14 = fully loaded.
-        /// </summary>
+        /// <summary>Load-state bin, where 13 is the default and 14 represents fully loaded.</summary>
         public int bin = 13;
 
-        /// <summary>
-        /// The current health of the unit.
-        /// </summary>
+        /// <summary>Current health of the unit.</summary>
         public float health = 100;
 
-        /// <summary>
-        /// The maximum health value the unit can have.
-        /// </summary>
+        /// <summary>Maximum health of the unit.</summary>
         public float maxHealth = 100;
 
-        /// <summary>
-        /// The current stamina level of the unit.
-        /// </summary>
+        /// <summary>Current stamina of the unit.</summary>
         public float stamina = 100;
 
-        /// <summary>
-        /// The maximum stamina the unit can store.
-        /// </summary>
+        /// <summary>Maximum stamina of the unit.</summary>
         public float maxStamina = 100;
 
-        /// <summary>
-        /// The vertical jump speed or strength of the unit.
-        /// </summary>
+        /// <summary>Vertical jump speed or strength of the unit.</summary>
         public float jumpSpeed = 5;
 
-        /// <summary>
-        /// The base walking/running speed of the unit.
-        /// </summary>
+        /// <summary>Base walking or running speed of the unit.</summary>
         public float defaultSpeed = 5;
 
-        /// <summary>
-        /// Movement multiplier when the unit is boosted or sprinting.
-        /// </summary>
+        /// <summary>Movement multiplier applied while the unit is boosted or sprinting.</summary>
         public float speedBoostMultiplier = 2;
 
-        /// <summary>
-        /// Movement multiplier when slowed by effects or environment.
-        /// </summary>
+        /// <summary>Movement multiplier applied while the unit is slowed.</summary>
         public float speedSlowMultiplier = 0.5f;
 
-        /// <summary>
-        /// Reduction rate for suppression effects. Higher values reduce suppression faster.
-        /// </summary>
+        /// <summary>Rate at which suppression is reduced.</summary>
         public float suppressionReductionRate = 0.1f;
 
-        /// <summary>
-        /// A normalized skill rating used for AI decision-making.
-        /// </summary>
+        /// <summary>Normalized skill rating used for AI decision-making.</summary>
         public float skillLevel = 1.0f;
 
-        /// <summary>
-        /// The MIL-STD-2525 SIDC string identifying the symbol to display for this unit.
-        /// </summary>
+        /// <summary>MIL-STD-2525 symbol identification code used to display the unit.</summary>
         public string sidc = string.Empty;
 
-        /// <summary>
-        /// An array of items assigned to the unit at spawn.
-        /// </summary>
+        /// <summary>Items assigned to the unit when it is spawned.</summary>
         public ItemType[] items;
 
-        /// <summary>
-        /// The movement behavior assigned to this unit.
-        /// </summary>
+        /// <summary>Movement configuration assigned to the unit.</summary>
         public Movement.Movement moveBehaviour;
 
-        /// <summary>
-        /// Bit flags describing unit capabilities (e.g., agent, sensor, target).
-        /// </summary>
+        /// <summary>Attribute flags describing the unit's simulation capabilities.</summary>
         public EntityAttributes attributes = EntityAttributes.agent;
 
 
-        /// <summary>
-        /// Default constructor for serialization or manual setup.
-        /// </summary>
+        /// <summary>Initializes an empty unit for serialization or manual setup.</summary>
         public Unit() { }
 
         /// <summary>

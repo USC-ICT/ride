@@ -1,15 +1,11 @@
 namespace Ride.Networking
 {
     /// <summary>
-    /// Marker interface representing an abstract reference to a player in a networked simulation context.
-    /// 
-    /// This interface allows systems to refer to players in a backend-agnostic way, enabling support
-    /// for multiple networking frameworks (e.g., Fusion, Photon) without coupling to specific implementations.
-    /// 
-    /// Implemented by classes such as <c>FusionNetwork</c> and <c>PhotonNetwork</c> to provide player-related functionality
-    /// like identity, input tracking, and event routing.
-    ///
-    /// Typically used in conjunction with <see cref="INetworkSystem"/> and other Ride.Networking components.
+    /// Represents an abstract reference to a player in a networked simulation. It lets RIDE pass player identity
+    /// through room callbacks, input and event routing, and network object creation without exposing a networking
+    /// backend's native player-reference type. Concrete integrations for frameworks such as Fusion or Photon wrap
+    /// their player handle behind this interface, which is used primarily with <see cref="INetworkSystem"/> and
+    /// <see cref="INetworkRunner"/>.
     /// </summary>
     public interface IPlayerRef
     {

@@ -11,7 +11,6 @@ namespace Ride.Samples
         [SerializeField] SamplesVHNonverbalBehaviorGeneratorSystem m_nvbg;
         [SerializeField] SamplesVHHead m_head;
         [SerializeField] SamplesVHFace m_face;
-        [SerializeField] SamplesVHSIMA m_sima;
         [SerializeField] SamplesBMLParser m_bml;
         private DebugMenu m_debugMenu;
         private AssetLoadingSystemAssetBundles m_assetBundleSystem;
@@ -33,8 +32,7 @@ namespace Ride.Samples
             m_debugMenu.InsertMenu(1, "Nonverbal Behavior Generation", m_nvbg.OnGUINonverbalBehaviorGeneration);
             m_debugMenu.InsertMenu(2, "Head Control", m_head.OnGUIHeadControl);
             m_debugMenu.InsertMenu(3, "Face", m_face.OnGUIFace);
-            m_debugMenu.InsertMenu(4, "SIMA", m_sima.OnGUINonverbalBehaviorGeneration);
-            m_debugMenu.InsertMenu(5, "BML", m_bml.OnGUIBMLParser);
+            m_debugMenu.InsertMenu(4, "BML", m_bml.OnGUIBMLParser);
 
             m_debugMenu.SetMenu(0);
             m_debugMenu.ShowMenu(true);

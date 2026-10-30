@@ -18,43 +18,59 @@ namespace Ride.IO
     {
         private readonly KeyCode key;
 
+        /// <summary>Initializes a RIDE key code from a Unity key code.</summary>
+        /// <param name="_key">The Unity key code.</param>
         public RideKeyCode(KeyCode _key)
         {
             key = _key;
         }
 
+        /// <summary>One greater than the largest numeric Unity key-code value.</summary>
         public static readonly int MaxDefinedKeyCode = Enum.GetValues(typeof(KeyCode))
                                                         .Cast<int>()
                                                         .Max() + 1;
 
+        /// <summary>Gets the wrapped Unity key code.</summary>
         public KeyCode UnityKey => key;
 
+        /// <summary>Gets whether this key is a Shift, Control, Alt, or Command modifier.</summary>
         public bool IsModifier =>
             key == KeyCode.LeftShift || key == KeyCode.RightShift ||
             key == KeyCode.LeftControl || key == KeyCode.RightControl ||
             key == KeyCode.LeftAlt || key == KeyCode.RightAlt ||
             key == KeyCode.LeftCommand || key == KeyCode.RightCommand;
 
+        /// <summary>Gets whether this key is an arrow key.</summary>
         public bool IsArrow =>
             key == KeyCode.LeftArrow || key == KeyCode.RightArrow ||
             key == KeyCode.UpArrow || key == KeyCode.DownArrow;
 
+        /// <summary>Gets whether this key is a mouse button.</summary>
         public bool IsMouse =>
             key >= KeyCode.Mouse0 && key <= KeyCode.Mouse6;
 
+        /// <summary>Gets whether this key is a function key from F1 through F15.</summary>
         public bool IsFunctionKey =>
             key >= KeyCode.F1 && key <= KeyCode.F15;
 
+        /// <inheritdoc/>
         public override string ToString() => key.ToString();
 
+        /// <inheritdoc/>
         public bool Equals(RideKeyCode other) => key == other.key;
+        /// <inheritdoc/>
         public override bool Equals(object obj) => obj is RideKeyCode other && Equals(other);
+        /// <inheritdoc/>
         public override int GetHashCode() => (int)key;
 
+        /// <summary>Converts a Unity key code to a RIDE key code.</summary>
         public static implicit operator RideKeyCode(KeyCode key) => new RideKeyCode(key);
+        /// <summary>Converts a RIDE key code to a Unity key code.</summary>
         public static implicit operator KeyCode(RideKeyCode rideKey) => rideKey.key;
 
+        /// <summary>Determines whether two key codes represent the same key.</summary>
         public static bool operator ==(RideKeyCode left, RideKeyCode right) => left.Equals(right);
+        /// <summary>Determines whether two key codes represent different keys.</summary>
         public static bool operator !=(RideKeyCode left, RideKeyCode right) => !left.Equals(right);
 
         public static readonly RideKeyCode None = new(KeyCode.None);

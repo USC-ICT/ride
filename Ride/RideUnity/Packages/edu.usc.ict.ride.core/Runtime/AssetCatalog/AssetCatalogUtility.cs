@@ -34,7 +34,7 @@ public static class AssetCatalogUtility
     /// <summary>
     /// Returns the version-folder name used to locate compatible AssetBundles for
     /// the current Unity version. This maps the running Unity version to a manually
-    /// maintained compatibility set (for example "6000.0.x" or "6000.1.x").
+    /// maintained set of generated asset-catalog buckets (for example "6000.1.x" or "6000.5.x").
     /// </summary>
     /// <returns>
     /// A string representing the compatible AssetBundle version folder.
@@ -42,34 +42,40 @@ public static class AssetCatalogUtility
     /// <remarks>
     /// The logic is:
     /// 1. Parse the Unity major/minor version (for example "6000.4" from "6000.4.1f1").
-    /// 2. If the major version is less than 6000, return the oldest supported Unity bucket.
-    /// 3. If the version falls between supported Unity 6 minors, use the nearest earlier supported bucket.
-    /// 4. If the version is newer than the known table, use the newest supported bucket.
+    /// 2. If the major version is less than 6000, return the oldest generated Unity bucket.
+    /// 3. If the version falls between generated Unity 6 minors, use the nearest earlier generated bucket.
+    /// 4. If the version is newer than the generated table, use the newest generated bucket.
     ///
-    /// Update the explicit mappings as needed when Unity changes bundle formats.
+    /// Add explicit mappings only after matching asset catalogs and bundles have
+    /// been generated for that Unity minor version.
     /// 
     /// <para>
     /// This mechanism allows the application to use a small number of controlled,
     /// tested bundle versions while still supporting a range of Unity editors and
-    /// runtimes. It also protects against silent asset breakage when Unity changes
-    /// asset bundle serialization in a new release.
+    /// runtimes. It also prevents runtime loading from probing version folders that
+    /// do not have generated catalogs and bundles yet.
     /// </para>
     ///
     /// <para>
     /// <b>Important:</b> This compatibility table is intentionally conservative.
     /// When upgrading Unity versions or rebuilding asset bundles, the table should
-    /// be reviewed and updated to reflect which Unity versions share binary-format
-    /// compatibility for your assets.
+    /// be reviewed and updated to reflect which Unity versions have generated,
+    /// tested bundle output for your assets.
     /// </para>
     /// </remarks>
     public static string GetCompatibleUnityVersionName()
     {
         // Keep this list sorted oldest to newest so fallback selection stays correct.
+        // Only add buckets here after matching asset catalogs/bundles are generated.
         (int major, int minor, string folder)[] supportedVersions =
         {
             (6000, 0, "6000.0.x"),
             (6000, 1, "6000.1.x"),
-            (6000, 4, "6000.4.x")
+            (6000, 3, "6000.3.x"),
+            (6000, 4, "6000.4.x"),
+            (6000, 5, "6000.5.x"),
+            //(6000, 6, "6000.6.x"),
+            //(6000, 7, "6000.7.x"),
         };
 
         string u = Application.unityVersion;

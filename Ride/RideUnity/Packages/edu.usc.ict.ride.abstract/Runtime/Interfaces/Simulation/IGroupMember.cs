@@ -44,6 +44,11 @@ namespace Ride.Entities
         /// </summary>
         public string title { get; }
 
+        /// <summary>Initializes a group member.</summary>
+        /// <param name="id">The member identifier.</param>
+        /// <param name="name">The member display name.</param>
+        /// <param name="rank">The member's authority rank.</param>
+        /// <param name="title">The member's role within the group.</param>
         public GroupMember(RideID id, string name, int rank, string title)
         {
             this.id = id;

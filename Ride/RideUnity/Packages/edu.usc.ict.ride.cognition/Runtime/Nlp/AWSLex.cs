@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 
 namespace Ride.NLP
 {
@@ -10,7 +11,7 @@ namespace Ride.NLP
         /// <summary>
         /// Response from AWS Lex.
         /// </summary>
-        [System.Serializable]
+        [Serializable]
         public struct AWSLexResponse
         {
             public string dialogState;
@@ -30,7 +31,7 @@ namespace Ride.NLP
         /// Response from AWS Lex V2 for RecognizeText
         /// https://docs.aws.amazon.com/lexv2/latest/APIReference/API_runtime_RecognizeText.html 
         /// </summary>
-        [System.Serializable]
+        [Serializable]
         public struct AWSLexResponseV2
         {
             public AWSIntent[] interpretations;
@@ -39,12 +40,14 @@ namespace Ride.NLP
             public AWSSessionState sessionState;            
         }
 
+        [Serializable]
         public struct AWSInterpretation
         {
             public AWSIntent[] intents;
             public AWSNluConfidence nluConfidence;
         }
 
+        [Serializable]
         public struct AWSIntent
         {
             public string confirmationState;
@@ -53,17 +56,20 @@ namespace Ride.NLP
             public string state;
         }
 
+        [Serializable]
         public struct AWSNluConfidence
         {
             public long score;
         }
 
+        [Serializable]
         public struct AWSMessage
         {
             public string content;
             public string contentType;
         }
 
+        [Serializable]
         public struct AWSSessionState
         {
             public AWSDialogAction dialogAction;
@@ -72,26 +78,30 @@ namespace Ride.NLP
             public AWSSessionAttributes sessionAttributes;
         }
 
+        [Serializable]
         public struct AWSDialogAction
         {
             public string type;
         }
 
+        [Serializable]
         public struct AWSSentimentResponse
         {
             public string sentimentLabel;
             public string sentimentScore;
         }
 
+        [Serializable]
         public struct AWSSessionAttributes
         {
 
         }
-        
+
+        [Serializable]
         public struct AWSSlots { }
 
         // add/put intent request (https://docs.aws.amazon.com/lex/latest/dg/API_PutIntent.html)
-        [System.Serializable]
+        //[Serializable]
         //public class AddIntentRequest
         //{
         //    //public string checksum;
@@ -111,6 +121,7 @@ namespace Ride.NLP
         //    public Slots[] slots;
         //}
 
+        [Serializable]
         public class AddIntentRequest
         {
             public FulfillmentActivity fulfillmentActivity;
@@ -118,14 +129,14 @@ namespace Ride.NLP
             public ConclusionStatement conclusionStatement;
         }
 
-        [System.Serializable]
+        [Serializable]
         public class ConclusionStatement
         {
             public Messages[] messages;
             //public string responseCard = "";
         }
 
-        [System.Serializable]
+        [Serializable]
         public class Messages
         {
             public string content = "";
@@ -133,7 +144,7 @@ namespace Ride.NLP
             //public int groupNumber;
         }
 
-        [System.Serializable]
+        [Serializable]
         public class ConfirmationPrompt 
         {
             public int maxAttempts;
@@ -141,34 +152,34 @@ namespace Ride.NLP
             //public string responseCard = "";
         }
         
-        [System.Serializable]
+        [Serializable]
         public class DialogCodeHook 
         {
             public string messageVersion = "";
             public string uri = "";
         }
 
-        [System.Serializable]
+        [Serializable]
         public struct FollowUpPrompt 
         {
             public ConfirmationPrompt prompt;
             public ConclusionStatement rejectionStatement;
         }
 
-        [System.Serializable]
+        [Serializable]
         public class FulfillmentActivity 
         {
             //public DialogCodeHook codeHook;
             public string type = "";
         }
 
-        [System.Serializable]
+        [Serializable]
         public class InputContexts 
         {
             public string name = "";
         }
 
-        [System.Serializable]
+        [Serializable]
         public class KendraConfiguration 
         {
             public string kendraIndex = "";
@@ -176,7 +187,7 @@ namespace Ride.NLP
             public string role = "";
         }
 
-        [System.Serializable]
+        [Serializable]
         public class OutputContexts 
         {
             public string name = "";
@@ -184,7 +195,7 @@ namespace Ride.NLP
             public int turnsToLive;
         }
 
-        [System.Serializable]
+        [Serializable]
         public class Slots 
         {
             public string slotType;
@@ -199,7 +210,7 @@ namespace Ride.NLP
 
         // Add/Update Bot
 
-        [System.Serializable]
+        [Serializable]
         public class GetBot
         {
             public AbortStatement abortStatement;
@@ -218,33 +229,33 @@ namespace Ride.NLP
             public string processBehaviour;
         }
 
-        [System.Serializable]
+        [Serializable]
         public class AbortStatement
         {
             public Messages[] messages;
         }
 
-        [System.Serializable]
+        [Serializable]
         public class ClarificationPrompt
         {
             public int maxAttempts;
             public Messages[] messages;
         }
 
-        [System.Serializable]
+        [Serializable]
         public class Intents
         {
             public string intentVersion;
             public string intentName;
         }
 
-        [System.Serializable]
+        [Serializable]
         public class CheckSum
         {
             public string checksum;
         }
 
-        [System.Serializable]
+        [Serializable]
         public class BotAliasRequest
         {
             public string botVersion;

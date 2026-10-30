@@ -7,20 +7,39 @@ using UnityEditor.AddressableAssets.Settings;
 
 namespace Ride
 {
+    /// <summary>Provides editor controls for building Addressables content and synchronizing it to Amazon S3.</summary>
+    /// <remarks>
+    /// The window is opened from <c>Ride/Addressables/Build and Sync</c>. It builds the active
+    /// Addressables settings, refreshes labels on a scene <see cref="AddressableSystem"/>, and can
+    /// invoke the locally installed AWS CLI to upload the platform-specific build output.
+    /// See <a href="https://docs.unity3d.com/Packages/com.unity.addressables@1.21/manual/Builds.html">Unity Addressables build documentation</a>
+    /// and <a href="https://docs.aws.amazon.com/cli/latest/reference/s3/sync.html">AWS CLI <c>s3 sync</c> documentation</a>.
+    /// </remarks>
     public class RideAddressablesBuildWindow : EditorWindow
     {
+        /// <summary>AWS access-key identifier entered for the sync operation.</summary>
         private string m_accessKey = "";
+
+        /// <summary>AWS secret access key entered for the sync operation.</summary>
         private string m_secretKey = "";
+
+        /// <summary>AWS region written to the active CLI configuration.</summary>
         private string m_region = "us-west-2";
+
+        /// <summary>Destination S3 URI prefix for Addressables content.</summary>
         private string m_s3BucketPrefix = "s3://dummy-bucket/addressables";
+
+        /// <summary>Most recent build, configuration, or synchronization result shown in the window.</summary>
         private string m_statusMessage = "";
-        
+
+        /// <summary>Opens the Addressables build and synchronization window.</summary>
         [MenuItem("Ride/Addressables/Build and Sync")]
         public static void ShowWindow()
         {
             GetWindow<RideAddressablesBuildWindow>("Build and Sync Addressables");
         }
 
+        /// <summary>Draws the Addressables build, AWS configuration, synchronization, and status controls.</summary>
         private void OnGUI()
         {
             GUILayout.Label("Build Addressables", EditorStyles.boldLabel);
@@ -45,6 +64,12 @@ namespace Ride
                     ? MessageType.Error : MessageType.Info);
         }
 
+        /// <summary>Builds content from the active Addressables settings and refreshes scene catalog labels.</summary>
+        /// <remarks>
+        /// Uses <see cref="AddressableAssetSettings.BuildPlayerContent()"/>. If an
+        /// <see cref="AddressableSystem"/> exists in the open scenes, its editor catalog cache is
+        /// refreshed after the build completes.
+        /// </remarks>
         private void BuildAddressables()
         {
             try
@@ -75,6 +100,7 @@ namespace Ride
             }
         }
 
+        /// <summary>Derives the current version, render-pipeline, and build-target path and starts an S3 sync.</summary>
         private void SyncAddressables()
         {
             try
@@ -101,6 +127,12 @@ namespace Ride
             }
         }
 
+        /// <summary>Synchronizes a local Addressables build directory to its corresponding S3 prefix.</summary>
+        /// <remarks>
+        /// The AWS CLI command uses <c>--delete</c>, so objects under the destination prefix that
+        /// are absent from the local build directory are removed during synchronization.
+        /// </remarks>
+        /// <param name="addressableBuildPath">Path segment composed from Unity version, render pipeline, and build target.</param>
         private void SyncToS3(string addressableBuildPath)
         {
             try
@@ -151,6 +183,16 @@ namespace Ride
             }
         }
 
+        /// <summary>Writes credentials and region to the active AWS CLI configuration.</summary>
+        /// <remarks>
+        /// This invokes <c>aws configure set</c>; the AWS CLI persists the access and secret keys in
+        /// the user's shared credentials file. See
+        /// <a href="https://docs.aws.amazon.com/cli/latest/reference/configure/set.html">AWS CLI configuration documentation</a>.
+        /// </remarks>
+        /// <param name="accessKey">AWS access-key identifier.</param>
+        /// <param name="secretKey">AWS secret access key.</param>
+        /// <param name="region">Default AWS region.</param>
+        /// <returns><see langword="true"/> when every AWS CLI configuration command succeeds; otherwise <see langword="false"/>.</returns>
         private bool ConfigureAws(string accessKey, string secretKey, string region)
         {
             try

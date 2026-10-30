@@ -34,12 +34,7 @@ namespace VHAssets
         /// </remarks>
         public virtual void Start()
         {
-            m_BMLParser = new BMLParser(OnParsedBMLTiming, OnParsedWordTiming, OnParsedVisemeTiming, OnParsedBMLEvent, OnFinishedReading, OnParsedCustomEvent);
-
-            if (m_CharacterController.GetCharacterControllerType() == "MecanimManager")
-                m_BMLParser.EventCategoryName = GenericEventNames.Mecanim;
-
-            m_BMLParser.TrimBMLTimingWhenParsing = m_TrimBMLTimingWhenParsing;
+            EnsureParser();
         }
 
         public virtual void InitializeLoadedAsset()
@@ -47,15 +42,32 @@ namespace VHAssets
             // Note we receive this message, but Start() may have already run.
             // Don't use the RIDE pattern of initializing after asset load, to avoid bringing in ILoadableAsset dependency.
 
-            if (m_BMLParser != null)
-                return;
+            EnsureParser();
+        }
 
-            m_BMLParser = new BMLParser(OnParsedBMLTiming, OnParsedWordTiming, OnParsedVisemeTiming, OnParsedBMLEvent, OnFinishedReading, OnParsedCustomEvent);
+        /// <summary>
+        /// Creates the parser if needed and applies the settings that depend on the character
+        /// controller.
+        /// </summary>
+        /// <remarks>
+        /// Start and InitializeLoadedAsset can arrive in either order, so creating the parser is
+        /// done once and the controller-dependent settings are applied by whichever call first
+        /// sees a controller; re-applying them is harmless.
+        ///
+        /// The controller reference is normally assigned in the scene. It is treated as optional
+        /// here so an unassigned reference degrades to default event naming instead of throwing
+        /// during asset load, which otherwise surfaces far from its cause.
+        /// </remarks>
+        private void EnsureParser()
+        {
+            if (m_BMLParser == null)
+            {
+                m_BMLParser = new BMLParser(OnParsedBMLTiming, OnParsedWordTiming, OnParsedVisemeTiming, OnParsedBMLEvent, OnFinishedReading, OnParsedCustomEvent);
+                m_BMLParser.TrimBMLTimingWhenParsing = m_TrimBMLTimingWhenParsing;
+            }
 
             if (m_CharacterController != null && m_CharacterController.GetCharacterControllerType() == "MecanimManager")
                 m_BMLParser.EventCategoryName = GenericEventNames.Mecanim;
-
-            m_BMLParser.TrimBMLTimingWhenParsing = m_TrimBMLTimingWhenParsing;
         }
 
         public virtual void ResetLoadedAsset()
